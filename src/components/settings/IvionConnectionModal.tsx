@@ -79,6 +79,11 @@ const IvionConnectionModal: React.FC<IvionConnectionModalProps> = ({
       setConfigStatus(data);
     } catch (e: any) {
       console.error('Failed to load config status:', e);
+      toast({
+        variant: 'destructive',
+        title: 'Could not load Ivion configuration status',
+        description: 'Shown status may not reflect the real configuration.',
+      });
       // Set default status if we can't load
       setConfigStatus({
         hasApiUrl: false,
@@ -91,7 +96,7 @@ const IvionConnectionModal: React.FC<IvionConnectionModalProps> = ({
     } finally {
       setIsLoadingConfig(false);
     }
-  }, []);
+  }, [toast]);
 
   // Test connection with automatic authentication
   const handleTestConnection = useCallback(async () => {

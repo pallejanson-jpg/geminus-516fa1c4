@@ -296,12 +296,12 @@ const RightSidebar: React.FC = () => {
                           {article.content}
                         </p>
                       </div>
-                      <Badge variant="outline" className="text-[10px] shrink-0">
+                      <Badge variant="outline" className="text-2xs shrink-0">
                         {article.app}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-1 mt-2">
-                      <Badge variant="secondary" className="text-[10px]">
+                      <Badge variant="secondary" className="text-2xs">
                         {article.category}
                       </Badge>
                     </div>
@@ -363,7 +363,7 @@ const RightSidebar: React.FC = () => {
                                 endpoint.method === 'PUT' ? 'outline' :
                                 'destructive'
                               }
-                              className="text-[10px] px-1.5"
+                              className="text-2xs px-1.5"
                             >
                               {endpoint.method}
                             </Badge>
@@ -432,7 +432,7 @@ const RightSidebar: React.FC = () => {
                 <Send size={16} />
               </Button>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-2">
+            <p className="text-2xs text-muted-foreground mt-2">
               Press Enter to send, Shift+Enter for new line
             </p>
           </div>

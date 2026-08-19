@@ -6,6 +6,16 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -466,6 +476,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
   const [detailDialog, setDetailDialog] = useState<PendingDetection | null>(null);
   const [approvalDetection, setApprovalDetection] = useState<PendingDetection | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [bulkConfirmAction, setBulkConfirmAction] = useState<'approve' | 'reject' | null>(null);
 
   // Load detections
   useEffect(() => {
@@ -686,7 +697,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                     </Button>
                     <Button
                       size="sm"
-                      onClick={bulkApprove}
+                      onClick={() => setBulkConfirmAction('approve')}
                       disabled={isProcessing}
                     >
                       <CheckCircle2 className="h-4 w-4 mr-1" />
@@ -695,7 +706,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
                     <Button
                       variant="destructive"
                       size="sm"
-                      onClick={bulkReject}
+                      onClick={() => setBulkConfirmAction('reject')}
                       disabled={isProcessing}
                     >
                       <XCircle className="h-4 w-4 mr-1" />
@@ -986,6 +997,45 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
           }}
         />
       )}
+
+      {/* Bulk approve/reject confirmation dialog */}
+      <AlertDialog open={!!bulkConfirmAction} onOpenChange={(open) => { if (!open) setBulkConfirmAction(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {bulkConfirmAction === 'approve'
+                ? t('Godkänna markerade detektioner?', 'Approve selected detections?')
+                : t('Avvisa markerade detektioner?', 'Reject selected detections?')}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {bulkConfirmAction === 'approve'
+                ? t(
+                    `Detta skapar ${selectedIds.size} tillgångar från de markerade detektionerna. Åtgärden kan inte ångras.`,
+                    `This will create ${selectedIds.size} assets from the selected detections. This action cannot be undone.`
+                  )
+                : t(
+                    `Detta avvisar ${selectedIds.size} markerade detektioner. Åtgärden kan inte ångras.`,
+                    `This will reject ${selectedIds.size} selected detections. This action cannot be undone.`
+                  )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isProcessing}>{t('Avbryt', 'Cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              className={bulkConfirmAction === 'reject' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : undefined}
+              disabled={isProcessing}
+              onClick={() => {
+                const action = bulkConfirmAction;
+                setBulkConfirmAction(null);
+                if (action === 'approve') bulkApprove();
+                else if (action === 'reject') bulkReject();
+              }}
+            >
+              {bulkConfirmAction === 'approve' ? t('Godkänn', 'Approve') : t('Avvisa', 'Reject')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

@@ -98,7 +98,11 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       .eq('building_fm_guid', facility.fmGuid)
       .order('created_at', { ascending: false })
       .limit(6)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Failed to fetch saved views:', error);
+          toast.error('Failed to load saved views', { description: error.message });
+        }
         setSavedViews(data || []);
         setLoadingViews(false);
       });
@@ -165,7 +169,13 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
       .select('geminus_base_building_guid')
       .eq('fm_guid', buildingGuid)
       .maybeSingle()
-      .then(({ data }) => setHasGeminusBase(!!data?.geminus_base_building_guid));
+      .then(({ data, error }) => {
+        if (error) {
+          console.error('Failed to fetch building settings:', error);
+          toast.error('Failed to load Geminus Base status', { description: error.message });
+        }
+        setHasGeminusBase(!!data?.geminus_base_building_guid);
+      });
   }, [buildingGuid]);
 
   // Get child storeys for buildings — use named storeys, exclude unnamed model placeholders

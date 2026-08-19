@@ -10,29 +10,54 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.15"
+  }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
   }
   public: {
     Tables: {
-      acc_assetplus_guid_map: {
+      acc_geminus_plus_guid_map: {
         Row: {
           acc_fm_guid: string
-          assetplus_fm_guid: string
           created_at: string
+          geminus_plus_fm_guid: string
           object_type: number
           synced_at: string | null
         }
         Insert: {
           acc_fm_guid: string
-          assetplus_fm_guid?: string
           created_at?: string
+          geminus_plus_fm_guid?: string
           object_type?: number
           synced_at?: string | null
         }
         Update: {
           acc_fm_guid?: string
-          assetplus_fm_guid?: string
           created_at?: string
+          geminus_plus_fm_guid?: string
           object_type?: number
           synced_at?: string | null
         }
@@ -48,6 +73,8 @@ export type Database = {
           file_name: string | null
           folder_id: string | null
           id: string
+          is_master_model: boolean | null
+          model_name: string | null
           output_format: string | null
           started_at: string | null
           translation_status: string
@@ -63,6 +90,8 @@ export type Database = {
           file_name?: string | null
           folder_id?: string | null
           id?: string
+          is_master_model?: boolean | null
+          model_name?: string | null
           output_format?: string | null
           started_at?: string | null
           translation_status?: string
@@ -78,6 +107,8 @@ export type Database = {
           file_name?: string | null
           folder_id?: string | null
           id?: string
+          is_master_model?: boolean | null
+          model_name?: string | null
           output_format?: string | null
           started_at?: string | null
           translation_status?: string
@@ -190,87 +221,92 @@ export type Database = {
       }
       api_profiles: {
         Row: {
-          assetplus_api_key: string | null
-          assetplus_api_url: string | null
-          assetplus_audience: string | null
-          assetplus_client_id: string | null
-          assetplus_client_secret: string | null
-          assetplus_keycloak_url: string | null
-          assetplus_password: string | null
-          assetplus_username: string | null
           created_at: string
-          fm_access_api_url: string | null
-          fm_access_password: string | null
-          fm_access_username: string | null
           geminus_base_api_url: string | null
           geminus_base_password: string | null
+          geminus_base_token_cache: Json | null
           geminus_base_username: string | null
+          geminus_plus_api_key: string | null
+          geminus_plus_api_url: string | null
+          geminus_plus_audience: string | null
+          geminus_plus_client_id: string | null
+          geminus_plus_client_secret: string | null
+          geminus_plus_keycloak_url: string | null
+          geminus_plus_password: string | null
+          geminus_plus_username: string | null
+          geminus_premium_api_url: string | null
+          geminus_premium_email: string | null
+          geminus_premium_password: string | null
           id: string
           is_default: boolean
           ivion_api_url: string | null
           ivion_password: string | null
           ivion_username: string | null
           name: string
-          senslinc_api_url: string | null
-          senslinc_email: string | null
-          senslinc_password: string | null
+          tenant_id: string | null
           updated_at: string
         }
         Insert: {
-          assetplus_api_key?: string | null
-          assetplus_api_url?: string | null
-          assetplus_audience?: string | null
-          assetplus_client_id?: string | null
-          assetplus_client_secret?: string | null
-          assetplus_keycloak_url?: string | null
-          assetplus_password?: string | null
-          assetplus_username?: string | null
           created_at?: string
-          fm_access_api_url?: string | null
-          fm_access_password?: string | null
-          fm_access_username?: string | null
           geminus_base_api_url?: string | null
           geminus_base_password?: string | null
+          geminus_base_token_cache?: Json | null
           geminus_base_username?: string | null
+          geminus_plus_api_key?: string | null
+          geminus_plus_api_url?: string | null
+          geminus_plus_audience?: string | null
+          geminus_plus_client_id?: string | null
+          geminus_plus_client_secret?: string | null
+          geminus_plus_keycloak_url?: string | null
+          geminus_plus_password?: string | null
+          geminus_plus_username?: string | null
+          geminus_premium_api_url?: string | null
+          geminus_premium_email?: string | null
+          geminus_premium_password?: string | null
           id?: string
           is_default?: boolean
           ivion_api_url?: string | null
           ivion_password?: string | null
           ivion_username?: string | null
           name: string
-          senslinc_api_url?: string | null
-          senslinc_email?: string | null
-          senslinc_password?: string | null
+          tenant_id?: string | null
           updated_at?: string
         }
         Update: {
-          assetplus_api_key?: string | null
-          assetplus_api_url?: string | null
-          assetplus_audience?: string | null
-          assetplus_client_id?: string | null
-          assetplus_client_secret?: string | null
-          assetplus_keycloak_url?: string | null
-          assetplus_password?: string | null
-          assetplus_username?: string | null
           created_at?: string
-          fm_access_api_url?: string | null
-          fm_access_password?: string | null
-          fm_access_username?: string | null
           geminus_base_api_url?: string | null
           geminus_base_password?: string | null
+          geminus_base_token_cache?: Json | null
           geminus_base_username?: string | null
+          geminus_plus_api_key?: string | null
+          geminus_plus_api_url?: string | null
+          geminus_plus_audience?: string | null
+          geminus_plus_client_id?: string | null
+          geminus_plus_client_secret?: string | null
+          geminus_plus_keycloak_url?: string | null
+          geminus_plus_password?: string | null
+          geminus_plus_username?: string | null
+          geminus_premium_api_url?: string | null
+          geminus_premium_email?: string | null
+          geminus_premium_password?: string | null
           id?: string
           is_default?: boolean
           ivion_api_url?: string | null
           ivion_password?: string | null
           ivion_username?: string | null
           name?: string
-          senslinc_api_url?: string | null
-          senslinc_email?: string | null
-          senslinc_password?: string | null
+          tenant_id?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "api_profiles_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       asset_connections: {
         Row: {
@@ -329,24 +365,6 @@ export type Database = {
           last_seen_at?: string | null
           model_version?: string | null
           source?: string
-        }
-        Relationships: []
-      }
-      asset_plus_endpoint_cache: {
-        Row: {
-          key: string
-          updated_at: string | null
-          value: string
-        }
-        Insert: {
-          key: string
-          updated_at?: string | null
-          value: string
-        }
-        Update: {
-          key?: string
-          updated_at?: string | null
-          value?: string
         }
         Relationships: []
       }
@@ -811,17 +829,20 @@ export type Database = {
       building_settings: {
         Row: {
           api_profile_id: string | null
-          assetplus_api_key: string | null
-          assetplus_api_url: string | null
-          assetplus_client_id: string | null
-          assetplus_client_secret: string | null
-          assetplus_keycloak_url: string | null
-          assetplus_password: string | null
-          assetplus_username: string | null
           created_at: string
-          fm_access_building_guid: string | null
+          display_name: string | null
           fm_guid: string
           geminus_base_building_guid: string | null
+          geminus_plus_api_key: string | null
+          geminus_plus_api_url: string | null
+          geminus_plus_client_id: string | null
+          geminus_plus_client_secret: string | null
+          geminus_plus_keycloak_url: string | null
+          geminus_plus_password: string | null
+          geminus_plus_username: string | null
+          geminus_premium_api_url: string | null
+          geminus_premium_email: string | null
+          geminus_premium_password: string | null
           hero_image_url: string | null
           id: string
           is_favorite: boolean
@@ -839,25 +860,26 @@ export type Database = {
           latitude: number | null
           longitude: number | null
           rotation: number | null
-          senslinc_api_url: string | null
-          senslinc_email: string | null
-          senslinc_password: string | null
           start_view_id: string | null
+          tenant_id: string | null
           updated_at: string
         }
         Insert: {
           api_profile_id?: string | null
-          assetplus_api_key?: string | null
-          assetplus_api_url?: string | null
-          assetplus_client_id?: string | null
-          assetplus_client_secret?: string | null
-          assetplus_keycloak_url?: string | null
-          assetplus_password?: string | null
-          assetplus_username?: string | null
           created_at?: string
-          fm_access_building_guid?: string | null
+          display_name?: string | null
           fm_guid: string
           geminus_base_building_guid?: string | null
+          geminus_plus_api_key?: string | null
+          geminus_plus_api_url?: string | null
+          geminus_plus_client_id?: string | null
+          geminus_plus_client_secret?: string | null
+          geminus_plus_keycloak_url?: string | null
+          geminus_plus_password?: string | null
+          geminus_plus_username?: string | null
+          geminus_premium_api_url?: string | null
+          geminus_premium_email?: string | null
+          geminus_premium_password?: string | null
           hero_image_url?: string | null
           id?: string
           is_favorite?: boolean
@@ -875,25 +897,26 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           rotation?: number | null
-          senslinc_api_url?: string | null
-          senslinc_email?: string | null
-          senslinc_password?: string | null
           start_view_id?: string | null
+          tenant_id?: string | null
           updated_at?: string
         }
         Update: {
           api_profile_id?: string | null
-          assetplus_api_key?: string | null
-          assetplus_api_url?: string | null
-          assetplus_client_id?: string | null
-          assetplus_client_secret?: string | null
-          assetplus_keycloak_url?: string | null
-          assetplus_password?: string | null
-          assetplus_username?: string | null
           created_at?: string
-          fm_access_building_guid?: string | null
+          display_name?: string | null
           fm_guid?: string
           geminus_base_building_guid?: string | null
+          geminus_plus_api_key?: string | null
+          geminus_plus_api_url?: string | null
+          geminus_plus_client_id?: string | null
+          geminus_plus_client_secret?: string | null
+          geminus_plus_keycloak_url?: string | null
+          geminus_plus_password?: string | null
+          geminus_plus_username?: string | null
+          geminus_premium_api_url?: string | null
+          geminus_premium_email?: string | null
+          geminus_premium_password?: string | null
           hero_image_url?: string | null
           id?: string
           is_favorite?: boolean
@@ -911,10 +934,8 @@ export type Database = {
           latitude?: number | null
           longitude?: number | null
           rotation?: number | null
-          senslinc_api_url?: string | null
-          senslinc_email?: string | null
-          senslinc_password?: string | null
           start_view_id?: string | null
+          tenant_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -930,6 +951,13 @@ export type Database = {
             columns: ["start_view_id"]
             isOneToOne: false
             referencedRelation: "saved_views"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "building_settings_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
             referencedColumns: ["id"]
           },
         ]
@@ -1125,6 +1153,51 @@ export type Database = {
         }
         Relationships: []
       }
+      faciliate_records: {
+        Row: {
+          building_cad_key: string | null
+          building_id: string | null
+          building_name: string | null
+          floor_cad_key: string | null
+          id: string
+          object_type: string
+          raw: Json
+          room_cad_key: string | null
+          source_guid: string
+          status: string | null
+          synced_at: string
+          title: string | null
+        }
+        Insert: {
+          building_cad_key?: string | null
+          building_id?: string | null
+          building_name?: string | null
+          floor_cad_key?: string | null
+          id?: string
+          object_type: string
+          raw?: Json
+          room_cad_key?: string | null
+          source_guid: string
+          status?: string | null
+          synced_at?: string
+          title?: string | null
+        }
+        Update: {
+          building_cad_key?: string | null
+          building_id?: string | null
+          building_name?: string | null
+          floor_cad_key?: string | null
+          id?: string
+          object_type?: string
+          raw?: Json
+          room_cad_key?: string | null
+          source_guid?: string
+          status?: string | null
+          synced_at?: string
+          title?: string | null
+        }
+        Relationships: []
+      }
       faciliate_sync_state: {
         Row: {
           created_at: string
@@ -1258,105 +1331,6 @@ export type Database = {
           },
         ]
       }
-      fm_access_documents: {
-        Row: {
-          building_fm_guid: string
-          class_name: string | null
-          document_id: string | null
-          file_name: string | null
-          id: string
-          name: string | null
-          object_id: string | null
-          synced_at: string
-        }
-        Insert: {
-          building_fm_guid: string
-          class_name?: string | null
-          document_id?: string | null
-          file_name?: string | null
-          id?: string
-          name?: string | null
-          object_id?: string | null
-          synced_at?: string
-        }
-        Update: {
-          building_fm_guid?: string
-          class_name?: string | null
-          document_id?: string | null
-          file_name?: string | null
-          id?: string
-          name?: string | null
-          object_id?: string | null
-          synced_at?: string
-        }
-        Relationships: []
-      }
-      fm_access_dou: {
-        Row: {
-          building_fm_guid: string | null
-          content: string | null
-          doc_type: string | null
-          id: string
-          object_fm_guid: string
-          synced_at: string
-          title: string | null
-        }
-        Insert: {
-          building_fm_guid?: string | null
-          content?: string | null
-          doc_type?: string | null
-          id?: string
-          object_fm_guid: string
-          synced_at?: string
-          title?: string | null
-        }
-        Update: {
-          building_fm_guid?: string | null
-          content?: string | null
-          doc_type?: string | null
-          id?: string
-          object_fm_guid?: string
-          synced_at?: string
-          title?: string | null
-        }
-        Relationships: []
-      }
-      fm_access_drawings: {
-        Row: {
-          building_fm_guid: string
-          class_name: string | null
-          drawing_id: string | null
-          floor_name: string | null
-          id: string
-          name: string | null
-          object_id: string | null
-          synced_at: string
-          tab_name: string | null
-        }
-        Insert: {
-          building_fm_guid: string
-          class_name?: string | null
-          drawing_id?: string | null
-          floor_name?: string | null
-          id?: string
-          name?: string | null
-          object_id?: string | null
-          synced_at?: string
-          tab_name?: string | null
-        }
-        Update: {
-          building_fm_guid?: string
-          class_name?: string | null
-          drawing_id?: string | null
-          floor_name?: string | null
-          id?: string
-          name?: string | null
-          object_id?: string | null
-          synced_at?: string
-          tab_name?: string | null
-        }
-        Relationships: []
-      }
       geminus_base_documents: {
         Row: {
           building_fm_guid: string
@@ -1420,6 +1394,60 @@ export type Database = {
         }
         Relationships: []
       }
+      geminus_base_drawings: {
+        Row: {
+          building_fm_guid: string
+          class_name: string | null
+          drawing_id: string | null
+          floor_name: string | null
+          id: string
+          name: string | null
+          object_id: string | null
+          synced_at: string
+          tab_name: string | null
+        }
+        Insert: {
+          building_fm_guid: string
+          class_name?: string | null
+          drawing_id?: string | null
+          floor_name?: string | null
+          id?: string
+          name?: string | null
+          object_id?: string | null
+          synced_at?: string
+          tab_name?: string | null
+        }
+        Update: {
+          building_fm_guid?: string
+          class_name?: string | null
+          drawing_id?: string | null
+          floor_name?: string | null
+          id?: string
+          name?: string | null
+          object_id?: string | null
+          synced_at?: string
+          tab_name?: string | null
+        }
+        Relationships: []
+      }
+      geminus_plus_endpoint_cache: {
+        Row: {
+          key: string
+          updated_at: string | null
+          value: string
+        }
+        Insert: {
+          key: string
+          updated_at?: string | null
+          value: string
+        }
+        Update: {
+          key?: string
+          updated_at?: string | null
+          value?: string
+        }
+        Relationships: []
+      }
       geometry_entity_map: {
         Row: {
           asset_fm_guid: string
@@ -1431,6 +1459,7 @@ export type Database = {
           last_seen_at: string | null
           metadata: Json | null
           model_id: string | null
+          model_id_norm: string | null
           source_model_guid: string | null
           source_model_name: string | null
           source_storey_name: string | null
@@ -1447,6 +1476,7 @@ export type Database = {
           last_seen_at?: string | null
           metadata?: Json | null
           model_id?: string | null
+          model_id_norm?: string | null
           source_model_guid?: string | null
           source_model_name?: string | null
           source_storey_name?: string | null
@@ -1463,6 +1493,7 @@ export type Database = {
           last_seen_at?: string | null
           metadata?: Json | null
           model_id?: string | null
+          model_id_norm?: string | null
           source_model_guid?: string | null
           source_model_name?: string | null
           source_storey_name?: string | null
@@ -1525,6 +1556,39 @@ export type Database = {
           id?: string
           last_indexed_at?: string | null
           url?: string
+        }
+        Relationships: []
+      }
+      ifc_fmguid_map: {
+        Row: {
+          building_fm_guid: string
+          created_at: string | null
+          element_name: string | null
+          fm_guid: string
+          id: string
+          ifc_global_id: string
+          ifc_type: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          building_fm_guid: string
+          created_at?: string | null
+          element_name?: string | null
+          fm_guid: string
+          id?: string
+          ifc_global_id: string
+          ifc_type?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          building_fm_guid?: string
+          created_at?: string | null
+          element_name?: string | null
+          fm_guid?: string
+          id?: string
+          ifc_global_id?: string
+          ifc_type?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -1603,6 +1667,7 @@ export type Database = {
           ivion_dataset_name: string | null
           ivion_image_id: number | null
           ivion_site_id: string
+          ivion_site_model_entity: Json | null
           object_type: string
           rejection_reason: string | null
           reviewed_at: string | null
@@ -1628,6 +1693,7 @@ export type Database = {
           ivion_dataset_name?: string | null
           ivion_image_id?: number | null
           ivion_site_id: string
+          ivion_site_model_entity?: Json | null
           object_type: string
           rejection_reason?: string | null
           reviewed_at?: string | null
@@ -1653,6 +1719,7 @@ export type Database = {
           ivion_dataset_name?: string | null
           ivion_image_id?: number | null
           ivion_site_id?: string
+          ivion_site_model_entity?: Json | null
           object_type?: string
           rejection_reason?: string | null
           reviewed_at?: string | null
@@ -1757,6 +1824,233 @@ export type Database = {
         }
         Relationships: []
       }
+      renovation_projects: {
+        Row: {
+          acc_account_id: string | null
+          acc_renovation_project_id: string | null
+          acc_setup_error: string | null
+          acc_setup_status: string | null
+          affected_level_fm_guids: string[] | null
+          affected_room_fm_guids: string[] | null
+          affected_system_types: string[] | null
+          archive_file_item_id: string | null
+          archive_file_item_ids: Json | null
+          archive_file_name: string | null
+          archive_file_names: Json | null
+          archive_folder_id: string | null
+          archive_folder_name: string | null
+          archive_project_id: string | null
+          archive_version_urn: string | null
+          building_fm_guid: string
+          completed_at: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          name: string
+          notes: string | null
+          renovation_folder_id: string | null
+          renovation_folder_name: string | null
+          scope_zone_description: string | null
+          started_at: string | null
+          status: string
+          updated_at: string | null
+        }
+        Insert: {
+          acc_account_id?: string | null
+          acc_renovation_project_id?: string | null
+          acc_setup_error?: string | null
+          acc_setup_status?: string | null
+          affected_level_fm_guids?: string[] | null
+          affected_room_fm_guids?: string[] | null
+          affected_system_types?: string[] | null
+          archive_file_item_id?: string | null
+          archive_file_item_ids?: Json | null
+          archive_file_name?: string | null
+          archive_file_names?: Json | null
+          archive_folder_id?: string | null
+          archive_folder_name?: string | null
+          archive_project_id?: string | null
+          archive_version_urn?: string | null
+          building_fm_guid: string
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          renovation_folder_id?: string | null
+          renovation_folder_name?: string | null
+          scope_zone_description?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Update: {
+          acc_account_id?: string | null
+          acc_renovation_project_id?: string | null
+          acc_setup_error?: string | null
+          acc_setup_status?: string | null
+          affected_level_fm_guids?: string[] | null
+          affected_room_fm_guids?: string[] | null
+          affected_system_types?: string[] | null
+          archive_file_item_id?: string | null
+          archive_file_item_ids?: Json | null
+          archive_file_name?: string | null
+          archive_file_names?: Json | null
+          archive_folder_id?: string | null
+          archive_folder_name?: string | null
+          archive_project_id?: string | null
+          archive_version_urn?: string | null
+          building_fm_guid?: string
+          completed_at?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          renovation_folder_id?: string | null
+          renovation_folder_name?: string | null
+          scope_zone_description?: string | null
+          started_at?: string | null
+          status?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "renovation_projects_building_fm_guid_fkey"
+            columns: ["building_fm_guid"]
+            isOneToOne: false
+            referencedRelation: "assets"
+            referencedColumns: ["fm_guid"]
+          },
+        ]
+      }
+      revit_assets: {
+        Row: {
+          building_fm_guid: string | null
+          category: string | null
+          external_guid: string
+          family_name: string | null
+          geometry: Json | null
+          id: string
+          level_guid: string | null
+          model_id: string
+          name: string | null
+          properties: Json | null
+          room_guid: string | null
+          synced_at: string | null
+          type_name: string | null
+        }
+        Insert: {
+          building_fm_guid?: string | null
+          category?: string | null
+          external_guid: string
+          family_name?: string | null
+          geometry?: Json | null
+          id?: string
+          level_guid?: string | null
+          model_id: string
+          name?: string | null
+          properties?: Json | null
+          room_guid?: string | null
+          synced_at?: string | null
+          type_name?: string | null
+        }
+        Update: {
+          building_fm_guid?: string | null
+          category?: string | null
+          external_guid?: string
+          family_name?: string | null
+          geometry?: Json | null
+          id?: string
+          level_guid?: string | null
+          model_id?: string
+          name?: string | null
+          properties?: Json | null
+          room_guid?: string | null
+          synced_at?: string | null
+          type_name?: string | null
+        }
+        Relationships: []
+      }
+      revit_levels: {
+        Row: {
+          building_fm_guid: string | null
+          elevation_mm: number | null
+          external_guid: string
+          id: string
+          model_id: string
+          name: string | null
+          synced_at: string | null
+        }
+        Insert: {
+          building_fm_guid?: string | null
+          elevation_mm?: number | null
+          external_guid: string
+          id?: string
+          model_id: string
+          name?: string | null
+          synced_at?: string | null
+        }
+        Update: {
+          building_fm_guid?: string | null
+          elevation_mm?: number | null
+          external_guid?: string
+          id?: string
+          model_id?: string
+          name?: string | null
+          synced_at?: string | null
+        }
+        Relationships: []
+      }
+      revit_rooms: {
+        Row: {
+          area_m2: number | null
+          building_fm_guid: string | null
+          external_guid: string
+          geometry: Json | null
+          id: string
+          level_guid: string | null
+          level_name: string | null
+          model_id: string
+          name: string | null
+          number: string | null
+          properties: Json | null
+          space_outline: Json | null
+          synced_at: string | null
+        }
+        Insert: {
+          area_m2?: number | null
+          building_fm_guid?: string | null
+          external_guid: string
+          geometry?: Json | null
+          id?: string
+          level_guid?: string | null
+          level_name?: string | null
+          model_id: string
+          name?: string | null
+          number?: string | null
+          properties?: Json | null
+          space_outline?: Json | null
+          synced_at?: string | null
+        }
+        Update: {
+          area_m2?: number | null
+          building_fm_guid?: string | null
+          external_guid?: string
+          geometry?: Json | null
+          id?: string
+          level_guid?: string | null
+          level_name?: string | null
+          model_id?: string
+          name?: string | null
+          number?: string | null
+          properties?: Json | null
+          space_outline?: Json | null
+          synced_at?: string | null
+        }
+        Relationships: []
+      }
       room_label_configs: {
         Row: {
           click_action: string
@@ -1804,6 +2098,7 @@ export type Database = {
       }
       saved_views: {
         Row: {
+          bcf_viewpoint: Json | null
           building_fm_guid: string
           building_name: string | null
           camera_eye: number[] | null
@@ -1827,6 +2122,7 @@ export type Database = {
           visualization_type: string | null
         }
         Insert: {
+          bcf_viewpoint?: Json | null
           building_fm_guid: string
           building_name?: string | null
           camera_eye?: number[] | null
@@ -1850,6 +2146,7 @@ export type Database = {
           visualization_type?: string | null
         }
         Update: {
+          bcf_viewpoint?: Json | null
           building_fm_guid?: string
           building_name?: string | null
           camera_eye?: number[] | null
@@ -2095,6 +2392,27 @@ export type Database = {
           },
         ]
       }
+      tenants: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -2115,6 +2433,35 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      user_tenant_access: {
+        Row: {
+          created_at: string
+          id: string
+          tenant_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          tenant_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          tenant_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_tenant_access_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       viewer_themes: {
         Row: {
@@ -2250,7 +2597,7 @@ export type Database = {
           parent_model_id: string | null
           source_updated_at: string | null
           source_url: string | null
-          storage_path: string
+          storage_path: string | null
           storey_fm_guid: string | null
           synced_at: string
           updated_at: string
@@ -2271,7 +2618,7 @@ export type Database = {
           parent_model_id?: string | null
           source_updated_at?: string | null
           source_url?: string | null
-          storage_path: string
+          storage_path?: string | null
           storey_fm_guid?: string | null
           synced_at?: string
           updated_at?: string
@@ -2292,7 +2639,7 @@ export type Database = {
           parent_model_id?: string | null
           source_updated_at?: string | null
           source_url?: string | null
-          storage_path?: string
+          storage_path?: string | null
           storey_fm_guid?: string | null
           synced_at?: string
           updated_at?: string
@@ -2304,6 +2651,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      delete_random_alarms: {
+        Args: { p_building_fm_guid: string; p_keep_fraction?: number }
+        Returns: number
+      }
       get_assets_by_category: {
         Args: { building_guid?: string; cat: string }
         Returns: Json
@@ -2359,6 +2710,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_tenant_access: { Args: { _tenant_id: string }; Returns: boolean }
       is_admin: { Args: never; Returns: boolean }
       mark_assignment_viewed: { Args: { p_token: string }; Returns: undefined }
       respond_to_assignment: {
@@ -2499,6 +2851,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {
       app_role: ["admin", "user"],

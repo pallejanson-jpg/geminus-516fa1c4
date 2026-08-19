@@ -109,7 +109,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
             <div className="p-4 space-y-4">
               {/* Core navigation grid */}
               <div>
-                <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Navigation</p>
+                <p className="text-2xs sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Navigation</p>
                 <div className="grid grid-cols-4 gap-2">
                   {CORE_NAV.map(({ key, icon: Icon, label }) => {
                     const isActive = activeApp === key;
@@ -139,7 +139,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
 
               {/* 3D Viewer quick link */}
               <div>
-              <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Viewer</p>
+              <p className="text-2xs sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Viewer</p>
                 <button
                   onClick={() => { setActiveApp('native_viewer'); setIsMobileMenuOpen(false); }}
                   className="flex flex-col items-center gap-1.5 w-[72px] p-2 rounded-xl hover:bg-muted/60 transition-colors"
@@ -160,7 +160,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
               {/* Dynamic apps */}
               {sidebarOrder.length > 0 && (
                 <div>
-                  <p className="text-[11px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Integrations</p>
+                  <p className="text-2xs sm:text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Integrations</p>
                   <div className="flex flex-wrap gap-3">
                     {sidebarOrder.map((item) => {
                       const meta = SIDEBAR_ITEM_META[item.id];

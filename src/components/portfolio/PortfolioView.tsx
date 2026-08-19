@@ -240,7 +240,8 @@ const PortfolioView: React.FC = () => {
     );
     
     let dashboardUrl = dashboardKey && attrs[dashboardKey]?.value ? attrs[dashboardKey].value : null;
-    
+    let fetchFailed = false;
+
     // If no URL in attributes, try to fetch from Geminus Premium API using FM GUID
     if (!dashboardUrl && facility.fmGuid) {
       try {
@@ -249,19 +250,23 @@ const PortfolioView: React.FC = () => {
         const { data, error } = await supabase.functions.invoke('geminus-premium-query', {
           body: { action: 'get-dashboard-url', fmGuid: facility.fmGuid }
         });
-        
+
         if (!error && data?.success && data?.data?.dashboardUrl) {
           dashboardUrl = data.data.dashboardUrl;
           console.log('[IoT] Found dashboard URL via API:', dashboardUrl);
+        } else if (error) {
+          fetchFailed = true;
+          console.log('[IoT] Failed to fetch dashboard URL from Geminus Premium:', error);
         }
       } catch (err) {
+        fetchFailed = true;
         console.log('[IoT] Failed to fetch dashboard URL from Geminus Premium:', err);
       }
     }
-    
+
     if (dashboardUrl) {
       const iotConfig = appConfigs.iot || { openMode: 'internal' };
-      
+
       if (iotConfig.openMode === 'internal') {
         // Open in internal iframe view
         openGeminusPremiumDashboard({
@@ -273,6 +278,12 @@ const PortfolioView: React.FC = () => {
         // Open in new browser tab
         window.open(dashboardUrl, '_blank');
       }
+    } else if (fetchFailed) {
+      // Genuine invoke failure (network/auth) - don't mask it as "not configured"
+      const { toast } = await import('sonner');
+      toast.error('Could not check for an IoT dashboard', {
+        description: 'The lookup failed. Please try again or check your connection.'
+      });
     } else {
       // No dashboard URL found - show info
       console.log('No IoT dashboard URL found for:', facility.commonName || facility.name);
@@ -281,9 +292,6 @@ const PortfolioView: React.FC = () => {
         description: 'This object has no linked sensor dashboard in Geminus Plus or Geminus Premium.'
       });
     }
-  };
-  const handleToggleFavorite = () => {
-    // Now handled by useBuildingSettings hook in FacilityLandingPage
   };
 
   // Handle Add Asset

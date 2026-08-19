@@ -8,6 +8,16 @@ import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useRoomLabelConfigs, RoomLabelConfig, AVAILABLE_LABEL_FIELDS } from '@/hooks/useRoomLabelConfigs';
 import { useLanguage } from '@/context/LanguageContext';
@@ -25,6 +35,7 @@ const RoomLabelSettings: React.FC = () => {
   const [isEditing, setIsEditing] = useState<string | null>(null);
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [editForm, setEditForm] = useState<Partial<RoomLabelConfig>>({});
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   // Create new config
   const handleCreate = async () => {
@@ -251,7 +262,7 @@ const RoomLabelSettings: React.FC = () => {
                         <Edit2 className="h-4 w-4 mr-1" />
                          {t('Redigera', 'Edit')}
                        </Button>
-                       <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => deleteConfig(config.id)}>
+                       <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeleteConfirmId(config.id)}>
                          <Trash2 className="h-4 w-4 mr-1" />
                          {t('Ta bort', 'Delete')}
                       </Button>
@@ -381,6 +392,32 @@ const RoomLabelSettings: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('Ta bort etikettkonfiguration?', 'Delete Label Configuration?')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('Är du säker på att du vill ta bort denna rumsetikettkonfiguration? Åtgärden kan inte ångras.', 'Are you sure you want to delete this room label configuration? This action cannot be undone.')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('Avbryt', 'Cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deleteConfirmId) {
+                  deleteConfig(deleteConfirmId);
+                  setDeleteConfirmId(null);
+                }
+              }}
+            >
+              {t('Ta bort', 'Delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

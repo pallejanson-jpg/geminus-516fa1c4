@@ -25,7 +25,6 @@ const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
 const InAppFaultReport = lazy(() => import("@/components/fault-report/InAppFaultReport"));
 const AiAssetScan = lazy(() => import("@/pages/AiAssetScan"));
 const FmaInternalView = lazy(() => import("@/components/viewer/FmaInternalView"));
-const GeminusBaseNativeView = lazy(() => import("@/components/geminus-base/GeminusBaseNativeView"));
 const GeminusBaseV2View = lazy(() => import("@/components/geminus-base/GeminusBaseV2View"));
 const CesiumGlobeView = lazy(() => import("@/components/globe/CesiumGlobeView"));
 const CustomerPortalView = lazy(() => import("@/components/support/CustomerPortalView"));

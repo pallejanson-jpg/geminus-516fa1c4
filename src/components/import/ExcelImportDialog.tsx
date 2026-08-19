@@ -72,11 +72,16 @@ const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
       }
 
       // Fetch floors and rooms for name lookup
-      const { data: assets } = await supabase
+      const { data: assets, error: assetsError } = await supabase
         .from('assets')
         .select('fm_guid, name, common_name, category, level_fm_guid')
         .eq('building_fm_guid', buildingFmGuid)
         .in('category', ['Building Storey', 'IfcBuildingStorey', 'Space', 'IfcSpace']);
+
+      if (assetsError) {
+        toast({ variant: 'destructive', title: 'Could not look up floors/rooms', description: 'Room matching was skipped, so all rows may be incorrectly flagged as not found. Please try again.' });
+        return;
+      }
 
       const floors = (assets || []).filter(a =>
         a.category === 'Building Storey' || a.category === 'IfcBuildingStorey'

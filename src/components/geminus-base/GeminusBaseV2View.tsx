@@ -12,6 +12,7 @@ import {
   Square, LayoutPanelLeft, Box, SplitSquareHorizontal, Combine, View, BarChart2, Map as MapIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from '@/hooks/use-toast';
 import { useGeminusBaseApi, GeminusBaseNode, CLASS_LABELS, NAV_CLASS_IDS, LEAF_CLASS_IDS, dynamicClassLabels, SPOT_CLASS_IDS } from '@/hooks/useGeminusBaseApi';
 import { useIsMobile } from '@/hooks/use-mobile';
 import GeminusBaseTree from './GeminusBaseTree';
@@ -304,6 +305,11 @@ const GeminusBaseV2View: React.FC = () => {
       setRootNode({ objectName: 'BLM Demo', classId: 102, objectId: -1, children: allChildren });
     } catch (e) {
       console.error('[GeminusBaseV2] buildTree error:', e);
+      toast({
+        variant: 'destructive',
+        title: 'Could not load Geminus Base tree',
+        description: 'The connection to Geminus Base may be down. The tree shown is a fallback, not your real data.',
+      });
       setRootNode({ objectName: '0000 - Kfast', classId: 103, objectId: 41854, children: [] });
     } finally {
       setTreeLoading(false);

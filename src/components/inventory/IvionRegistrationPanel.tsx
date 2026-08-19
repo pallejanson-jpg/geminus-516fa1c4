@@ -90,6 +90,13 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
   const [levelFmGuid, setLevelFmGuid] = useState('');
   const [roomFmGuid, setRoomFmGuid] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  // Inline validation errors for required fields (shown persistently under each field)
+  const [fieldErrors, setFieldErrors] = useState<{
+    name?: string;
+    category?: string;
+    symbolId?: string;
+  }>({});
   
   // Data
   const [symbols, setSymbols] = useState<AnnotationSymbol[]>([]);
@@ -356,18 +363,17 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
 
   // Handle form submission
   const handleSave = async () => {
-    if (!name.trim()) {
-       toast.error('Name is required');
-       return;
-     }
-     if (!category) {
-       toast.error('Select a category');
-       return;
-     }
-     if (!symbolId) {
-       toast.error('Select a symbol');
-       return;
-     }
+    const errors: typeof fieldErrors = {};
+    if (!name.trim()) errors.name = 'Name is required';
+    if (!category) errors.category = 'Select a category';
+    if (!symbolId) errors.symbolId = 'Select a symbol';
+
+    setFieldErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
+      toast.error(errors.name || errors.category || errors.symbolId);
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -459,10 +465,11 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
       setFetchedPoiId(null);
       setFetchedImageId(null);
       setAutoFetchAttempted(false); // Allow auto-fetch again for next item
+      setFieldErrors({});
       // Keep level and room for convenience
     } catch (err: any) {
       console.error('Save error:', err);
-      toast.error('Could not save', { description: err.message });
+      toast.error('Could not save', { description: 'Please try again, or contact support if this keeps happening.' });
     } finally {
       setIsLoading(false);
       setCloseAfterSave(false);
@@ -608,17 +615,27 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
             <Label className="text-sm">Name / Designation *</Label>
             <Input
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: undefined }));
+              }}
               placeholder="e.g. Fire Extinguisher BS-001"
               className="h-10"
               maxLength={100}
             />
+            {fieldErrors.name && <p className="text-xs text-destructive">{fieldErrors.name}</p>}
           </div>
 
           {/* Category */}
           <div className="space-y-1.5">
             <Label className="text-sm">Category *</Label>
-            <Select value={category} onValueChange={setCategory}>
+            <Select
+              value={category}
+              onValueChange={(v) => {
+                setCategory(v);
+                if (fieldErrors.category) setFieldErrors((prev) => ({ ...prev, category: undefined }));
+              }}
+            >
               <SelectTrigger className="h-10">
                 <SelectValue placeholder="Select category..." />
               </SelectTrigger>
@@ -633,12 +650,19 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
                 ))}
               </SelectContent>
             </Select>
+            {fieldErrors.category && <p className="text-xs text-destructive">{fieldErrors.category}</p>}
           </div>
 
           {/* Symbol */}
           <div className="space-y-1.5">
             <Label className="text-sm">Symbol *</Label>
-            <Select value={symbolId} onValueChange={setSymbolId}>
+            <Select
+              value={symbolId}
+              onValueChange={(v) => {
+                setSymbolId(v);
+                if (fieldErrors.symbolId) setFieldErrors((prev) => ({ ...prev, symbolId: undefined }));
+              }}
+            >
               <SelectTrigger className="h-10">
                 <SelectValue placeholder="Select symbol..." />
               </SelectTrigger>
@@ -667,6 +691,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
                 ))}
               </SelectContent>
             </Select>
+            {fieldErrors.symbolId && <p className="text-xs text-destructive">{fieldErrors.symbolId}</p>}
           </div>
 
           {/* Floor */}

@@ -107,7 +107,7 @@ export default function ApiProfilesManager() {
   async function fetchProfiles() {
     setLoading(true);
     const { data, error } = await supabase
-      .from('api_profiles' as any)
+      .from('api_profiles')
       .select('*')
       .order('is_default', { ascending: false })
       .order('name');
@@ -116,7 +116,7 @@ export default function ApiProfilesManager() {
       // Keep whatever profiles were already loaded rather than clearing them —
       // an empty list here would be indistinguishable from "no profiles exist".
     } else if (data) {
-      setProfiles(data as any[]);
+      setProfiles(data);
     }
     setLoading(false);
   }
@@ -184,14 +184,14 @@ export default function ApiProfilesManager() {
 
       if (editingId) {
         const { error } = await supabase
-          .from('api_profiles' as any)
+          .from('api_profiles')
           .update(payload)
           .eq('id', editingId);
         if (error) throw error;
         toast({ title: 'Profile updated' });
       } else {
         const { error } = await supabase
-          .from('api_profiles' as any)
+          .from('api_profiles')
           .insert(payload);
         if (error) throw error;
         toast({ title: 'Profile created' });
@@ -209,7 +209,7 @@ export default function ApiProfilesManager() {
     if (!deleteId) return;
     try {
       const { error } = await supabase
-        .from('api_profiles' as any)
+        .from('api_profiles')
         .delete()
         .eq('id', deleteId);
       if (error) throw error;

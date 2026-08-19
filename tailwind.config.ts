@@ -17,6 +17,10 @@ export default {
         sans: ["Inter", "system-ui", "sans-serif"],
         display: ["Inter", "system-ui", "sans-serif"],
       },
+      fontSize: {
+        // Standardized "tiny label" size — replaces the many one-off text-[10px]/text-[11px] arbitrary values
+        "2xs": ["0.6875rem", { lineHeight: "1rem" }],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

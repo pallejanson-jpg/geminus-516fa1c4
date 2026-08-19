@@ -124,12 +124,13 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
       setAlarms((data as AlarmAsset[]) || []);
       setTotalCount(count || 0);
       setSelectedIds(new Set());
-    } catch (e) {
+    } catch (e: any) {
       console.error('Error fetching alarms:', e);
+      toast({ title: 'Failed to load alarms', description: e?.message, variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
-  }, [buildingFmGuid, page, levelFilter]);
+  }, [buildingFmGuid, page, levelFilter, toast]);
 
   useEffect(() => {
     fetchLevelNames();

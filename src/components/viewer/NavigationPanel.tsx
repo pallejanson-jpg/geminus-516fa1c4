@@ -32,6 +32,7 @@ import {
 import { useFloorData, type FloorInfo } from '@/hooks/useFloorData';
 import { getXeokitViewerFromRef } from '@/hooks/useFloorVisibility';
 import { generateFloorNavGraph, collectVerticalNodes, mergeGeneratedFloor } from '@/lib/nav-graph-autogen';
+import { getFloorAabb } from '@/lib/indoor-route-3d';
 import { formatRoomLabel } from '@/lib/utils';
 
 function normalizeGuid(v?: string | null): string {
@@ -204,7 +205,19 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
         return;
       }
 
-      const merged = mergeGeneratedFloor(graph, currentFloorFmGuid ?? null, generated);
+      // Lets mergeGeneratedFloor convert any other floors' percent-space edges to real
+      // meters too (instead of just warning about them) when this floor's AABB isn't the
+      // one they need — matched by database level fm_guid, since one FloorInfo can span
+      // several of those.
+      const resolveOtherFloorAabb = (otherFloorFmGuid: string | null) => {
+        if (!otherFloorFmGuid) return null;
+        const otherFloor = floors.find(f =>
+          f.databaseLevelFmGuids.some(g => normalizeGuid(g) === normalizeGuid(otherFloorFmGuid))
+        );
+        return otherFloor ? getFloorAabb(viewer, otherFloor) : null;
+      };
+
+      const merged = mergeGeneratedFloor(graph, currentFloorFmGuid ?? null, generated, resolveOtherFloorAabb);
       onGraphLoaded(merged);
       toast.success(t(`Genererade ${generated.nodes.size} noder`, `Generated ${generated.nodes.size} nodes`));
     } finally {

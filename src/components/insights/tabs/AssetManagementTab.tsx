@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 import { SEQUENTIAL_PALETTE, CHART_COLORS, STATUS_COLORS, ICON_COLOR_CLASSES } from '@/lib/chart-theme';
+import { toast } from 'sonner';
 
 // Truncate name for chart display
 const truncateName = (name: string, maxLen = 12) => 
@@ -83,8 +84,9 @@ export default function AssetManagementTab({ onNavigateToAssets }: AssetManageme
                     });
                     setDbCategories(categories);
                 }
-            } catch (e) {
+            } catch (e: any) {
                 console.error('Failed to fetch asset counts:', e);
+                toast.error('Failed to load asset data', { description: e?.message });
             } finally {
                 setIsLoadingDb(false);
             }

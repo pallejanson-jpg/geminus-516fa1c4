@@ -143,7 +143,7 @@ const FaultReport: React.FC = () => {
     } catch (err: any) {
       console.error('Submit error:', err);
       toast.error('Could not submit fault report', {
-        description: err.message,
+        description: 'Please try again in a moment.',
       });
     } finally {
       setIsSubmitting(false);

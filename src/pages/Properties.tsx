@@ -71,7 +71,7 @@ export default function Properties() {
       let profileMap: Record<string, string> = {};
       if (profileIds.length > 0) {
         const { data: profiles } = await supabase
-          .from('api_profiles' as any)
+          .from('api_profiles')
           .select('id, name')
           .in('id', profileIds);
         (profiles || []).forEach((p: any) => {

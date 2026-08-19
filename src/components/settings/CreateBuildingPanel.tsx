@@ -390,7 +390,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       if (selectedTenantId) {
         await supabase
           .from('building_settings')
-          .upsert({ fm_guid: created.buildingFmGuid, tenant_id: selectedTenantId } as any, { onConflict: 'fm_guid' });
+          .upsert({ fm_guid: created.buildingFmGuid, tenant_id: selectedTenantId }, { onConflict: 'fm_guid' });
         window.dispatchEvent(new Event('building-settings-changed'));
       }
 
@@ -484,7 +484,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           created_by: user.id,
           source_type: isUploadToExisting ? 'ifc-upload-to-existing' : 'ifc',
           source_bucket: 'ifc-uploads',
-        } as any)
+        })
         .select('id')
         .single();
 
@@ -747,7 +747,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           file_name: storageFileName, file_size: result.xktData.byteLength,
           storage_path: storagePath, file_url: null, format: 'xkt',
           synced_at: new Date().toISOString(), source_updated_at: new Date().toISOString(),
-        } as any, { onConflict: 'building_fm_guid,model_id' });
+        }, { onConflict: 'building_fm_guid,model_id' });
         await cleanupSupersededModels(buildingGuid, modelNameSafe, modelId);
 
         // Persist systems
@@ -758,10 +758,10 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
             const { data: sysRow } = await supabase.from('systems').upsert({
               fm_guid: sysFmGuid, name: sys.name, system_type: sys.type, discipline: sys.discipline,
               building_fm_guid: buildingGuid, source: 'ifc-browser',
-            } as any, { onConflict: 'fm_guid' }).select('id').single();
+            }, { onConflict: 'fm_guid' }).select('id').single();
             if (sysRow?.id && sys.memberIds.length > 0) {
               const links = sys.memberIds.slice(0, 500).map((mid: string) => ({ system_id: sysRow.id, asset_fm_guid: mid }));
-              await supabase.from('asset_system').upsert(links as any[], { onConflict: 'system_id,asset_fm_guid' });
+              await supabase.from('asset_system').upsert(links, { onConflict: 'system_id,asset_fm_guid' });
             }
           }
           log(`✅ ${result.systems.length} systems saved`);
@@ -1063,7 +1063,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
   };
 
   const handleResetJob = async (jobId: string) => {
-    await supabase.from('conversion_jobs').update({ status: 'pending', progress: 0, error_message: null, updated_at: new Date().toISOString() } as any).eq('id', jobId);
+    await supabase.from('conversion_jobs').update({ status: 'pending', progress: 0, error_message: null, updated_at: new Date().toISOString() }).eq('id', jobId);
     fetchConversionJobs();
   };
 

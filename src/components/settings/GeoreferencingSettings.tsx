@@ -68,6 +68,11 @@ const GeoreferencingSettings: React.FC<GeoreferencingSettingsProps> = ({
                 }
             } catch (error) {
                 console.error('Failed to fetch georeferencing settings:', error);
+                toast({
+                    variant: "destructive",
+                    title: "Could not load georeferencing settings",
+                    description: "Existing values may not be shown. Avoid saving until this is resolved to prevent overwriting them.",
+                });
             } finally {
                 setIsLoading(false);
             }

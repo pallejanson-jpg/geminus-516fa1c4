@@ -1,5 +1,6 @@
 import React, { createContext, useState, useCallback, useContext, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from '@/hooks/use-toast';
 
 export interface Tenant {
   id: string;
@@ -46,6 +47,11 @@ export const TenantProvider: React.FC<{ children: ReactNode }> = ({ children }) 
       const { data, error } = await supabase.from('tenants').select('id, name').order('name');
       if (error) {
         console.error('Failed to load tenants:', error);
+        toast({
+          variant: 'destructive',
+          title: 'Could not load tenants',
+          description: 'The tenant list may be incomplete or stale. Please try again.',
+        });
         return;
       }
       const rows = data || [];

@@ -133,6 +133,14 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
   // Track the fm_guid when editing
   const [editingFmGuid, setEditingFmGuid] = useState<string | null>(null);
 
+  // Inline validation errors for required fields (shown persistently under each field)
+  const [fieldErrors, setFieldErrors] = useState<{
+    name?: string;
+    category?: string;
+    symbolId?: string;
+    buildingFmGuid?: string;
+  }>({});
+
   // Load edit item data
   useEffect(() => {
     if (editItem) {
@@ -199,6 +207,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
     setAiResult(null);
     setBipSuggestions([]);
     setSelectedBip(null);
+    setFieldErrors({});
   };
 
   // AI image recognition - calls mobile-ai-scan with the uploaded image
@@ -434,20 +443,16 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
 
   const handleSubmit = async () => {
     // Validation
-    if (!name.trim()) {
-      toast.error('Name is required');
-      return;
-    }
-    if (!category) {
-      toast.error('Select a category');
-      return;
-    }
-    if (!symbolId) {
-      toast.error('Select a symbol');
-      return;
-    }
-    if (!buildingFmGuid) {
-      toast.error('Select a building');
+    const errors: typeof fieldErrors = {};
+    if (!name.trim()) errors.name = 'Name is required';
+    if (!category) errors.category = 'Select a category';
+    if (!symbolId) errors.symbolId = 'Select a symbol';
+    if (!buildingFmGuid) errors.buildingFmGuid = 'Select a building';
+
+    setFieldErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
+      toast.error(errors.name || errors.category || errors.symbolId || errors.buildingFmGuid);
       return;
     }
 
@@ -592,7 +597,7 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
     } catch (error: any) {
       console.error('Save error:', error);
       toast.error('Could not save', {
-        description: error.message,
+        description: 'Please try again, or contact support if this keeps happening.',
       });
     } finally {
       setIsLoading(false);
@@ -640,18 +645,28 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
         <Label className="text-base">Name / Designation *</Label>
         <Input
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setName(e.target.value);
+            if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: undefined }));
+          }}
           placeholder="e.g. Fire Extinguisher BS-001"
           className="h-12 text-base"
           autoFocus
           maxLength={100}
         />
+        {fieldErrors.name && <p className="text-sm text-destructive">{fieldErrors.name}</p>}
       </div>
 
       {/* Category dropdown */}
       <div className="space-y-2">
         <Label className="text-base">Category *</Label>
-        <Select value={category} onValueChange={setCategory}>
+        <Select
+          value={category}
+          onValueChange={(v) => {
+            setCategory(v);
+            if (fieldErrors.category) setFieldErrors((prev) => ({ ...prev, category: undefined }));
+          }}
+        >
           <SelectTrigger className="h-12">
             <SelectValue placeholder="Select category..." />
           </SelectTrigger>
@@ -666,12 +681,19 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
             ))}
           </SelectContent>
         </Select>
+        {fieldErrors.category && <p className="text-sm text-destructive">{fieldErrors.category}</p>}
       </div>
 
       {/* Symbol dropdown with images */}
       <div className="space-y-2">
         <Label className="text-base">Symbol *</Label>
-        <Select value={symbolId} onValueChange={setSymbolId}>
+        <Select
+          value={symbolId}
+          onValueChange={(v) => {
+            setSymbolId(v);
+            if (fieldErrors.symbolId) setFieldErrors((prev) => ({ ...prev, symbolId: undefined }));
+          }}
+        >
           <SelectTrigger className="h-12">
             <SelectValue placeholder="Select symbol..." />
           </SelectTrigger>
@@ -704,17 +726,22 @@ const InventoryForm: React.FC<InventoryFormProps> = ({ onSaved, onCancel, prefil
             ))}
           </SelectContent>
         </Select>
+        {fieldErrors.symbolId && <p className="text-sm text-destructive">{fieldErrors.symbolId}</p>}
       </div>
 
       {/* Building dropdown */}
-      <BuildingSelector
-        value={buildingFmGuid}
-        onChange={(v) => {
-          setBuildingFmGuid(v);
-          setLevelFmGuid('');
-          setRoomFmGuid('');
-        }}
-      />
+      <div className="space-y-2">
+        <BuildingSelector
+          value={buildingFmGuid}
+          onChange={(v) => {
+            setBuildingFmGuid(v);
+            setLevelFmGuid('');
+            setRoomFmGuid('');
+            if (fieldErrors.buildingFmGuid) setFieldErrors((prev) => ({ ...prev, buildingFmGuid: undefined }));
+          }}
+        />
+        {fieldErrors.buildingFmGuid && <p className="text-sm text-destructive">{fieldErrors.buildingFmGuid}</p>}
+      </div>
 
       {/* Floor - filtered by building */}
       {buildingFmGuid && (

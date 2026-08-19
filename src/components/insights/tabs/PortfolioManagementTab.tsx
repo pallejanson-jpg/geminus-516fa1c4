@@ -65,8 +65,8 @@ export default function PortfolioManagementTab({ onColorMap }: PortfolioManageme
     const totals = useMemo(() => ({
         totalValue: portfolioData.reduce((s, b) => s + b.marketValue, 0),
         totalRent: portfolioData.reduce((s, b) => s + b.annualRent, 0),
-        avgRoi: portfolioData.reduce((s, b) => s + b.roi, 0) / portfolioData.length,
-        avgOccupancy: Math.round(portfolioData.reduce((s, b) => s + b.occupancy, 0) / portfolioData.length),
+        avgRoi: portfolioData.reduce((s, b) => s + b.roi, 0) / Math.max(portfolioData.length, 1),
+        avgOccupancy: Math.round(portfolioData.reduce((s, b) => s + b.occupancy, 0) / Math.max(portfolioData.length, 1)),
         buildingCount: portfolioData.length,
     }), [portfolioData]);
 

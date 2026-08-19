@@ -122,12 +122,17 @@ const FeedbackThreadDetail: React.FC<FeedbackThreadDetailProps> = ({
   const handleVote = async () => {
     if (!user) return;
     try {
+      let error;
       if (thread.user_voted) {
         await supabase.from('feedback_votes').delete().eq('thread_id', thread.id).eq('user_id', user.id);
-        await supabase.from('feedback_threads').update({ vote_count: Math.max(0, thread.vote_count - 1) }).eq('id', thread.id);
+        ({ error } = await supabase.from('feedback_threads').update({ vote_count: Math.max(0, thread.vote_count - 1) }).eq('id', thread.id));
       } else {
         await supabase.from('feedback_votes').insert({ thread_id: thread.id, user_id: user.id });
-        await supabase.from('feedback_threads').update({ vote_count: thread.vote_count + 1 }).eq('id', thread.id);
+        ({ error } = await supabase.from('feedback_threads').update({ vote_count: thread.vote_count + 1 }).eq('id', thread.id));
+      }
+      if (error) {
+        console.error('Failed to update vote count:', error);
+        toast({ variant: 'destructive', title: 'Vote may not be counted', description: 'Your vote was recorded but the count failed to update.' });
       }
       onUpdated();
     } catch (err) {

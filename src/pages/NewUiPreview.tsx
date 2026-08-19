@@ -9,6 +9,7 @@ import { useAllBuildingSettings } from '@/hooks/useAllBuildingSettings';
 import { extractSpaceArea } from '@/lib/building-utils';
 import { supabase } from '@/integrations/supabase/client';
 import { BUILDING_IMAGES } from '@/lib/constants';
+import { toast } from '@/hooks/use-toast';
 import './new-ui-preview.css';
 
 // This page reads REAL Geminus data (read-only) via the same hooks/context
@@ -93,14 +94,21 @@ function useRealSavedViews(): { views: SavedView[]; loading: boolean } {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
-        .from('saved_views')
-        .select('id, name, screenshot_url, building_name, building_fm_guid, created_at')
-        .order('created_at', { ascending: false })
-        .limit(6);
-      if (!cancelled) {
-        setViews(data || []);
-        setLoading(false);
+      try {
+        const { data, error } = await supabase
+          .from('saved_views')
+          .select('id, name, screenshot_url, building_name, building_fm_guid, created_at')
+          .order('created_at', { ascending: false })
+          .limit(6);
+        if (error) throw error;
+        if (!cancelled) setViews(data || []);
+      } catch (err) {
+        console.error('Failed to load saved views:', err);
+        if (!cancelled) {
+          toast({ variant: 'destructive', title: 'Could not load saved views', description: 'Please try again later.' });
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };

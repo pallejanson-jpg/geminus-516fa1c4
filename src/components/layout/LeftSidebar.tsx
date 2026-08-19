@@ -116,7 +116,7 @@ const LeftSidebar: React.FC = () => {
                     
                     {/* Context label when building is selected */}
                     {selectedFacility && (
-                        <p className={`text-[10px] font-medium uppercase tracking-wider px-1 truncate ${isSidebarExpanded ? 'text-muted-foreground' : 'hidden'}`}>
+                        <p className={`text-2xs font-medium uppercase tracking-wider px-1 truncate ${isSidebarExpanded ? 'text-muted-foreground' : 'hidden'}`}>
                             {selectedFacility.commonName || selectedFacility.name || 'Building'}
                         </p>
                     )}

@@ -24,6 +24,7 @@ import { Input } from '@/components/ui/input';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/context/LanguageContext';
+import { toast } from 'sonner';
 
 
 // Helper for deterministic pseudo-random based on string
@@ -142,8 +143,9 @@ export default function FacilityManagementTab() {
                     setAlarmCountByBuilding(counts);
                     setTotalRealAlarms(data.length);
                 }
-            } catch (e) {
+            } catch (e: any) {
                 console.error('Failed to fetch alarm counts:', e);
+                toast.error('Failed to load alarm data', { description: e?.message });
             }
         };
         fetchAlarmCounts();

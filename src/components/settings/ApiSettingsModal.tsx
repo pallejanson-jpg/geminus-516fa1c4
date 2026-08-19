@@ -997,6 +997,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             }
         } catch (err: any) {
             console.error('Failed to check ACC status:', err);
+            toast({ variant: 'destructive', title: 'Could not check ACC status', description: err.message });
         } finally {
             setIsCheckingAccStatus(false);
         }
@@ -1406,6 +1407,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             }
         } catch (error) {
             console.error('Failed to fetch config:', error);
+            toast({ variant: 'destructive', title: 'Could not load configuration', description: 'Shown values may be stale or blank.' });
         } finally {
             setIsLoadingConfig(false);
         }
@@ -1431,6 +1433,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             }
         } catch (error) {
             console.error('Failed to fetch sync status:', error);
+            toast({ variant: 'destructive', title: 'Could not load sync status', description: 'Shown counts may be stale or incomplete.' });
         }
     };
 
@@ -1453,6 +1456,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             }
         } catch (error) {
             console.error('Failed to fetch sync progress:', error);
+            toast({ variant: 'destructive', title: 'Could not load sync progress', description: 'Progress shown may be stale.' });
         }
     };
 
@@ -1469,6 +1473,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             }
         } catch (error) {
             console.error('Failed to check sync status:', error);
+            toast({ variant: 'destructive', title: 'Could not check sync status', description: 'Please try again.' });
         } finally {
             setIsCheckingSync(false);
         }
@@ -1909,6 +1914,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             setFavoriteBuildings([allBuildings[0]]);
         } catch (error) {
             console.error('Failed to fetch favorite buildings:', error);
+            toast({ variant: 'destructive', title: 'Could not load favorite buildings', description: 'The list shown may be empty or stale.' });
         }
     };
 
@@ -1949,6 +1955,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             }
         } catch (error) {
             console.error('Failed to fetch Congeria data:', error);
+            toast({ variant: 'destructive', title: 'Could not load Congeria data', description: 'Links and counts shown may be stale or incomplete.' });
         }
     };
 

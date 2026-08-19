@@ -54,7 +54,10 @@ const InAppFaultReport: React.FC = () => {
       toast.success(t('Felanmälan skickad!', 'Fault report submitted!'));
     } catch (err: any) {
       console.error('Submit error:', err);
-      toast.error('Could not submit fault report', { description: err.message });
+      toast.error(
+        t('Kunde inte skicka felanmälan', 'Could not submit fault report'),
+        { description: t('Försök igen om en stund.', 'Please try again in a moment.') }
+      );
     } finally {
       setIsSubmitting(false);
     }

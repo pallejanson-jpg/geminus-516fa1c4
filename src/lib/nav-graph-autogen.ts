@@ -15,7 +15,7 @@
 import { getDescendantIds } from '@/hooks/useFloorVisibility';
 import type { FloorInfo } from '@/hooks/useFloorData';
 import type { NavGraph, NavNode, NavEdge } from '@/lib/pathfinding';
-import { getFloorAabb, resolveFloorMetaObjectIds, type Aabb6 } from '@/lib/indoor-route-3d';
+import { getFloorAabb, resolveFloorMetaObjectIds, pctDistanceToMeters, type Aabb6 } from '@/lib/indoor-route-3d';
 
 const SPACE_TYPES = new Set(['ifcspace']);
 const DOOR_TYPES = new Set(['ifcdoor', 'ifcdoorstandardcase']);
@@ -62,6 +62,30 @@ let idCounter = 0;
 function makeNodeId(prefix: string): string {
   idCounter += 1;
   return `auto_${prefix}_${Date.now().toString(36)}_${idCounter}`;
+}
+
+/**
+ * P12 unit-mismatch bookkeeping: every edge this module creates has its `weight` in
+ * real-world meters (computed from live BIM geometry — see dist3/distXZ above), whereas
+ * hand-drawn edges from NavGraphEditorOverlay.tsx store `weight` as a raw percent-of-image
+ * Euclidean distance over [x%, z%] node coordinates. The two are not interchangeable, so
+ * mergeGeneratedFloor() below needs to tell them apart when it combines a freshly generated
+ * floor with whatever graph the user already had loaded (see its docstring for the full
+ * reasoning). This marker is a plain runtime property, not part of the public NavEdge shape —
+ * it deliberately does NOT round-trip through navGraphToGeoJSON/parseNavGraph (pathfinding.ts),
+ * so it only survives for the lifetime of the in-memory graph before the user hits "Save graph".
+ * Once a graph is saved and reloaded from the DB, this tag is gone and the units of any given
+ * edge can no longer be told apart after the fact — see mergeGeneratedFloor's console.warn path.
+ */
+const METERS_UNIT_MARKER = '__navGraphAutogenMeters';
+
+function markAsMeters(edge: NavEdge): NavEdge {
+  (edge as unknown as Record<string, unknown>)[METERS_UNIT_MARKER] = true;
+  return edge;
+}
+
+function isMarkedAsMeters(edge: NavEdge): boolean {
+  return (edge as unknown as Record<string, unknown>)[METERS_UNIT_MARKER] === true;
 }
 
 export interface VerticalNode {
@@ -164,7 +188,7 @@ export function generateFloorNavGraph(viewer: any, floor: FloorInfo, options: Ge
     });
 
     touchingRooms.slice(0, 2).forEach(room => {
-      edges.push({ from: doorNodeId, to: room.nodeId, weight: dist3(center, room.center) });
+      edges.push(markAsMeters({ from: doorNodeId, to: room.nodeId, weight: dist3(center, room.center) }));
     });
   }
 
@@ -195,7 +219,7 @@ export function generateFloorNavGraph(viewer: any, floor: FloorInfo, options: Ge
       if (!nearestRoom || d < nearestRoom.dist) nearestRoom = { nodeId: room.nodeId, dist: d };
     }
     if (nearestRoom && nearestRoom.dist < MAX_VERTICAL_TO_ROOM_DISTANCE) {
-      edges.push({ from: nodeId, to: nearestRoom.nodeId, weight: nearestRoom.dist });
+      edges.push(markAsMeters({ from: nodeId, to: nearestRoom.nodeId, weight: nearestRoom.dist }));
     }
 
     // Cross-floor link: same type, close horizontal footprint, different floor
@@ -205,7 +229,11 @@ export function generateFloorNavGraph(viewer: any, floor: FloorInfo, options: Ge
       && distXZ(center, v.worldPos) < VERTICAL_MATCH_RADIUS
     );
     if (match) {
-      edges.push({ from: nodeId, to: match.nodeId, weight: 1 });
+      // Real 3D distance (mostly the floor-to-floor height difference, since distXZ already
+      // confirmed the horizontal footprints are within VERTICAL_MATCH_RADIUS) in meters —
+      // was previously a hardcoded `1`, an arbitrary unit that wasn't meters *or* percent and
+      // was itself inconsistent with every other edge this function emits.
+      edges.push(markAsMeters({ from: nodeId, to: match.nodeId, weight: dist3(center, match.worldPos) }));
     }
   }
 
@@ -216,8 +244,38 @@ export function generateFloorNavGraph(viewer: any, floor: FloorInfo, options: Ge
  * Merge a freshly generated floor graph into a working graph, replacing whatever
  * that floor previously contributed (so re-running the suggestion on a floor is
  * idempotent) while preserving every other floor untouched.
+ *
+ * P12 unit-mismatch handling: `generated`'s edges are always real-world meters (see
+ * markAsMeters above). `existingGraph`'s edges for every OTHER floor are, in the common
+ * case, hand-drawn percent-of-image distances from NavGraphEditorOverlay.tsx — but they
+ * could instead already be real meters, if that other floor was itself produced by this
+ * same generator earlier in the session and hasn't been saved/reloaded yet (still tagged,
+ * see isMarkedAsMeters) or was auto-generated in an earlier session and already saved (tag
+ * lost on save — see METERS_UNIT_MARKER's docstring). Once both units sit in the same graph,
+ * Dijkstra (pathfinding.ts) sums incompatible numbers and produces misleading route
+ * distances / can pick the wrong "shortest" path.
+ *
+ * What this function does about it:
+ *  - Tagged (already-meters) other-floor edges are left untouched — converting them again
+ *    would silently double-scale them, which is worse than leaving them alone.
+ *  - Untagged other-floor edges are converted to meters via `resolveOtherFloorAabb` +
+ *    pctDistanceToMeters WHEN the caller supplies that calibration lookup (it needs a live
+ *    xeokit viewer plus the building's floor list to resolve each floor's AABB — this
+ *    function only knows about the one floor it was just handed, so it can't derive that
+ *    itself). The current call site (NavigationPanel.tsx's runGenerateSuggestion) doesn't
+ *    pass it, so in practice this conversion doesn't run today.
+ *  - Without that calibration, per "don't fabricate a scale factor for units we can't
+ *    verify," those edges' weights are left exactly as saved, and a single console.warn
+ *    flags that the merged graph mixes units, so this is at least visible instead of a
+ *    silently wrong route distance.
  */
-export function mergeGeneratedFloor(existingGraph: NavGraph, floorFmGuid: string | null, generated: NavGraph): NavGraph {
+export function mergeGeneratedFloor(
+  existingGraph: NavGraph,
+  floorFmGuid: string | null,
+  generated: NavGraph,
+  /** Resolve another floor's live AABB (image/world calibration) for percent->meters conversion, if available. */
+  resolveOtherFloorAabb?: (otherFloorFmGuid: string | null) => Aabb6 | null,
+): NavGraph {
   const floorNorm = normalizeGuid(floorFmGuid);
   const nodes = new Map<string, NavNode>();
   for (const [id, node] of existingGraph.nodes) {
@@ -232,8 +290,56 @@ export function mergeGeneratedFloor(existingGraph: NavGraph, floorFmGuid: string
   // orphan that one cross-floor link; re-running the later floor's generation
   // re-establishes it. Not auto-healed both ways — acceptable for a suggestion tool.)
   const keptIds = new Set(nodes.keys());
-  const edges = existingGraph.edges.filter(e => keptIds.has(e.from) && keptIds.has(e.to));
-  edges.push(...generated.edges);
+  const otherFloorEdges = existingGraph.edges.filter(e => keptIds.has(e.from) && keptIds.has(e.to));
+
+  let unverifiedUnitCount = 0;
+  const aabbCache = new Map<string, Aabb6 | null>();
+
+  const normalizedOtherFloorEdges = otherFloorEdges.map(edge => {
+    if (isMarkedAsMeters(edge)) return edge; // already real meters — leave as-is, don't double-convert
+
+    const fromNode = nodes.get(edge.from);
+    const toNode = nodes.get(edge.to);
+    if (!fromNode || !toNode) return edge;
+
+    // A cross-floor edge's two [x%, z%] endpoints live in different floors' percent
+    // coordinate systems — there's no single floor AABB that makes "percent distance
+    // between them" meaningful, so this is left alone regardless of resolveOtherFloorAabb.
+    // (Cross-floor edges only ever come from this module's own vertical-link generation,
+    // see `match` above; an unmarked one just means it predates the markAsMeters fix.)
+    if (normalizeGuid(fromNode.floor_fm_guid) !== normalizeGuid(toNode.floor_fm_guid)) {
+      unverifiedUnitCount++;
+      return edge;
+    }
+
+    if (!resolveOtherFloorAabb) {
+      unverifiedUnitCount++;
+      return edge;
+    }
+
+    const edgeFloorKey = normalizeGuid(fromNode.floor_fm_guid);
+    if (!aabbCache.has(edgeFloorKey)) aabbCache.set(edgeFloorKey, resolveOtherFloorAabb(fromNode.floor_fm_guid ?? null));
+    const aabb = aabbCache.get(edgeFloorKey);
+    if (!aabb) {
+      unverifiedUnitCount++;
+      return edge;
+    }
+
+    return markAsMeters({ ...edge, weight: pctDistanceToMeters(fromNode.coordinates, toNode.coordinates, aabb) });
+  });
+
+  if (unverifiedUnitCount > 0) {
+    console.warn(
+      `[nav-graph-autogen] mergeGeneratedFloor: merging a freshly auto-generated floor ` +
+      `(real-world-meter edge weights) with ${unverifiedUnitCount} pre-existing edge(s) on ` +
+      `other floor(s) whose unit could not be verified or converted (most likely percent-of-image ` +
+      `distances from hand-drawn edges). Route distances that cross between these floors may be ` +
+      `inconsistent/misleading until those floors are also regenerated, hand-redrawn, or a ` +
+      `calibration source is supplied to mergeGeneratedFloor.`
+    );
+  }
+
+  const edges = [...normalizedOtherFloorEdges, ...generated.edges];
 
   return { nodes, edges };
 }

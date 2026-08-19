@@ -78,6 +78,29 @@ export function pctToWorld(xPct: number, zPct: number, aabb: Aabb6, yOverride?: 
   return [x, y, z];
 }
 
+/**
+ * Real-world-meters distance between two nav-graph [x%, z%] points on the same floor,
+ * using the floor's AABB as the image-to-meters calibration (the same denormalization
+ * pctToWorld uses for 3D rendering).
+ *
+ * This is the calibration primitive behind the P12 unit-mismatch fix: hand-drawn nav-graph
+ * edges (NavGraphEditorOverlay.tsx) store `weight` as a raw percent-space Euclidean distance
+ * between two [x%, z%] node coordinates (see euclideanDist() in pathfinding.ts), while
+ * nav-graph-autogen.ts's generateFloorNavGraph() computes edge weights as real-world meters
+ * read directly from BIM geometry. Those two numbers are not comparable — summing them in
+ * Dijkstra (pathfinding.ts) produces meaningless route distances and can pick the wrong
+ * "shortest" path. Converting a percent-space edge through this function (using the same
+ * floor's live AABB) yields the real-meters equivalent, matching auto-generated edges' units.
+ *
+ * Ignores Y: floor plans are inherently 2D, and a floor's vertical extent isn't part of a
+ * horizontal walking-distance calculation (matches distXZ's reasoning in nav-graph-autogen.ts).
+ */
+export function pctDistanceToMeters(aPct: [number, number], bPct: [number, number], aabb: Aabb6): number {
+  const [ax, , az] = pctToWorld(aPct[0], aPct[1], aabb, 0);
+  const [bx, , bz] = pctToWorld(bPct[0], bPct[1], aabb, 0);
+  return Math.hypot(bx - ax, bz - az);
+}
+
 export interface ResolvedRouteNode {
   node: NavNode;
   worldPos: [number, number, number];

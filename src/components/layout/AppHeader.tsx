@@ -221,7 +221,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                 >
                     <Search className="h-4 w-4 shrink-0" />
                     <span className="flex-1 text-left truncate">{t('Sök byggnader, rum, objekt...', 'Search buildings, rooms, objects...')}</span>
-                    <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+                    <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-border bg-muted px-1.5 font-mono text-2xs font-medium text-muted-foreground">
                         ⌘K
                     </kbd>
                 </button>
@@ -269,7 +269,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                             <div className="flex items-center gap-2">
                                 <p className="text-sm font-medium">{displayName}</p>
                                 {isAdmin && (
-                                    <Badge variant="secondary" className="text-[10px] h-4 px-1.5">
+                                    <Badge variant="secondary" className="text-2xs h-4 px-1.5">
                                         <Shield className="h-2.5 w-2.5 mr-0.5" />
                                         {t('Admin', 'Admin')}
                                     </Badge>

@@ -25,6 +25,16 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Accordion,
   AccordionContent,
   AccordionItem,
@@ -75,7 +85,8 @@ const SymbolSettings: React.FC = () => {
   const [editingSymbol, setEditingSymbol] = useState<AnnotationSymbol | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  
+  const [symbolToDelete, setSymbolToDelete] = useState<AnnotationSymbol | null>(null);
+
   // Form state
   const [formData, setFormData] = useState({
     name: '',
@@ -207,8 +218,6 @@ const SymbolSettings: React.FC = () => {
   };
 
   const handleDelete = async (symbol: AnnotationSymbol) => {
-    if (!confirm(`Delete "${symbol.name}"?`)) return;
-
     try {
       const { error } = await supabase
         .from('annotation_symbols')
@@ -228,6 +237,8 @@ const SymbolSettings: React.FC = () => {
         title: 'Error',
         description: error.message,
       });
+    } finally {
+      setSymbolToDelete(null);
     }
   };
 
@@ -330,7 +341,7 @@ const SymbolSettings: React.FC = () => {
                         variant="ghost"
                         size="sm"
                         className="text-destructive hover:text-destructive"
-                        onClick={() => handleDelete(symbol)}
+                        onClick={() => setSymbolToDelete(symbol)}
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
                         {t('Ta bort', 'Delete')}
@@ -551,6 +562,30 @@ const SymbolSettings: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!symbolToDelete} onOpenChange={() => setSymbolToDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('Ta bort symbol?', 'Delete Symbol?')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t(
+                `Är du säker på att du vill ta bort "${symbolToDelete?.name}"? Åtgärden kan inte ångras.`,
+                `Are you sure you want to delete "${symbolToDelete?.name}"? This action cannot be undone.`
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>{t('Avbryt', 'Cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => symbolToDelete && handleDelete(symbolToDelete)}
+            >
+              {t('Ta bort', 'Delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

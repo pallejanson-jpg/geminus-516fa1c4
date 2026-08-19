@@ -106,7 +106,7 @@ export default function TenantsManager() {
     }
     setSaving(true);
     try {
-      const { error } = await supabase.from('tenants' as any).insert({ name: newName.trim() });
+      const { error } = await supabase.from('tenants').insert({ name: newName.trim() });
       if (error) throw error;
       toast({ title: 'Customer created' });
       setCreating(false);
@@ -123,7 +123,7 @@ export default function TenantsManager() {
     if (!renameValue.trim()) return;
     setSaving(true);
     try {
-      const { error } = await supabase.from('tenants' as any).update({ name: renameValue.trim() }).eq('id', id);
+      const { error } = await supabase.from('tenants').update({ name: renameValue.trim() }).eq('id', id);
       if (error) throw error;
       setRenamingId(null);
       refreshTenants();
@@ -137,7 +137,7 @@ export default function TenantsManager() {
   async function handleDelete() {
     if (!deleteId) return;
     try {
-      const { error } = await supabase.from('tenants' as any).delete().eq('id', deleteId);
+      const { error } = await supabase.from('tenants').delete().eq('id', deleteId);
       if (error) throw error;
       toast({ title: 'Customer deleted' });
       refreshTenants();
@@ -284,13 +284,13 @@ function TenantCredentialsEditor({ tenantId }: { tenantId: string }) {
     (async () => {
       setLoading(true);
       const { data } = await supabase
-        .from('api_profiles' as any)
+        .from('api_profiles')
         .select('*')
         .eq('tenant_id', tenantId)
         .maybeSingle();
       if (cancelled) return;
       if (data) {
-        const row = data as any;
+        const row = data;
         setProfileId(row.id);
         setForm({
           geminus_plus_api_url: row.geminus_plus_api_url || '',
@@ -347,16 +347,16 @@ function TenantCredentialsEditor({ tenantId }: { tenantId: string }) {
       }
 
       if (profileId) {
-        const { error } = await supabase.from('api_profiles' as any).update(payload).eq('id', profileId);
+        const { error } = await supabase.from('api_profiles').update(payload).eq('id', profileId);
         if (error) throw error;
       } else {
         const { data, error } = await supabase
-          .from('api_profiles' as any)
+          .from('api_profiles')
           .insert({ ...payload, name: `Tenant credentials (${tenantId.slice(0, 8)})` })
           .select('id')
           .single();
         if (error) throw error;
-        setProfileId((data as any).id);
+        setProfileId(data.id);
       }
       toast({ title: 'Credentials saved' });
     } catch (err: any) {

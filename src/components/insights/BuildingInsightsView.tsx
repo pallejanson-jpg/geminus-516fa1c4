@@ -37,6 +37,7 @@ import { AppContext } from '@/context/AppContext';
 import { Facility } from '@/lib/types';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
+import type { Database } from '@/integrations/supabase/types';
 const NativeXeokitViewer = React.lazy(() => import('@/components/viewer/NativeXeokitViewer'));
 import { useGeminusPremiumBuildingData } from '@/hooks/useGeminusPremiumData';
 import { cn } from '@/lib/utils';
@@ -48,6 +49,18 @@ import { toast } from 'sonner';
 
 import { emit } from '@/lib/event-bus';
 const HIERARCHY_CATEGORIES = ['Building', 'Building Storey', 'Space', 'IfcBuilding', 'IfcBuildingStorey', 'IfcSpace'];
+
+// Row shapes matching the specific columns selected from the `assets` table below
+// (kept narrow/explicit rather than using the full generated Row type, since only
+// a subset of columns is ever fetched for these queries).
+type AssetsTableRow = Database['public']['Tables']['assets']['Row'];
+type LevelAssetRow = Pick<AssetsTableRow, 'fm_guid' | 'name' | 'common_name'>;
+type AlarmLevelRow = Pick<AssetsTableRow, 'level_fm_guid'>;
+type AssetCategoryRow = Pick<AssetsTableRow, 'asset_type'>;
+type AlarmRow = Pick<AssetsTableRow,
+    'id' | 'fm_guid' | 'level_fm_guid' | 'in_room_fm_guid' | 'updated_at' |
+    'coordinate_x' | 'coordinate_y' | 'coordinate_z' | 'name' | 'common_name' | 'attributes'
+>;
 
 // Floor colors — derived from Nordic Pro chart palette
 const FLOOR_COLORS = [
@@ -165,6 +178,51 @@ const InsightsInlineViewer: React.FC<InsightsInlineViewerProps> = ({ fmGuid, ins
     );
 };
 
+// ─── Shared floor filter pill carousel (used by both the Space and Asset tabs) ───
+interface FloorFilterOption {
+    guid: string;
+    name: string;
+}
+
+interface FloorFilterCarouselProps {
+    options: FloorFilterOption[];
+    /** Currently selected floor's base name, or '' for "All" */
+    value: string;
+    /** Called with the selected option, or null when "All" is chosen */
+    onSelect: (option: FloorFilterOption | null) => void;
+}
+
+const FloorFilterCarousel: React.FC<FloorFilterCarouselProps> = ({ options, value, onSelect }) => {
+    return (
+        <Carousel opts={{ align: 'start', dragFree: true }} className="w-full">
+            <CarouselContent className="-ml-1">
+                <CarouselItem className="pl-1 basis-auto">
+                    <Button
+                        size="sm"
+                        variant={value === '' ? 'default' : 'outline'}
+                        className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
+                        onClick={() => onSelect(null)}
+                    >
+                        All
+                    </Button>
+                </CarouselItem>
+                {options.map(opt => (
+                    <CarouselItem key={opt.guid} className="pl-1 basis-auto">
+                        <Button
+                            size="sm"
+                            variant={value === opt.name ? 'default' : 'outline'}
+                            className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
+                            onClick={() => onSelect(opt)}
+                        >
+                            {opt.name}
+                        </Button>
+                    </CarouselItem>
+                ))}
+            </CarouselContent>
+        </Carousel>
+    );
+};
+
 export default function BuildingInsightsView({ facility, onBack, drawerMode }: BuildingInsightsViewProps) {
     const { allData } = useContext(AppContext);
     const isMobile = useIsMobile();
@@ -188,12 +246,12 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     // FM-flik state (was "Larm")
     const [alarmCount, setAlarmCount] = useState<number>(0);
     const [alarmsByLevel, setAlarmsByLevel] = useState<{ levelGuid: string; levelName: string; count: number }[]>([]);
-    const [alarmList, setAlarmList] = useState<any[]>([]);
+    const [alarmList, setAlarmList] = useState<AlarmRow[]>([]);
     const [alarmRefreshKey, setAlarmRefreshKey] = useState(0);
     const [showAlarmManagement, setShowAlarmManagement] = useState(false);
     const [alarmDataError, setAlarmDataError] = useState(false);
     const [assetDataError, setAssetDataError] = useState(false);
-    const [alarmToDelete, setAlarmToDelete] = useState<any | null>(null);
+    const [alarmToDelete, setAlarmToDelete] = useState<AlarmRow | null>(null);
     const [isDeletingAlarm, setIsDeletingAlarm] = useState(false);
 
     // Space tab floor filter + room type filter
@@ -228,7 +286,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     // Room metadata lookup from allData (for enriching alarm list)
     const roomLookup = useMemo(() => {
         const map = new Map<string, { name: string; commonName: string }>();
-        allData.forEach((a: any) => {
+        allData.forEach((a: Facility) => {
             if (a.buildingFmGuid !== facility.fmGuid) return;
             if (a.category !== 'Space' && a.category !== 'IfcSpace') return;
             map.set(a.fmGuid?.toLowerCase(), { name: a.name || '', commonName: a.commonName || '' });
@@ -260,7 +318,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
             const levelMap = new Map<string, string>();
             let unkIdx = 1;
-            (levelAssets || []).forEach((l: any) => {
+            (levelAssets || []).forEach((l: LevelAssetRow) => {
                 levelMap.set(l.fm_guid, l.common_name || l.name || `Floor (unknown ${unkIdx++})`);
             });
 
@@ -273,7 +331,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
             if (alarmLevels) {
                 const lvlCounts: Record<string, number> = {};
-                alarmLevels.forEach((a: any) => {
+                alarmLevels.forEach((a: AlarmLevelRow) => {
                     const guid = a.level_fm_guid || '__none__';
                     lvlCounts[guid] = (lvlCounts[guid] || 0) + 1;
                 });
@@ -313,7 +371,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             const { error } = await supabase.from('assets').delete().eq('fm_guid', alarmToDelete.fm_guid);
             if (error) throw error;
             toast.success('Alarm deleted');
-            setAlarmList(prev => prev.filter((a: any) => a.fm_guid !== alarmToDelete.fm_guid));
+            setAlarmList(prev => prev.filter((a) => a.fm_guid !== alarmToDelete.fm_guid));
             setAlarmToDelete(null);
             setAlarmRefreshKey(k => k + 1);
         } catch (e: any) {
@@ -347,7 +405,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                     .limit(5000);
                 if (catData) {
                     const cats: Record<string, number> = {};
-                    catData.forEach((row: any) => {
+                    catData.forEach((row: AssetCategoryRow) => {
                         const cat = (row.asset_type || 'Unknown').replace('Ifc', '');
                         cats[cat] = (cats[cat] || 0) + 1;
                     });
@@ -364,18 +422,18 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
     // Filter building-specific data once (stable ref unless building changes)
     const buildingSpaces = useMemo(() => allData.filter(
-        (a: any) => (a.category === 'Space' || a.category === 'IfcSpace') && a.buildingFmGuid === facility.fmGuid
+        (a: Facility) => (a.category === 'Space' || a.category === 'IfcSpace') && a.buildingFmGuid === facility.fmGuid
     ), [allData, facility.fmGuid]);
 
     const buildingStoreys = useMemo(() => allData.filter(
-        (a: any) => (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') && a.buildingFmGuid === facility.fmGuid
+        (a: Facility) => (a.category === 'Building Storey' || a.category === 'IfcBuildingStorey') && a.buildingFmGuid === facility.fmGuid
     ), [allData, facility.fmGuid]);
 
     // Level name lookup (needs buildingStoreys)
     const levelNames = useMemo(() => {
         const map = new Map<string, string>();
         let unknownIndex = 1;
-        buildingStoreys.forEach((s: any) => {
+        buildingStoreys.forEach((s: Facility) => {
             const name = s.commonName || s.name;
             map.set(s.fmGuid?.toLowerCase(), name || `Floor (unknown ${unknownIndex++})`);
         });
@@ -394,7 +452,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const spaceFloorOptions = useMemo(() => {
         const seen = new Set<string>();
         const options: { guid: string; name: string }[] = [];
-        buildingStoreys.forEach((s: any) => {
+        buildingStoreys.forEach((s: Facility) => {
             const baseName = (s.commonName || '').replace(/\s*-\s*\d+$/, '');
             if (!baseName || seen.has(baseName)) return;
             seen.add(baseName);
@@ -407,11 +465,11 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const floorFilteredSpaces = useMemo(() => {
         if (!spaceFloorFilter) return buildingSpaces;
         const matchingGuids = new Set<string>();
-        buildingStoreys.forEach((s: any) => {
+        buildingStoreys.forEach((s: Facility) => {
             const baseName = (s.commonName || '').replace(/\s*-\s*\d+$/, '');
             if (baseName === spaceFloorFilter) matchingGuids.add(s.fmGuid?.toLowerCase());
         });
-        return buildingSpaces.filter((s: any) => matchingGuids.has(s.levelFmGuid?.toLowerCase()));
+        return buildingSpaces.filter((s: Facility) => matchingGuids.has(s.levelFmGuid?.toLowerCase()));
     }, [buildingSpaces, buildingStoreys, spaceFloorFilter]);
 
     // Space type pie — respects floor filter
@@ -421,7 +479,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             'hsl(var(--chart-4))', 'hsl(var(--chart-7))', 'hsl(var(--muted-foreground))',
         ];
         const types: Record<string, { count: number; area: number }> = {};
-        floorFilteredSpaces.forEach((space: any) => {
+        floorFilteredSpaces.forEach((space: Facility) => {
             const name = space.commonName || space.name || 'Unknown';
             if (!types[name]) types[name] = { count: 0, area: 0 };
             types[name].count++;
@@ -436,12 +494,12 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const sensorRooms = useMemo(() => {
         let filtered = floorFilteredSpaces;
         if (selectedRoomType) {
-            filtered = filtered.filter((s: any) => {
+            filtered = filtered.filter((s: Facility) => {
                 const name = s.commonName || s.name || 'Unknown';
                 return name === selectedRoomType;
             });
         }
-        return filtered.slice(0, 60).map((s: any) => ({
+        return filtered.slice(0, 60).map((s: Facility) => ({
             fmGuid: s.fmGuid,
             commonName: s.commonName,
             name: s.name,
@@ -453,11 +511,11 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const filteredAlarmList = useMemo(() => {
         let list = alarmList;
         if (alarmLevelFilter) {
-            list = list.filter((a: any) => a.level_fm_guid === alarmLevelFilter);
+            list = list.filter((a: AlarmRow) => a.level_fm_guid === alarmLevelFilter);
         }
         if (alarmSearch) {
             const q = alarmSearch.toLowerCase();
-            list = list.filter((a: any) => {
+            list = list.filter((a: AlarmRow) => {
                 const room = a.in_room_fm_guid ? roomLookup.get(a.in_room_fm_guid.toLowerCase()) : null;
                 const lvl = a.level_fm_guid ? levelNames.get(a.level_fm_guid.toLowerCase()) : '';
                 return (room?.commonName || '').toLowerCase().includes(q) ||
@@ -482,26 +540,26 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         return { ...room, value };
     }), [sensorRooms, iotMachineMap, sensorMetric]);
 
-    const sensorMetricDef = SENSOR_METRICS.find(m => m.key === sensorMetric)!;
+    const sensorMetricDef = SENSOR_METRICS.find(m => m.key === sensorMetric) ?? SENSOR_METRICS[0];
 
 
 
     // Calculate actual stats from allData for this building (REAL for hierarchy, DB for assets)
     const stats = useMemo(() => {
         let totalArea = 0;
-        buildingSpaces.forEach((space: any) => {
+        buildingSpaces.forEach((space: Facility) => {
             totalArea += extractSpaceArea(space);
         });
 
         // Space types grouped by commonName (REAL from allData)
         const spaceTypes: Record<string, number> = {};
-        buildingSpaces.forEach((space: any) => {
+        buildingSpaces.forEach((space: Facility) => {
             const name = space.commonName || space.name || 'Unknown';
             spaceTypes[name] = (spaceTypes[name] || 0) + 1;
         });
 
         // Deduplicate floors: strip model suffix like " - 01", " - 02" and count unique
-        const uniqueFloors = new Set(buildingStoreys.map((s: any) =>
+        const uniqueFloors = new Set(buildingStoreys.map((s: Facility) =>
             (s.commonName || s.fmGuid).replace(/\s*-\s*\d+$/, '')
         ));
 
@@ -550,7 +608,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         if (isFloorMode) {
             // Map storey names → colors
             Object.entries(opts.colorMap).forEach(([fmGuid, rgb]) => {
-                const storey = buildingStoreys.find((s: any) => s.fmGuid === fmGuid);
+                const storey = buildingStoreys.find((s: Facility) => s.fmGuid === fmGuid);
                 if (storey) {
                     const name = (storey.commonName || storey.name || '').toLowerCase().trim();
                     if (name) nameColorMap[name] = rgb;
@@ -559,7 +617,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         } else if (isRoomMode) {
             // Map room names → colors
             Object.entries(opts.colorMap).forEach(([fmGuid, rgb]) => {
-                const space = buildingSpaces.find((s: any) => s.fmGuid === fmGuid);
+                const space = buildingSpaces.find((s: Facility) => s.fmGuid === fmGuid);
                 if (space) {
                     const name = (space.commonName || space.name || '').toLowerCase().trim();
                     if (name) nameColorMap[name] = rgb;
@@ -588,7 +646,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     // Helper: build color map from room values and push to 3D
     const colorizeAllSensorRooms = useCallback(() => {
         const roomColorMap: Record<string, [number, number, number]> = {};
-        sensorRoomValues.forEach((room: any) => {
+        sensorRoomValues.forEach((room) => {
             if (room.value !== null) {
                 const rgb = getVisualizationColor(room.value, sensorMetric);
                 if (rgb) roomColorMap[room.fmGuid] = rgb;
@@ -602,7 +660,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const colorizeSelectedSensorRooms = useCallback((guids: Set<string>) => {
         const roomColorMap: Record<string, [number, number, number]> = {};
         const nameColorMap: Record<string, [number, number, number]> = {};
-        sensorRoomValues.forEach((room: any) => {
+        sensorRoomValues.forEach((room) => {
             if (guids.has(room.fmGuid) && room.value !== null) {
                 const rgb = getVisualizationColor(room.value, sensorMetric);
                 if (rgb) {
@@ -635,7 +693,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         const timer = setTimeout(() => {
             const roomColorMap: Record<string, [number, number, number]> = {};
             const nameColorMap: Record<string, [number, number, number]> = {};
-            sensorRoomValues.forEach((room: any) => {
+            sensorRoomValues.forEach((room) => {
                 if (room.value !== null) {
                     const rgb = getVisualizationColor(room.value, sensorMetric);
                     if (rgb) {
@@ -664,7 +722,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             const nameColorMap: Record<string, [number, number, number]> = {};
             spaceTypePie.forEach(pie => {
                 const rgb = hslStringToRgbFloat(pie.color);
-                floorFilteredSpaces.forEach((space: any) => {
+                floorFilteredSpaces.forEach((space: Facility) => {
                     if ((space.commonName || space.name || 'Unknown') === pie.fullName) {
                         roomColorMap[space.fmGuid] = rgb;
                         const n = (space.commonName || space.name || '').toLowerCase().trim();
@@ -727,7 +785,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const energyByFloor = useMemo(() => {
         const seen = new Set<string>();
         const result: { name: string; fmGuid: string; kwhPerSqm: number; color: string }[] = [];
-        buildingStoreys.forEach((storey: any) => {
+        buildingStoreys.forEach((storey: Facility) => {
             const baseName = (storey.commonName || storey.name || '').replace(/\s*-\s*\d+$/, '');
             if (!baseName || seen.has(baseName)) return;
             seen.add(baseName);
@@ -878,7 +936,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                     const roomColorMap: Record<string, [number, number, number]> = {};
                                                     energyByFloor.forEach(f => {
                                                         const floorColor = hslStringToRgbFloat(f.color);
-                                                        buildingSpaces.forEach((space: any) => {
+                                                        buildingSpaces.forEach((space: Facility) => {
                                                             if (space.levelFmGuid === f.fmGuid) {
                                                                 roomColorMap[space.fmGuid] = floorColor;
                                                             }
@@ -911,12 +969,12 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                      // Find ALL storey fmGuids that share this base name (across model copies)
                                                                      const baseName = entry.name;
                                                                      const matchingStoreyGuids = new Set<string>();
-                                                                     buildingStoreys.forEach((s: any) => {
+                                                                     buildingStoreys.forEach((s: Facility) => {
                                                                          const sBaseName = (s.commonName || s.name || '').replace(/\s*-\s*\d+$/, '');
                                                                          if (sBaseName === baseName) matchingStoreyGuids.add(s.fmGuid);
                                                                      });
                                                                      // Only include rooms that belong to this specific floor
-                                                                     buildingSpaces.forEach((space: any) => {
+                                                                     buildingSpaces.forEach((space: Facility) => {
                                                                          if (matchingStoreyGuids.has(space.levelFmGuid)) {
                                                                              roomColorMap[space.fmGuid] = floorColor;
                                                                          }
@@ -944,7 +1002,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                 const roomColorMap: Record<string, [number, number, number]> = {};
                                                 energyByFloor.forEach(f => {
                                                     const floorColor = hslStringToRgbFloat(f.color);
-                                                    buildingSpaces.forEach((space: any) => {
+                                                    buildingSpaces.forEach((space: Facility) => {
                                                         if (space.levelFmGuid === f.fmGuid) {
                                                             roomColorMap[space.fmGuid] = floorColor;
                                                         }
@@ -968,7 +1026,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                  const categoryColor = hslStringToRgbFloat(entry.color);
                                                                 const roomColorMap: Record<string, [number, number, number]> = {};
                                                                 energyByFloor.forEach(f => {
-                                                                    buildingSpaces.forEach((space: any) => {
+                                                                    buildingSpaces.forEach((space: Facility) => {
                                                                         if (space.levelFmGuid === f.fmGuid) {
                                                                             roomColorMap[space.fmGuid] = categoryColor;
                                                                         }
@@ -1016,47 +1074,26 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                         <TabsContent value="space" className="mt-0 space-y-6">
                              {/* Floor filter pills — above pie chart */}
                              {spaceFloorOptions.length > 1 && (
-                                 <Carousel opts={{ align: 'start', dragFree: true }} className="w-full">
-                                     <CarouselContent className="-ml-1">
-                                         <CarouselItem className="pl-1 basis-auto">
-                                             <Button
-                                                 size="sm"
-                                                 variant={spaceFloorFilter === '' ? 'default' : 'outline'}
-                                                 className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
-                                                  onClick={() => {
-                                                      setSpaceFloorFilter(''); setSelectedRoomType('');
-                                                      if (drawerMode) {
-                                                          emit('FLOOR_SELECTION_CHANGED', { floorId: null, isAllFloorsVisible: true } as FloorSelectionEventDetail);
-                                                      }
-                                                  }}
-                                              >
-                                                 All
-                                             </Button>
-                                         </CarouselItem>
-                                         {spaceFloorOptions.map(opt => (
-                                             <CarouselItem key={opt.guid} className="pl-1 basis-auto">
-                                                 <Button
-                                                     size="sm"
-                                                     variant={spaceFloorFilter === opt.name ? 'default' : 'outline'}
-                                                     className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
-                                                      onClick={() => {
-                                                          setSpaceFloorFilter(opt.name); setSelectedRoomType('');
-                                                          if (drawerMode) {
-                                                              // Collect all storey fmGuids matching this floor name
-                                                              const matchingFmGuids = buildingStoreys
-                                                                  .filter((s: any) => (s.commonName || '').replace(/\s*-\s*\d+$/, '') === opt.name)
-                                                                  .map((s: any) => s.fmGuid)
-                                                                  .filter(Boolean);
-                                                              emit('FLOOR_SELECTION_CHANGED', { floorId: opt.guid, visibleFloorFmGuids: matchingFmGuids, isAllFloorsVisible: false } as FloorSelectionEventDetail);
-                                                          }
-                                                      }}
-                                                 >
-                                                     {opt.name}
-                                                 </Button>
-                                             </CarouselItem>
-                                         ))}
-                                     </CarouselContent>
-                                 </Carousel>
+                                 <FloorFilterCarousel
+                                     options={spaceFloorOptions}
+                                     value={spaceFloorFilter}
+                                     onSelect={(opt) => {
+                                         setSpaceFloorFilter(opt?.name ?? '');
+                                         setSelectedRoomType('');
+                                         if (drawerMode) {
+                                             if (!opt) {
+                                                 emit('FLOOR_SELECTION_CHANGED', { floorId: null, isAllFloorsVisible: true } as FloorSelectionEventDetail);
+                                             } else {
+                                                 // Collect all storey fmGuids matching this floor name
+                                                 const matchingFmGuids = buildingStoreys
+                                                     .filter((s: Facility) => (s.commonName || '').replace(/\s*-\s*\d+$/, '') === opt.name)
+                                                     .map((s: Facility) => s.fmGuid)
+                                                     .filter(Boolean);
+                                                 emit('FLOOR_SELECTION_CHANGED', { floorId: opt.guid, visibleFloorFmGuids: matchingFmGuids, isAllFloorsVisible: false } as FloorSelectionEventDetail);
+                                             }
+                                         }
+                                     }}
+                                 />
                              )}
 
                             <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
@@ -1070,7 +1107,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                 const nameColorMap: Record<string, [number, number, number]> = {};
                                                 spaceTypePie.forEach(s => { nameColorMap[s.fullName] = hslStringToRgbFloat(s.color); });
                                                 const roomColorMap: Record<string, [number, number, number]> = {};
-                                                floorFilteredSpaces.forEach((space: any) => {
+                                                floorFilteredSpaces.forEach((space: Facility) => {
                                                     const name = space.commonName || space.name || 'Unknown';
                                                     const color = nameColorMap[name];
                                                     if (color) roomColorMap[space.fmGuid] = color;
@@ -1100,18 +1137,18 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                         // Color matching rooms in 3D
                                                                         const roomColorMap: Record<string, [number, number, number]> = {};
                                                                         const targetSpaces = newType
-                                                                            ? floorFilteredSpaces.filter((s: any) => (s.commonName || s.name || 'Unknown') === newType)
+                                                                            ? floorFilteredSpaces.filter((s: Facility) => (s.commonName || s.name || 'Unknown') === newType)
                                                                             : floorFilteredSpaces;
                                                                         const nameColorMap2: Record<string, [number, number, number]> = {};
                                                                         if (newType) {
                                                                             const rgb = hslStringToRgbFloat(entry.color);
-                                                                            targetSpaces.forEach((s: any) => { roomColorMap[s.fmGuid] = rgb; });
+                                                                            targetSpaces.forEach((s: Facility) => { roomColorMap[s.fmGuid] = rgb; });
                                                                             nameColorMap2[newType.toLowerCase().trim()] = rgb;
                                                                         } else {
                                                                             spaceTypePie.forEach(pie => {
                                                                                 const rgb = hslStringToRgbFloat(pie.color);
-                                                                                floorFilteredSpaces.filter((s: any) => (s.commonName || s.name || 'Unknown') === pie.fullName)
-                                                                                    .forEach((s: any) => { roomColorMap[s.fmGuid] = rgb; });
+                                                                                floorFilteredSpaces.filter((s: Facility) => (s.commonName || s.name || 'Unknown') === pie.fullName)
+                                                                                    .forEach((s: Facility) => { roomColorMap[s.fmGuid] = rgb; });
                                                                             });
                                                                         }
                                                                         handleInsightsClick({ mode: 'room_spaces', colorMap: roomColorMap });
@@ -1299,46 +1336,24 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                         <TabsContent value="asset" className="mt-0 space-y-6">
                              {/* Floor filter pills — same as Space tab */}
                              {spaceFloorOptions.length > 1 && (
-                                 <Carousel opts={{ align: 'start', dragFree: true }} className="w-full">
-                                     <CarouselContent className="-ml-1">
-                                         <CarouselItem className="pl-1 basis-auto">
-                                             <Button
-                                                 size="sm"
-                                                 variant={assetFloorFilter === '' ? 'default' : 'outline'}
-                                                 className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
-                                                 onClick={() => {
-                                                     setAssetFloorFilter('');
-                                                     if (drawerMode) {
-                                                         emit('FLOOR_SELECTION_CHANGED', { floorId: null, isAllFloorsVisible: true } as FloorSelectionEventDetail);
-                                                     }
-                                                 }}
-                                             >
-                                                 All
-                                             </Button>
-                                         </CarouselItem>
-                                         {spaceFloorOptions.map(opt => (
-                                             <CarouselItem key={opt.guid} className="pl-1 basis-auto">
-                                                 <Button
-                                                     size="sm"
-                                                     variant={assetFloorFilter === opt.name ? 'default' : 'outline'}
-                                                     className="h-6 px-2 text-[10px] rounded-full whitespace-nowrap"
-                                                     onClick={() => {
-                                                         setAssetFloorFilter(opt.name);
-                                                         if (drawerMode) {
-                                                             const matchingFmGuids = buildingStoreys
-                                                                 .filter((s: any) => (s.commonName || '').replace(/\s*-\s*\d+$/, '') === opt.name)
-                                                                 .map((s: any) => s.fmGuid)
-                                                                 .filter(Boolean);
-                                                             emit('FLOOR_SELECTION_CHANGED', { floorId: opt.guid, visibleFloorFmGuids: matchingFmGuids, isAllFloorsVisible: false } as FloorSelectionEventDetail);
-                                                         }
-                                                     }}
-                                                 >
-                                                     {opt.name}
-                                                 </Button>
-                                             </CarouselItem>
-                                         ))}
-                                     </CarouselContent>
-                                 </Carousel>
+                                 <FloorFilterCarousel
+                                     options={spaceFloorOptions}
+                                     value={assetFloorFilter}
+                                     onSelect={(opt) => {
+                                         setAssetFloorFilter(opt?.name ?? '');
+                                         if (drawerMode) {
+                                             if (!opt) {
+                                                 emit('FLOOR_SELECTION_CHANGED', { floorId: null, isAllFloorsVisible: true } as FloorSelectionEventDetail);
+                                             } else {
+                                                 const matchingFmGuids = buildingStoreys
+                                                     .filter((s: Facility) => (s.commonName || '').replace(/\s*-\s*\d+$/, '') === opt.name)
+                                                     .map((s: Facility) => s.fmGuid)
+                                                     .filter(Boolean);
+                                                 emit('FLOOR_SELECTION_CHANGED', { floorId: opt.guid, visibleFloorFmGuids: matchingFmGuids, isAllFloorsVisible: false } as FloorSelectionEventDetail);
+                                             }
+                                         }
+                                     }}
+                                 />
                              )}
                             <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
                                 {/* Asset Category Distribution - REAL */}
@@ -1402,7 +1417,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                     // Dispatch event — viewer is listening
                                                     const alarmsForViewer = alarmList
                                                         .slice(0, 50)
-                                                        .map((a: any) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }));
+                                                        .map((a: AlarmRow) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }));
                                                     emit('ALARM_ANNOTATIONS_SHOW', { alarms: alarmsForViewer, flyTo: true });
                                                 } else {
                                                     // Navigate to viewer
@@ -1527,9 +1542,9 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                 title={`Show ${level.count} alarms for ${level.levelName}`}
                                                                 onClick={() => {
                                                                     const levelAlarms = alarmList
-                                                                        .filter((a: any) => a.level_fm_guid === level.levelGuid)
+                                                                        .filter((a: AlarmRow) => a.level_fm_guid === level.levelGuid)
                                                                         .slice(0, 50)
-                                                                        .map((a: any) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }));
+                                                                        .map((a: AlarmRow) => ({ fmGuid: a.fm_guid, roomFmGuid: a.in_room_fm_guid }));
                                                                     if (isMobile && !drawerMode) {
                                                                         sessionStorage.setItem('pending_alarm_annotations', JSON.stringify({ alarms: levelAlarms }));
                                                                         navigate(`/viewer?building=${facility.fmGuid}&mode=3d`);
@@ -1591,7 +1606,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                         </TableRow>
                                                     </TableHeader>
                                                     <TableBody>
-                                                        {filteredAlarmList.map((alarm: any) => {
+                                                        {filteredAlarmList.map((alarm: AlarmRow) => {
                                                             const room = alarm.in_room_fm_guid ? roomLookup.get(alarm.in_room_fm_guid.toLowerCase()) : null;
                                                             const lvlName = alarm.level_fm_guid ? levelNames.get(alarm.level_fm_guid.toLowerCase()) : null;
                                                             return (

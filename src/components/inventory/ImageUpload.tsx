@@ -74,7 +74,7 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
     } catch (error: any) {
       console.error('Upload error:', error);
       toast.error('Could not upload image', {
-        description: error.message,
+        description: 'Please try again, or contact support if this keeps happening.',
       });
     } finally {
       setIsUploading(false);
@@ -127,7 +127,6 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                console.log('Camera button clicked, ref:', cameraInputRef.current);
                 cameraInputRef.current?.click();
               }}
               disabled={disabled || isUploading}
@@ -151,7 +150,6 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ value, onChange, disabled }) 
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              console.log('Upload button clicked, ref:', fileInputRef.current);
               fileInputRef.current?.click();
             }}
             disabled={disabled || isUploading}

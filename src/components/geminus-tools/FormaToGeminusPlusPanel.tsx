@@ -10,6 +10,16 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useLanguage } from '@/context/LanguageContext';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 interface SyncLog {
   time: string;
@@ -195,6 +205,33 @@ export default function FormaToGeminusPlusPanel() {
     setJobs(rows);
     return rows;
   }, []);
+
+  // Job deletion confirmation
+  const [jobToDelete, setJobToDelete] = useState<any | null>(null);
+  const [deletingJob, setDeletingJob] = useState(false);
+
+  const handleDeleteJob = useCallback(async () => {
+    if (!jobToDelete) return;
+    setDeletingJob(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('acc-to-geminus-plus', {
+        body: { action: 'delete-job', versionUrn: jobToDelete.version_urn },
+      });
+      if (error || data?.error) {
+        throw new Error(error?.message || data?.error || 'Delete failed');
+      }
+      await fetchJobs();
+    } catch (e: any) {
+      toast({
+        variant: 'destructive',
+        title: t('Kunde inte radera jobbet', 'Failed to delete job'),
+        description: e.message,
+      });
+    } finally {
+      setDeletingJob(false);
+      setJobToDelete(null);
+    }
+  }, [jobToDelete, fetchJobs, toast, t]);
 
   // Per-job check status messages
   const [jobCheckResults, setJobCheckResults] = useState<Record<string, string>>({});
@@ -860,12 +897,7 @@ export default function FormaToGeminusPlusPanel() {
                     </button>
                   )}
                   <button
-                    onClick={async () => {
-                      await supabase.functions.invoke('acc-to-geminus-plus', {
-                        body: { action: 'delete-job', versionUrn: job.version_urn },
-                      });
-                      fetchJobs();
-                    }}
+                    onClick={() => setJobToDelete(job)}
                     className="shrink-0 text-[10px] text-muted-foreground hover:text-destructive"
                     title={t('Radera jobb', 'Delete job')}
                   >✕</button>
@@ -880,6 +912,31 @@ export default function FormaToGeminusPlusPanel() {
             })}
           </div>
         </div>
+
+      {/* Delete job confirmation dialog */}
+      <AlertDialog open={!!jobToDelete} onOpenChange={(open) => { if (!open) setJobToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('Radera konverteringsjobb?', 'Delete conversion job?')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t(
+                `Är du säker på att du vill radera jobbet "${jobToDelete?.model_name || jobToDelete?.file_name || jobToDelete?.version_urn}"? Åtgärden kan inte ångras.`,
+                `Are you sure you want to delete the job "${jobToDelete?.model_name || jobToDelete?.file_name || jobToDelete?.version_urn}"? This action cannot be undone.`
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingJob}>{t('Avbryt', 'Cancel')}</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deletingJob}
+              onClick={handleDeleteJob}
+            >
+              {t('Radera', 'Delete')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   );

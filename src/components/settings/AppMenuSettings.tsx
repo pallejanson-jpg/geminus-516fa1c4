@@ -71,12 +71,14 @@ export const getSidebarOrder = (): SidebarItem[] => {
   return DEFAULT_SIDEBAR_ORDER;
 };
 
-export const saveSidebarOrder = (items: SidebarItem[]) => {
+export const saveSidebarOrder = (items: SidebarItem[]): boolean => {
   try {
     localStorage.setItem(SIDEBAR_ORDER_STORAGE_KEY, JSON.stringify(items));
     window.dispatchEvent(new CustomEvent(SIDEBAR_SETTINGS_CHANGED_EVENT, { detail: items }));
+    return true;
   } catch (e) {
     console.warn('Failed to save sidebar order:', e);
+    return false;
   }
 };
 
@@ -180,9 +182,12 @@ const AppMenuSettings: React.FC<AppMenuSettingsProps> = ({ isOpen, onClose }) =>
   };
 
   const handleSave = () => {
-    saveSidebarOrder(items);
-    toast.success('App order saved');
-    onClose();
+    if (saveSidebarOrder(items)) {
+      toast.success('App order saved');
+      onClose();
+    } else {
+      toast.error('Could not save app order. Your changes were not persisted.');
+    }
   };
 
   const handleReset = () => {

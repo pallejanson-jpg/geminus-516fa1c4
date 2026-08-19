@@ -77,7 +77,7 @@ export default function CreatePropertyDialog({
 
   async function fetchProfiles() {
     const { data, error } = await supabase
-      .from('api_profiles' as any)
+      .from('api_profiles')
       .select('id, name, is_default')
       .order('is_default', { ascending: false })
       .order('name');
@@ -86,7 +86,7 @@ export default function CreatePropertyDialog({
       toast({ title: 'Failed to load API profiles', description: error.message, variant: 'destructive' });
       return;
     }
-    if (data) setProfiles(data as any[]);
+    if (data) setProfiles(data);
   }
 
   async function loadExisting(fmGuid: string) {
@@ -119,10 +119,10 @@ export default function CreatePropertyDialog({
     setForm({
       fm_guid: data.fm_guid,
       name: asset?.name || '',
-      latitude: (data as any).latitude?.toString() || '',
-      longitude: (data as any).longitude?.toString() || '',
-      api_profile_id: (data as any).api_profile_id || '',
-      tenant_id: (data as any).tenant_id || '',
+      latitude: data.latitude?.toString() || '',
+      longitude: data.longitude?.toString() || '',
+      api_profile_id: data.api_profile_id || '',
+      tenant_id: data.tenant_id || '',
     });
   }
 
@@ -155,13 +155,13 @@ export default function CreatePropertyDialog({
       if (existing) {
         const { error } = await supabase
           .from('building_settings')
-          .update(settingsPayload as any)
+          .update(settingsPayload)
           .eq('fm_guid', form.fm_guid.trim());
         if (error) throw error;
       } else {
         const { error } = await supabase
           .from('building_settings')
-          .insert(settingsPayload as any);
+          .insert(settingsPayload);
         if (error) throw error;
       }
 
