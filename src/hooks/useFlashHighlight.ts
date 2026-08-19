@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+import { logger } from '@/lib/logger';
 
 interface FlashOptions {
   color1?: [number, number, number];
@@ -35,7 +36,7 @@ export const useFlashHighlight = () => {
       try {
         currentEntityRef.current.colorize = originalColorRef.current;
       } catch (e) {
-        console.debug('Could not reset entity color:', e);
+        logger.debug('Could not reset entity color:', e);
       }
     }
     
@@ -88,7 +89,7 @@ export const useFlashHighlight = () => {
         }, duration);
       }
     } catch (e) {
-      console.debug('Could not start flashing:', e);
+      logger.debug('Could not start flashing:', e);
       stopFlashing();
     }
   }, [stopFlashing]);
@@ -122,7 +123,7 @@ export const useFlashHighlight = () => {
     if (entity) {
       startFlashing(entity, options);
     } else {
-      console.debug('Flash: Entity not found in scene:', entityId);
+      logger.debug('Flash: Entity not found in scene:', entityId);
     }
   }, [startFlashing]);
 
@@ -182,7 +183,7 @@ export const useFlashHighlight = () => {
             }
           });
         } catch (e) {
-          console.debug('Could not restore colors:', e);
+          logger.debug('Could not restore colors:', e);
         }
         stopFlashing();
       }, duration);
@@ -207,7 +208,7 @@ export const useFlashHighlight = () => {
       });
 
       if (hit?.entity) {
-        console.log('Selected object ID:', hit.entity.id);
+        logger.log('Selected object ID:', hit.entity.id);
         startFlashing(hit.entity, options);
         return hit;
       } else {
@@ -215,7 +216,7 @@ export const useFlashHighlight = () => {
         return null;
       }
     } catch (e) {
-      console.debug('Pick error:', e);
+      logger.debug('Pick error:', e);
       return null;
     }
   }, [startFlashing, stopFlashing]);

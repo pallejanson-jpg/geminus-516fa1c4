@@ -15,6 +15,7 @@ import { AlertTriangle } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useFloorData } from '@/hooks/useFloorData';
 import { emit, on } from '@/lib/event-bus';
+import { logger } from '@/lib/logger';
 import {
   Select,
   SelectContent,
@@ -152,7 +153,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         const sdk = await (Function('return import("/lib/xeokit/xeokit-sdk.es.js")')() as Promise<any>);
         if (mounted) sdkRef.current = sdk;
       } catch (e) {
-        console.warn('[SplitPlanView] SDK load failed:', e);
+        logger.warn('[SplitPlanView] SDK load failed:', e);
       }
     })();
     return () => { mounted = false; };
@@ -205,13 +206,13 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         }
 
         if (mounted) {
-          console.log(`[SplitPlanView] StoreyViewsPlugin ready with ${storeyKeys.length} storeys`);
+          logger.log(`[SplitPlanView] StoreyViewsPlugin ready with ${storeyKeys.length} storeys`);
           setStoreyPlugin(plugin);
           pluginRef.current = plugin;
           setIsLoading(false);
         }
       } catch (e) {
-        console.warn('StoreyViewsPlugin init failed:', e);
+        logger.warn('StoreyViewsPlugin init failed:', e);
         if (mounted) {
           setError('Could not initialize plan view');
         }
@@ -362,7 +363,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             }
           }
         } catch (snapErr) {
-          console.warn('[SplitPlanView] Fallback snapshot capture failed:', snapErr);
+          logger.warn('[SplitPlanView] Fallback snapshot capture failed:', snapErr);
         } finally {
           camera.projection = origProjection;
           camera.eye = origEye;
@@ -372,7 +373,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         }
       }, 100);
     } catch (e) {
-      console.warn('[SplitPlanView] Fallback snapshot failed:', e);
+      logger.warn('[SplitPlanView] Fallback snapshot failed:', e);
       setIsLoading(false);
     }
   }, [getXeokitViewer]);
@@ -596,7 +597,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       }
     } catch (e) {
       restoreColors();
-      console.warn('[SplitPlanView] createStoreyMap failed:', e);
+      logger.warn('[SplitPlanView] createStoreyMap failed:', e);
       generateFallbackSnapshot();
     } finally {
       setIsLoading(false);
@@ -1017,7 +1018,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     const nextLook: [number, number, number] = [worldPos[0] + dirX * 5, eyeHeight, worldPos[2] + dirZ * 5];
 
     if (!nextEye.every((v) => Number.isFinite(v)) || !nextLook.every((v) => Number.isFinite(v))) {
-      console.warn('[SplitPlanView] Skipping flyTo — invalid camera coords');
+      logger.warn('[SplitPlanView] Skipping flyTo — invalid camera coords');
       return;
     }
 

@@ -15,6 +15,7 @@ import { getIleanSettings, ILEAN_SETTINGS_CHANGED_EVENT } from '@/components/set
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 
+import { logger } from '@/lib/logger';
 /** Apps that should hide header/sidebars for fullscreen experience */
 const IMMERSIVE_APPS = ['geminus_plus_viewer', 'viewer', 'native_viewer', 'radar'];
 
@@ -115,13 +116,13 @@ const AppLayoutInner: React.FC = () => {
     // Voice command callbacks
     const voiceCallbacks = useCallback(() => ({
         onSearch: (term: string) => {
-            console.log('Voice search:', term);
+            logger.log('Voice search:', term);
         },
         onOpenGunnar: () => {
-            console.log('Voice: Open Gunnar');
+            logger.log('Voice: Open Gunnar');
         },
         onAskGunnar: (question: string) => {
-            console.log('Voice ask Gunnar:', question);
+            logger.log('Voice ask Gunnar:', question);
         },
     }), []);
 

@@ -18,6 +18,7 @@ import BuildingInfoCard from '@/components/map/BuildingInfoCard';
 import StreetViewOverlay from '@/components/globe/StreetViewOverlay';
 import { useLanguage } from '@/context/LanguageContext';
 
+import { logger } from '@/lib/logger';
 interface SelectedBuilding {
   facility: MapFacility;
   screenX: number;
@@ -140,7 +141,7 @@ const CesiumGlobeView: React.FC = () => {
 
     const initViewer = (container: HTMLDivElement) => {
       if (destroyed) return;
-      console.log('[Globe] initViewer', { w: container.clientWidth, h: container.clientHeight, retryCount });
+      logger.log('[Globe] initViewer', { w: container.clientWidth, h: container.clientHeight, retryCount });
       let viewer: Cesium.Viewer;
       try {
         viewer = new Cesium.Viewer(container, {
@@ -157,7 +158,7 @@ const CesiumGlobeView: React.FC = () => {
       // When the render loop throws (e.g. maximumTextureSize=0 on a lost WebGL
       // context), destroy the dead viewer and retry up to 3 times.
       viewer.scene.renderError.addEventListener((_scene: unknown, error: unknown) => {
-        console.warn('[CesiumGlobeView] Render error:', error);
+        logger.warn('[CesiumGlobeView] Render error:', error);
         if (destroyed) return;
         retryCount++;
         if (retryCount > 3) {
@@ -520,7 +521,7 @@ const CesiumGlobeView: React.FC = () => {
   const handleSidebarSelect = useCallback((id: string) => {
     const viewer = cesiumViewerRef.current;
     const facility = facilitiesByGuidRef.current.get(id);
-    console.log('[Globe] sidebarSelect', id, { viewer: !!viewer, destroyed: viewer?.isDestroyed(), facility: !!facility });
+    logger.log('[Globe] sidebarSelect', id, { viewer: !!viewer, destroyed: viewer?.isDestroyed(), facility: !!facility });
     if (!viewer || viewer.isDestroyed() || !facility) return;
 
     setSelectedFmGuid(id);

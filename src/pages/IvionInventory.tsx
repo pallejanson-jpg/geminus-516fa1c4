@@ -23,6 +23,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { IVION_DEFAULT_BASE_URL } from '@/lib/constants';
+import { logger } from '@/lib/logger';
 
 interface BuildingWithIvion {
   fm_guid: string;
@@ -227,7 +228,7 @@ const IvionInventory: React.FC = () => {
         if (data?.id && data?.location) {
           // If this is a new POI (different from last seen)
           if (data.id !== lastSeenPoiId) {
-            console.log('New POI detected:', data.id, 'previous:', lastSeenPoiId);
+            logger.log('New POI detected:', data.id, 'previous:', lastSeenPoiId);
             
             if (lastSeenPoiId !== null) {
               // This is a genuinely new POI (not the first poll)
@@ -250,7 +251,7 @@ const IvionInventory: React.FC = () => {
         }
       } catch (err) {
         // Silent fail - polling is a background feature
-        console.log('POI polling error (non-critical):', err);
+        logger.log('POI polling error (non-critical):', err);
       }
     };
 

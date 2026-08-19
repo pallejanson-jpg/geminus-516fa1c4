@@ -12,6 +12,7 @@ import { Loader2, AlertCircle, Square, MapPin, ArrowLeft, RefreshCw } from 'luci
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import GeminusPluginMenu from './GeminusPluginMenu';
+import { logger } from '@/lib/logger';
 
 interface GeminusBase2DPanelProps {
   buildingFmGuid: string;
@@ -128,10 +129,10 @@ const GeminusBase2DPanel: React.FC<GeminusBase2DPanelProps> = ({
     const msgType = event.data?.type || event.data;
     
     // Debug: log ALL messages from HDC for investigation
-    console.log('[GeminusBase2D] postMessage from HDC:', msgType, event.data);
+    logger.log('[GeminusBase2D] postMessage from HDC:', msgType, event.data);
 
     if (msgType === 'HDC_APP_SYSTEM_READY') {
-      console.log('[GeminusBase2D] HDC_APP_SYSTEM_READY received');
+      logger.log('[GeminusBase2D] HDC_APP_SYSTEM_READY received');
       setPhase('ready');
     }
 
@@ -163,7 +164,7 @@ const GeminusBase2DPanel: React.FC<GeminusBase2DPanelProps> = ({
   useEffect(() => {
     if (phase !== 'loading-iframe') return;
     const timeout = setTimeout(() => {
-      console.log('[GeminusBase2D] Timeout (15s), revealing iframe');
+      logger.log('[GeminusBase2D] Timeout (15s), revealing iframe');
       setPhase('ready');
     }, 15000);
     return () => clearTimeout(timeout);
@@ -172,7 +173,7 @@ const GeminusBase2DPanel: React.FC<GeminusBase2DPanelProps> = ({
   // When iframe loads, transition to ready (URL params handle auth)
   const handleIframeLoad = useCallback(() => {
     if (phase === 'loading-iframe') {
-      console.log('[GeminusBase2D] iframe loaded');
+      logger.log('[GeminusBase2D] iframe loaded');
       // Give HDC a moment to send SYSTEM_READY, otherwise timeout handles it
     }
   }, [phase]);

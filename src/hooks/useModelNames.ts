@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 /**
  * Shared hook for resolving BIM model IDs to friendly names.
@@ -35,7 +36,7 @@ export function useModelNames(buildingFmGuid: string | undefined | null) {
           setNameEntries(legacyEntries);
         }
       } catch (e) {
-        console.debug('Failed to fetch model names:', e);
+        logger.debug('Failed to fetch model names:', e);
       } finally {
         if (!cancelled) setIsLoading(false);
       }

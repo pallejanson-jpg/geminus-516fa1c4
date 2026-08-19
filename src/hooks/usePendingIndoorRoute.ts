@@ -4,6 +4,7 @@ import {
   parseNavGraph, dijkstra, findNodeByRoom, findNearestEntranceNode, mergeGraphs,
   type NavGraph, type RouteResult,
 } from '@/lib/pathfinding';
+import { logger } from '@/lib/logger';
 
 interface PendingIndoorRoutePayload {
   buildingFmGuid: string;
@@ -41,7 +42,7 @@ export function usePendingIndoorRoute({ buildingFmGuid, ready, onRoute }: UsePen
     try {
       payload = JSON.parse(raw);
     } catch (e) {
-      console.warn('[usePendingIndoorRoute] Failed to parse pending_indoor_route:', e);
+      logger.warn('[usePendingIndoorRoute] Failed to parse pending_indoor_route:', e);
       return;
     }
     if (payload.buildingFmGuid !== buildingFmGuid) return;

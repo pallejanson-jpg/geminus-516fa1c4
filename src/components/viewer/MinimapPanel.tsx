@@ -9,6 +9,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { X, RefreshCw, GripVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { logger } from '@/lib/logger';
 
 interface MinimapPanelProps {
   viewerRef: React.MutableRefObject<any>;
@@ -109,7 +110,7 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
           pluginRef.current = plugin;
         }
       } catch (e) {
-        console.warn('MinimapPanel: StoreyViewsPlugin init failed:', e);
+        logger.warn('MinimapPanel: StoreyViewsPlugin init failed:', e);
       }
     };
 
@@ -181,7 +182,7 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
         setError('Could not generate map');
       }
     } catch (e) {
-      console.warn('Minimap generation failed:', e);
+      logger.warn('Minimap generation failed:', e);
       setError('Map generation failed');
     }
     setIsLoading(false);

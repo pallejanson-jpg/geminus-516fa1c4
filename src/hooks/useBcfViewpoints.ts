@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react';
+import { logger } from '@/lib/logger';
 
 interface BcfViewpoint {
   perspective_camera?: {
@@ -52,7 +53,7 @@ export const useBcfViewpoints = ({ viewerRef }: UseBcfViewpointsProps) => {
   const captureViewpoint = useCallback((): BcfViewpoint | null => {
     const xeokitViewer = getXeokitViewer();
     if (!xeokitViewer) {
-      console.warn('Viewer not available for BCF capture');
+      logger.warn('Viewer not available for BCF capture');
       return null;
     }
 
@@ -145,7 +146,7 @@ export const useBcfViewpoints = ({ viewerRef }: UseBcfViewpointsProps) => {
   const restoreViewpoint = useCallback((viewpoint: BcfViewpoint, options?: { duration?: number }) => {
     const xeokitViewer = getXeokitViewer();
     if (!xeokitViewer || !viewpoint) {
-      console.warn('Cannot restore viewpoint - viewer or viewpoint not available');
+      logger.warn('Cannot restore viewpoint - viewer or viewpoint not available');
       return;
     }
 

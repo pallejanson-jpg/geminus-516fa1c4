@@ -16,6 +16,8 @@
  * @see https://ivion-api.docs.navvis.com
  */
 
+import { logger } from '@/lib/logger';
+
 export interface IvionVector3 {
   x: number;
   y: number;
@@ -194,13 +196,13 @@ export async function loadIvionSdk(
 ): Promise<IvionApi> {
   // Guard against concurrent loads — wait for any in-progress attempt
   if (activeLoadPromise) {
-    console.log('[Ivion SDK] Another load is in progress, waiting for it…');
+    logger.log('[Ivion SDK] Another load is in progress, waiting for it…');
     try {
       const result = await activeLoadPromise;
-      console.log('[Ivion SDK] Reusing result from concurrent load');
+      logger.log('[Ivion SDK] Reusing result from concurrent load');
       return result;
     } catch (e) {
-      console.log('[Ivion SDK] Concurrent load failed, starting fresh attempt');
+      logger.log('[Ivion SDK] Concurrent load failed, starting fresh attempt');
       // Fall through to start a new load
     }
   }
@@ -211,7 +213,7 @@ export async function loadIvionSdk(
   // Force-clear the guard on timeout so retries aren't blocked by a stale promise
   const timeoutGuard = setTimeout(() => {
     if (activeLoadPromise === loadPromise) {
-      console.warn('[Ivion SDK] Clearing stale activeLoadPromise after timeout');
+      logger.warn('[Ivion SDK] Clearing stale activeLoadPromise after timeout');
       activeLoadPromise = null;
     }
   }, timeoutMs + 500);
@@ -237,13 +239,13 @@ async function doLoadIvionSdk(
   const sdkConfig: Record<string, any> = {};
   if (loginToken) {
     sdkConfig.loginToken = loginToken;
-    console.log('[Ivion SDK] Using loginToken for auto-authentication');
+    logger.log('[Ivion SDK] Using loginToken for auto-authentication');
   }
 
   // Also pass siteId in config (future SDK versions may support it)
   if (siteId) {
     sdkConfig.siteId = siteId;
-    console.log('[Ivion SDK] Passing siteId in SDK config:', siteId);
+    logger.log('[Ivion SDK] Passing siteId in SDK config:', siteId);
   }
 
   const cleanBaseUrl = baseUrl.replace(/\/$/, '');
@@ -253,9 +255,9 @@ async function doLoadIvionSdk(
   // ── Attempt 1: local SDK bundle (/lib/ivion/api.js) ────────────────
   try {
     getApi = await loadGetApiViaScript('/lib/ivion/api.js');
-    console.log('[Ivion SDK] Loaded via local /lib/ivion/api.js');
+    logger.log('[Ivion SDK] Loaded via local /lib/ivion/api.js');
   } catch (e) {
-    console.log('[Ivion SDK] Local SDK not available:', (e as Error).message);
+    logger.log('[Ivion SDK] Local SDK not available:', (e as Error).message);
   }
 
   // ── Attempt 2: script tag from IVION instance ─────────────────────
@@ -263,9 +265,9 @@ async function doLoadIvionSdk(
     const directUrl = `${cleanBaseUrl}/ivion.js`;
     try {
       getApi = await loadGetApiViaScript(directUrl);
-      console.log('[Ivion SDK] Loaded via direct script tag:', directUrl);
+      logger.log('[Ivion SDK] Loaded via direct script tag:', directUrl);
     } catch (e) {
-      console.log('[Ivion SDK] Direct script-tag failed:', (e as Error).message);
+      logger.log('[Ivion SDK] Direct script-tag failed:', (e as Error).message);
     }
   }
 
@@ -276,9 +278,9 @@ async function doLoadIvionSdk(
       const proxyUrl = `${supabaseUrl}/functions/v1/ivion-proxy/ivion.js`;
       try {
         getApi = await loadGetApiViaScript(proxyUrl);
-        console.log('[Ivion SDK] Loaded via CORS proxy:', proxyUrl);
+        logger.log('[Ivion SDK] Loaded via CORS proxy:', proxyUrl);
       } catch (e) {
-        console.log('[Ivion SDK] CORS proxy script-tag failed:', (e as Error).message);
+        logger.log('[Ivion SDK] CORS proxy script-tag failed:', (e as Error).message);
       }
     }
   }
@@ -297,13 +299,13 @@ async function doLoadIvionSdk(
     while (elapsed < maxWait) {
       const el = document.querySelector('ivion');
       if (el && el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0) {
-        console.log('[Ivion SDK] <ivion> element found with dimensions');
+        logger.log('[Ivion SDK] <ivion> element found with dimensions');
         return true;
       }
       await new Promise(r => setTimeout(r, interval));
       elapsed += interval;
     }
-    console.warn('[Ivion SDK] <ivion> element not found or has zero dimensions after', maxWait, 'ms');
+    logger.warn('[Ivion SDK] <ivion> element not found or has zero dimensions after', maxWait, 'ms');
     return false;
   };
 
@@ -323,14 +325,14 @@ async function doLoadIvionSdk(
         url.searchParams.set('site', siteId);
         window.history.replaceState(null, '', url.toString());
         urlModified = true;
-        console.log('[Ivion SDK] Temporarily injected ?site= for getApi()');
+        logger.log('[Ivion SDK] Temporarily injected ?site= for getApi()');
       }
     } catch (e) {
-      console.warn('[Ivion SDK] Could not inject ?site= param:', e);
+      logger.warn('[Ivion SDK] Could not inject ?site= param:', e);
     }
   }
 
-  console.log('[Ivion SDK] Calling getApi with baseUrl:', cleanBaseUrl);
+  logger.log('[Ivion SDK] Calling getApi with baseUrl:', cleanBaseUrl);
   const apiPromise = getApi(cleanBaseUrl, config);
   const timeoutPromise = new Promise<never>((_, reject) =>
     setTimeout(
@@ -342,15 +344,15 @@ async function doLoadIvionSdk(
   let iv: IvionApi;
   try {
     iv = await Promise.race([apiPromise, timeoutPromise]);
-    console.log('[Ivion SDK] Initialized successfully');
+    logger.log('[Ivion SDK] Initialized successfully');
   } finally {
     // Always clean up the injected ?site= param immediately
     if (urlModified) {
       try {
         window.history.replaceState(null, '', originalUrl);
-        console.log('[Ivion SDK] Cleaned up ?site= from URL');
+        logger.log('[Ivion SDK] Cleaned up ?site= from URL');
       } catch (e) {
-        console.warn('[Ivion SDK] Failed to clean up ?site= param:', e);
+        logger.warn('[Ivion SDK] Failed to clean up ?site= param:', e);
       }
     }
   }
@@ -363,22 +365,22 @@ async function doLoadIvionSdk(
         // Check if site was already auto-selected via config
         const activeSite = siteApi?.service?.activeSite;
         if (activeSite) {
-          console.log('[Ivion SDK] Site already active (selected via config):', siteId);
+          logger.log('[Ivion SDK] Site already active (selected via config):', siteId);
         } else {
-          console.log('[Ivion SDK] Loading site via API:', siteId);
+          logger.log('[Ivion SDK] Loading site via API:', siteId);
           const site = await siteApi.repository.findOne(Number(siteId));
           if (site) {
             await siteApi.service.loadSite(site);
-            console.log('[Ivion SDK] Site loaded successfully:', siteId);
+            logger.log('[Ivion SDK] Site loaded successfully:', siteId);
           } else {
-            console.warn('[Ivion SDK] Site not found:', siteId);
+            logger.warn('[Ivion SDK] Site not found:', siteId);
           }
         }
       } else {
-        console.warn('[Ivion SDK] Site API not available on SDK instance');
+        logger.warn('[Ivion SDK] Site API not available on SDK instance');
       }
     } catch (e) {
-      console.warn('[Ivion SDK] Failed to auto-load site (user will see site menu):', e);
+      logger.warn('[Ivion SDK] Failed to auto-load site (user will see site menu):', e);
     }
   }
 
@@ -393,11 +395,11 @@ async function doLoadIvionSdk(
           item.isVisible = () => false;
         }
       });
-      console.log('[Ivion SDK] Hidden', menuItems.length, 'sidebar menu items');
+      logger.log('[Ivion SDK] Hidden', menuItems.length, 'sidebar menu items');
     }
     iv.closeMenu?.();
   } catch (e) {
-    console.debug('[Ivion SDK] Could not hide sidebar items:', e);
+    logger.debug('[Ivion SDK] Could not hide sidebar items:', e);
   }
 
   return iv;
@@ -452,6 +454,6 @@ export function destroyIvionElement(container: HTMLElement, element: HTMLElement
       container.removeChild(element);
     }
   } catch (e) {
-    console.warn('[Ivion SDK] Cleanup error:', e);
+    logger.warn('[Ivion SDK] Cleanup error:', e);
   }
 }

@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
 
+import { logger } from '@/lib/logger';
 interface FeedbackCreateFormProps {
   open: boolean;
   onClose: () => void;
@@ -111,7 +112,7 @@ const FeedbackCreateForm: React.FC<FeedbackCreateFormProps> = ({ open, onClose, 
           body: { title: title.trim(), description: description.trim(), category },
         });
       } catch (notifyErr) {
-        console.warn('Failed to send notification:', notifyErr);
+        logger.warn('Failed to send notification:', notifyErr);
       }
 
       toast({ title: 'Thanks for your feedback!', description: 'Your suggestion has been submitted.' });

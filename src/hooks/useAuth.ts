@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { User, Session } from '@supabase/supabase-js';
+import { logger } from '@/lib/logger';
 
 export interface UserProfile {
   id: string;
@@ -37,7 +38,7 @@ export function useAuth(): UseAuthReturn {
         .maybeSingle();
 
       if (profileError) {
-        console.warn('Error fetching profile:', profileError);
+        logger.warn('Error fetching profile:', profileError);
       } else if (profileData) {
         setProfile({
           id: profileData.id,
@@ -57,7 +58,7 @@ export function useAuth(): UseAuthReturn {
         .maybeSingle();
 
       if (roleError) {
-        console.warn('Error fetching role:', roleError);
+        logger.warn('Error fetching role:', roleError);
       } else if (roleData) {
         setIsAdmin(roleData.role === 'admin');
       }

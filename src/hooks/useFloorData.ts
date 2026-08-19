@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { on } from '@/lib/event-bus';
+import { logger } from '@/lib/logger';
 
 export interface FloorInfo {
   id: string;           // Representative metaObject ID for this floor group
@@ -96,7 +97,7 @@ export function useFloorData(
           setFloorNamesMap(nameMap);
         }
       } catch (e) {
-        console.debug('[useFloorData] Failed to fetch storeys:', e);
+        logger.debug('[useFloorData] Failed to fetch storeys:', e);
       }
     };
 

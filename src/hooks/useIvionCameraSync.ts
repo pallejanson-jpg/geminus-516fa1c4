@@ -18,6 +18,7 @@ import type { BuildingOrigin } from '@/lib/coordinate-transform';
 import type { IvionApi, IvionImage as SdkIvionImage } from '@/lib/ivion-sdk';
 import { resolveMainView, resolveMoveTo } from '@/lib/ivion-sdk';
 import { ivionToBim, bimToIvion, ivionHeadingToBim, bimHeadingToIvion, IDENTITY_TRANSFORM, isIdentityTransform, type IvionBimTransform } from '@/lib/ivion-bim-transform';
+import { logger } from '@/lib/logger';
 
 export interface IvionImage {
   id: number;
@@ -120,9 +121,9 @@ export function useIvionCameraSync({
       if (data?.success && data?.images?.length > 0) {
         setImageCache(data.images);
         setHasImageLoadError(false);
-        console.log(`[Ivion Sync] Loaded ${data.images.length} images for site`);
+        logger.log(`[Ivion Sync] Loaded ${data.images.length} images for site`);
       } else {
-        console.warn('[Ivion Sync] No images returned:', data?.error || 'Unknown');
+        logger.warn('[Ivion Sync] No images returned:', data?.error || 'Unknown');
         setHasImageLoadError(true);
       }
     } catch (e) {
@@ -177,7 +178,7 @@ export function useIvionCameraSync({
     }
 
     setSdkSyncActive(true);
-    console.log('[Ivion Sync] SDK mode: Starting position polling');
+    logger.log('[Ivion Sync] SDK mode: Starting position polling');
     
     let lastImageId: number | null = null;
     let lastLon: number | null = null;
@@ -219,7 +220,7 @@ export function useIvionCameraSync({
           
           const pos: LocalCoords = { x: bimPos.x, y: bimPos.y, z: bimPos.z };
           
-          console.log('[Ivion Sync] SDK position:', { imageId: image.id, ivionPos, bimPos: pos, heading: bimHeading.toFixed(1) });
+          logger.log('[Ivion Sync] SDK position:', { imageId: image.id, ivionPos, bimPos: pos, heading: bimHeading.toFixed(1) });
           
           updateFromIvion(pos, bimHeading, pitch);
           setCurrentImageId(image.id);
@@ -240,10 +241,10 @@ export function useIvionCameraSync({
         unsubscribe = ivApi.pov.onChange(() => {
           pollPosition();
         });
-        console.log('[Ivion Sync] SDK: Subscribed to pov.onChange');
+        logger.log('[Ivion Sync] SDK: Subscribed to pov.onChange');
       }
     } catch (e) {
-      console.debug('[Ivion Sync] pov.onChange not available, using polling only');
+      logger.debug('[Ivion Sync] pov.onChange not available, using polling only');
     }
 
     return () => {
@@ -276,7 +277,7 @@ export function useIvionCameraSync({
         lat: (syncState.pitch * Math.PI) / 180,
       };
       
-      console.log('[Ivion Sync] SDK: Moving to image', nearestImage.id, 'viewDir:', viewDir);
+      logger.log('[Ivion Sync] SDK: Moving to image', nearestImage.id, 'viewDir:', viewDir);
       
       resolveMoveTo(ivApi, nearestImage.id, viewDir)
         .then(() => {
@@ -300,7 +301,7 @@ export function useIvionCameraSync({
           });
         }
       } catch (e) {
-        console.debug('[Ivion Sync] SDK updateOrientation not available');
+        logger.debug('[Ivion Sync] SDK updateOrientation not available');
       }
       setTimeout(() => { isSyncingRef.current = false; }, 100);
     }
@@ -333,7 +334,7 @@ export function useIvionCameraSync({
         currentUrl.searchParams.set('vlon', ((ivionHeading * Math.PI) / 180).toFixed(2));
         currentUrl.searchParams.set('vlat', ((syncState.pitch * Math.PI) / 180).toFixed(2));
         
-        console.log('[Ivion Sync] Iframe: Navigating to image:', nearestImage.id);
+        logger.log('[Ivion Sync] Iframe: Navigating to image:', nearestImage.id);
         iframeRef.current.src = currentUrl.toString();
         setCurrentImageId(nearestImage.id);
         setLastSyncSource('3d');
@@ -357,7 +358,7 @@ export function useIvionCameraSync({
   const sendSubscribeCommand = useCallback(() => {
     // In SDK mode: not needed (we use direct API)
     // In iframe mode: postMessage subscribe doesn't work
-    console.debug('[Ivion Sync] Subscribe command is no longer needed');
+    logger.debug('[Ivion Sync] Subscribe command is no longer needed');
   }, []);
 
   // Manual URL sync (fallback for both modes)

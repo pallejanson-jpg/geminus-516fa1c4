@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useIvionSdk } from '@/hooks/useIvionSdk';
 import { supabase } from '@/integrations/supabase/client';
 
+import { logger } from '@/lib/logger';
 interface BrowserScanRunnerProps {
   scanJobId: string;
   buildingFmGuid: string;
@@ -56,7 +57,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     const checkDimensions = () => {
       const el = containerRef.current;
       if (el && el.offsetHeight > 0 && el.offsetWidth > 0) {
-        console.log('[BrowserScan] Container ready:', el.offsetWidth, 'x', el.offsetHeight);
+        logger.log('[BrowserScan] Container ready:', el.offsetWidth, 'x', el.offsetHeight);
         setSdkEnabled(true);
         return true;
       }
@@ -167,7 +168,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
       document.head.appendChild(globalStyle);
     }
 
-    console.log('[BrowserScan] Ivion minimal UI CSS injected into', ivionEls.length, 'element(s)');
+    logger.log('[BrowserScan] Ivion minimal UI CSS injected into', ivionEls.length, 'element(s)');
   }, []);
 
   useEffect(() => {
@@ -185,9 +186,9 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
       api?.closeMenu?.();
       const mainView = api?.view?.mainView ?? (typeof api?.getMainView === 'function' ? api.getMainView() : null);
       mainView?.setFullscreen?.(true);
-      console.log('[BrowserScan] Ivion UI minimized via SDK');
+      logger.log('[BrowserScan] Ivion UI minimized via SDK');
     } catch (e) {
-      console.warn('[BrowserScan] Could not minimize Ivion UI via SDK:', e);
+      logger.warn('[BrowserScan] Could not minimize Ivion UI via SDK:', e);
     }
 
     return () => {
@@ -233,10 +234,10 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
           let dataUri: string | null = null;
           if (screenshotResult && typeof screenshotResult === 'object' && screenshotResult.data) {
             dataUri = screenshotResult.data;
-            console.log(`[BrowserScan] Screenshot captured: ${screenshotResult.width}x${screenshotResult.height}`);
+            logger.log(`[BrowserScan] Screenshot captured: ${screenshotResult.width}x${screenshotResult.height}`);
           } else if (typeof screenshotResult === 'string') {
             dataUri = screenshotResult;
-            console.log('[BrowserScan] Screenshot captured (string fallback)');
+            logger.log('[BrowserScan] Screenshot captured (string fallback)');
           }
 
           if (dataUri && typeof dataUri === 'string') {
@@ -244,12 +245,12 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
             if (base64 && base64.length > 100) {
               return base64;
             }
-            console.warn('[BrowserScan] Screenshot data too small, likely empty');
+            logger.warn('[BrowserScan] Screenshot data too small, likely empty');
           }
         }
       }
 
-      console.warn('[BrowserScan] getScreenshot not found on any view path');
+      logger.warn('[BrowserScan] getScreenshot not found on any view path');
 
       const ivionEl = containerRef.current?.querySelector('ivion');
       if (ivionEl) {
@@ -259,16 +260,16 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
             const dataUri = canvas.toDataURL('image/jpeg', 0.85);
             const base64 = dataUri.split(',')[1];
             if (base64 && base64.length > 100) {
-              console.log(`[BrowserScan] Canvas fallback screenshot, base64 length: ${base64.length}`);
+              logger.log(`[BrowserScan] Canvas fallback screenshot, base64 length: ${base64.length}`);
               return base64;
             }
           } catch (canvasErr) {
-            console.warn('[BrowserScan] Canvas toDataURL failed (WebGL security):', canvasErr);
+            logger.warn('[BrowserScan] Canvas toDataURL failed (WebGL security):', canvasErr);
           }
         }
       }
     } catch (e) {
-      console.warn('[BrowserScan] Screenshot capture failed:', e);
+      logger.warn('[BrowserScan] Screenshot capture failed:', e);
     }
     return null;
   };
@@ -292,7 +293,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         };
       }
     } catch (e) {
-      console.warn('[BrowserScan] Could not get image position:', e);
+      logger.warn('[BrowserScan] Could not get image position:', e);
     }
     return { x: 0, y: 0, z: 0 };
   };
@@ -305,10 +306,10 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         const newLon = (currentDir?.lon || 0) + (lonDeg * Math.PI / 180);
         const currentLat = currentDir?.lat || 0;
         mainView.updateOrientation({ lon: newLon, lat: currentLat });
-        console.log(`[BrowserScan] Rotated to lon=${(newLon * 180 / Math.PI).toFixed(1)}°`);
+        logger.log(`[BrowserScan] Rotated to lon=${(newLon * 180 / Math.PI).toFixed(1)}°`);
       }
     } catch (e) {
-      console.warn('[BrowserScan] Rotation failed:', e);
+      logger.warn('[BrowserScan] Rotation failed:', e);
     }
   };
 
@@ -334,7 +335,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         console.error('[BrowserScan] Analysis error:', error);
         return 0;
       }
-      console.log(`[BrowserScan] AI analysis returned ${data?.detections || 0} detections`);
+      logger.log(`[BrowserScan] AI analysis returned ${data?.detections || 0} detections`);
       return data?.detections || 0;
     } catch (e) {
       console.error('[BrowserScan] Analysis request failed:', e);
@@ -366,7 +367,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         console.error('[BrowserScan] Batch analysis error:', error);
         return 0;
       }
-      console.log(`[BrowserScan] Batch AI analysis returned ${data?.detections || 0} detections from ${screenshots.length} images`);
+      logger.log(`[BrowserScan] Batch AI analysis returned ${data?.detections || 0} detections from ${screenshots.length} images`);
       return data?.detections || 0;
     } catch (e) {
       console.error('[BrowserScan] Batch analysis request failed:', e);
@@ -384,12 +385,12 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
     try {
       const imageApi = api.image;
       if (imageApi?.repository?.findAll) {
-        console.log('[BrowserScan] Fetching images via api.image.repository.findAll()...');
+        logger.log('[BrowserScan] Fetching images via api.image.repository.findAll()...');
         const images = await imageApi.repository.findAll(true);
         if (Array.isArray(images) && images.length > 0) {
-          console.log(`[BrowserScan] ✅ Got ${images.length} images from SDK repository`);
+          logger.log(`[BrowserScan] ✅ Got ${images.length} images from SDK repository`);
           if (images[0]?.siteModelEntity) {
-            console.log('[BrowserScan] siteModelEntity sample:', JSON.stringify(images[0].siteModelEntity, null, 2));
+            logger.log('[BrowserScan] siteModelEntity sample:', JSON.stringify(images[0].siteModelEntity, null, 2));
           }
           return images.map((img: any) => ({
             id: img.id,
@@ -397,21 +398,21 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
             siteModelEntity: img.siteModelEntity || null,
           }));
         }
-        console.warn('[BrowserScan] findAll() returned empty array');
+        logger.warn('[BrowserScan] findAll() returned empty array');
       } else {
-        console.warn('[BrowserScan] api.image.repository.findAll not available');
+        logger.warn('[BrowserScan] api.image.repository.findAll not available');
       }
 
       const datasetApi = api.dataset;
       if (datasetApi?.repository?.findAll) {
-        console.log('[BrowserScan] Trying dataset-based fallback...');
+        logger.log('[BrowserScan] Trying dataset-based fallback...');
         const datasets = await datasetApi.repository.findAll(true);
         if (Array.isArray(datasets) && datasets.length > 0) {
-          console.log(`[BrowserScan] Found ${datasets.length} datasets, re-trying image findAll...`);
+          logger.log(`[BrowserScan] Found ${datasets.length} datasets, re-trying image findAll...`);
           if (imageApi?.repository?.findAll) {
             const images = await imageApi.repository.findAll(true);
             if (Array.isArray(images) && images.length > 0) {
-              console.log(`[BrowserScan] ✅ Got ${images.length} images after dataset load`);
+              logger.log(`[BrowserScan] ✅ Got ${images.length} images after dataset load`);
               return images.map((img: any) => ({
                 id: img.id,
                 datasetName: img.siteModelEntity?.name || undefined,
@@ -422,7 +423,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
         }
       }
 
-      console.log('[BrowserScan] Fallback: exploring from current position...');
+      logger.log('[BrowserScan] Fallback: exploring from current position...');
       const mainView = api.mainView ?? api.getMainView?.();
       const currentImage = mainView?.getImage?.();
       if (currentImage && imageApi?.service?.getClosestImageInDir) {
@@ -442,11 +443,11 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
             break;
           }
         }
-        console.log(`[BrowserScan] Explored ${imageList.length} images via getClosestImageInDir`);
+        logger.log(`[BrowserScan] Explored ${imageList.length} images via getClosestImageInDir`);
         if (imageList.length > 0) return imageList;
       }
 
-      console.warn('[BrowserScan] Could not get any images');
+      logger.warn('[BrowserScan] Could not get any images');
       return [];
     } catch (e) {
       console.error('[BrowserScan] Image list error:', e);
@@ -456,7 +457,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
 
   const startScan = async () => {
     if (isScanningRef.current) {
-      console.warn('[BrowserScan] startScan() called but already scanning, ignoring');
+      logger.warn('[BrowserScan] startScan() called but already scanning, ignoring');
       return;
     }
     isScanningRef.current = true;
@@ -472,14 +473,14 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
 
     setScanState('scanning');
     const t0 = Date.now();
-    console.log(`[BrowserScan] === Starting scan at ${new Date().toISOString()} ===`);
-    console.log(`[BrowserScan] Job: ${scanJobId}, Site: ${ivionSiteId}, Templates: ${templates.length}`);
-    console.log(`[BrowserScan] cancelledRef.current = ${cancelledRef.current}`);
+    logger.log(`[BrowserScan] === Starting scan at ${new Date().toISOString()} ===`);
+    logger.log(`[BrowserScan] Job: ${scanJobId}, Site: ${ivionSiteId}, Templates: ${templates.length}`);
+    logger.log(`[BrowserScan] cancelledRef.current = ${cancelledRef.current}`);
 
     try {
       const allImages = await getImageList();
-      console.log(`[BrowserScan] Image list fetched: ${allImages.length} images (took ${Date.now() - t0}ms)`);
-      console.log(`[BrowserScan] cancelledRef.current after getImageList = ${cancelledRef.current}`);
+      logger.log(`[BrowserScan] Image list fetched: ${allImages.length} images (took ${Date.now() - t0}ms)`);
+      logger.log(`[BrowserScan] cancelledRef.current after getImageList = ${cancelledRef.current}`);
 
       if (allImages.length === 0) {
         toast({
@@ -492,12 +493,12 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
       if (allImages.length > MAX_IMAGES_PER_SCAN) {
         const step = Math.max(1, Math.floor(allImages.length / MAX_IMAGES_PER_SCAN));
         images = allImages.filter((_, i) => i % step === 0).slice(0, MAX_IMAGES_PER_SCAN);
-        console.log(`[BrowserScan] Sampled ${images.length} images from ${allImages.length} (every ${step}th image)`);
+        logger.log(`[BrowserScan] Sampled ${images.length} images from ${allImages.length} (every ${step}th image)`);
       }
 
       const scanCount = Math.max(images.length, 1);
       setTotalImages(scanCount);
-      console.log(`[BrowserScan] Will scan ${scanCount} images with ${ROTATIONS_PER_POSITION} rotations each`);
+      logger.log(`[BrowserScan] Will scan ${scanCount} images with ${ROTATIONS_PER_POSITION} rotations each`);
 
       await supabase.from('scan_jobs').update({
         total_images: scanCount,
@@ -510,32 +511,32 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
       let consecutiveNavFailures = 0;
       let processed = 0;
 
-      console.log(`[BrowserScan] === Entering scan loop, cancelledRef=${cancelledRef.current} ===`);
+      logger.log(`[BrowserScan] === Entering scan loop, cancelledRef=${cancelledRef.current} ===`);
 
       for (let i = 0; i < scanCount; i++) {
         if (cancelledRef.current) {
-          console.log(`[BrowserScan] Cancelled at image ${i}`);
+          logger.log(`[BrowserScan] Cancelled at image ${i}`);
           break;
         }
         await waitForPause();
         if (cancelledRef.current) {
-          console.log(`[BrowserScan] Cancelled after pause at image ${i}`);
+          logger.log(`[BrowserScan] Cancelled after pause at image ${i}`);
           break;
         }
 
         const img = images[i];
         setCurrentImageInfo(`Image ${i + 1} / ${scanCount}${img?.datasetName ? ` (${img.datasetName})` : ''}`);
-        console.log(`[BrowserScan] --- Image ${i + 1}/${scanCount}, id=${img?.id ?? 'current'} (${new Date().toISOString()}) ---`);
+        logger.log(`[BrowserScan] --- Image ${i + 1}/${scanCount}, id=${img?.id ?? 'current'} (${new Date().toISOString()}) ---`);
 
         if (img) {
           try {
             await (api as any).legacyApi.moveToImageId(img.id, undefined, undefined);
-            console.log(`[BrowserScan] ✅ Navigated to image ${img.id}`);
+            logger.log(`[BrowserScan] ✅ Navigated to image ${img.id}`);
             consecutiveNavFailures = 0;
             await sleep(800);
           } catch (e) {
             consecutiveNavFailures++;
-            console.warn(`[BrowserScan] ❌ Navigation failed for image ${img.id} (consecutive failures: ${consecutiveNavFailures}):`, e);
+            logger.warn(`[BrowserScan] ❌ Navigation failed for image ${img.id} (consecutive failures: ${consecutiveNavFailures}):`, e);
             
             if (consecutiveNavFailures > MAX_CONSECUTIVE_NAV_FAILURES) {
               console.error(`[BrowserScan] Too many consecutive navigation failures (${consecutiveNavFailures}), aborting scan`);
@@ -568,7 +569,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
             screenshots.push(screenshot);
           } else {
             screenshotFailures++;
-            console.warn(`[BrowserScan] Screenshot failed (rotation ${rot + 1}, total failures: ${screenshotFailures})`);
+            logger.warn(`[BrowserScan] Screenshot failed (rotation ${rot + 1}, total failures: ${screenshotFailures})`);
           }
 
           if (rot < ROTATIONS_PER_POSITION - 1) {
@@ -579,7 +580,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
 
         if (screenshots.length > 0 && !cancelledRef.current) {
           const position = getImagePosition();
-          console.log(`[BrowserScan] Batch analyzing ${screenshots.length} screenshots, pos=(${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`);
+          logger.log(`[BrowserScan] Batch analyzing ${screenshots.length} screenshots, pos=(${position.x.toFixed(1)}, ${position.y.toFixed(1)}, ${position.z.toFixed(1)})`);
           const detCount = await analyzeScreenshotBatch(screenshots, img?.id ?? null, position, img?.datasetName);
           totalDetections += detCount;
           setDetectionsFound(totalDetections);
@@ -596,11 +597,11 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
       }
 
       if (screenshotFailures > 0) {
-        console.warn(`[BrowserScan] Total screenshot failures: ${screenshotFailures}`);
+        logger.warn(`[BrowserScan] Total screenshot failures: ${screenshotFailures}`);
       }
 
       const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
-      console.log(`[BrowserScan] === Loop finished: processed=${processed}, detections=${totalDetections}, elapsed=${elapsed}s, cancelled=${cancelledRef.current} ===`);
+      logger.log(`[BrowserScan] === Loop finished: processed=${processed}, detections=${totalDetections}, elapsed=${elapsed}s, cancelled=${cancelledRef.current} ===`);
 
       if (!cancelledRef.current) {
         if (processed === 0) {
@@ -614,7 +615,7 @@ const BrowserScanRunner: React.FC<BrowserScanRunnerProps> = ({
           }).eq('id', scanJobId);
         } else {
           setScanState('completing');
-          console.log(`[BrowserScan] === Scan complete: ${totalDetections} detections in ${processed} images ===`);
+          logger.log(`[BrowserScan] === Scan complete: ${totalDetections} detections in ${processed} images ===`);
 
           await supabase.functions.invoke('ai-asset-detection', {
             body: { action: 'complete-browser-scan', scanJobId },

@@ -47,6 +47,7 @@ import {
   type ViewerToolChangedDetail,
   type ViewMode2DToggledDetail,
 } from '@/lib/viewer-events';
+import { logger } from '@/lib/logger';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -471,7 +472,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
     scene.alphaDepthMask = true;
 
     // Re-apply architect colors after batch reset (critical!)
-    try { applyArchitectColors(viewer); } catch (e) { console.warn('[handleResetView] applyArchitectColors failed:', e); }
+    try { applyArchitectColors(viewer); } catch (e) { logger.warn('[handleResetView] applyArchitectColors failed:', e); }
 
     // Clear global flags set by insights / visualization systems
     (window as any).__colorFilterActive = false;
@@ -553,7 +554,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
   const activateMeasure = useCallback(() => {
     if (!viewer?.scene) return;
     const sdk = (window as any).__xeokitSdk;
-    if (!sdk?.DistanceMeasurementsPlugin) { console.warn('[ViewerToolbar] DistanceMeasurementsPlugin not in SDK'); return; }
+    if (!sdk?.DistanceMeasurementsPlugin) { logger.warn('[ViewerToolbar] DistanceMeasurementsPlugin not in SDK'); return; }
     if (!measurePluginRef.current) {
       measurePluginRef.current = new sdk.DistanceMeasurementsPlugin(viewer, {
         defaultVisible: true,
@@ -572,14 +573,14 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
   const clearMeasurements = useCallback(() => {
     if (measurePluginRef.current) {
       measurePluginRef.current.clear?.();
-      console.log('[ViewerToolbar] Measurements cleared');
+      logger.log('[ViewerToolbar] Measurements cleared');
     }
   }, []);
 
   const activateAngleMeasure = useCallback(() => {
     if (!viewer?.scene) return;
     const sdk = (window as any).__xeokitSdk;
-    if (!sdk?.AngleMeasurementsPlugin) { console.warn('[ViewerToolbar] AngleMeasurementsPlugin not in SDK'); return; }
+    if (!sdk?.AngleMeasurementsPlugin) { logger.warn('[ViewerToolbar] AngleMeasurementsPlugin not in SDK'); return; }
     if (!angleMeasurePluginRef.current) {
       angleMeasurePluginRef.current = new sdk.AngleMeasurementsPlugin(viewer, {
         defaultVisible: true,
@@ -601,7 +602,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
   const activateSection = useCallback(() => {
     if (!viewer?.scene) return;
     const sdk = (window as any).__xeokitSdk;
-    if (!sdk?.SectionPlanesPlugin) { console.warn('[ViewerToolbar] SectionPlanesPlugin not in SDK'); return; }
+    if (!sdk?.SectionPlanesPlugin) { logger.warn('[ViewerToolbar] SectionPlanesPlugin not in SDK'); return; }
     if (!sectionPluginRef.current) {
       sectionPluginRef.current = new sdk.SectionPlanesPlugin(viewer, {
         overviewVisible: true,
@@ -629,7 +630,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
           // Show interactive drag gizmo/control for the created plane
           if (sectionPlane && sectionPluginRef.current?.showControl) {
             sectionPluginRef.current.showControl(sectionPlane.id);
-            console.log('[ViewerToolbar] Section plane created with interactive control');
+            logger.log('[ViewerToolbar] Section plane created with interactive control');
           }
           // Remove click handler after first plane - user can reposition via gizmo
           canvas.removeEventListener('click', clickHandler);
@@ -772,7 +773,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
 
   const handleViewModeChange = useCallback((mode: ViewMode) => {
     if (!viewer?.scene) {
-      console.warn('[ViewerToolbar] handleViewModeChange: viewer not ready, skipping');
+      logger.warn('[ViewerToolbar] handleViewModeChange: viewer not ready, skipping');
       return;
     }
     // Force reapply: if already in 2D mode and requesting 2D, re-run clipping
@@ -957,7 +958,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
               depth++;
             }
           });
-          console.log(`[2D] storey.children empty — parent-chain fallback found ${storeyDescendants.size} entities for floor ${targetFloorId}`);
+          logger.log(`[2D] storey.children empty — parent-chain fallback found ${storeyDescendants.size} entities for floor ${targetFloorId}`);
         }
 
         let visibleCount = 0;
@@ -1014,7 +1015,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
         // Safety: if no objects are visible after 2D styling, rollback by restoring offsets
         // and resetting the scene to its 3D state
         if (visibleCount === 0) {
-          console.warn('[ViewerToolbar] 2D mode: 0 visible objects after styling — rolling back');
+          logger.warn('[ViewerToolbar] 2D mode: 0 visible objects after styling — rolling back');
           colorized.forEach((orig, id) => {
             const entity = scene.objects?.[id];
             if (entity && orig.offset !== null) {
@@ -1085,7 +1086,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
           try { sessionStorage.setItem('viewer_last_floor_id', targetFloorId); } catch {}
         }
       } catch (err) {
-        console.warn('[ViewerToolbar] Failed to enter 2D mode cleanly:', err);
+        logger.warn('[ViewerToolbar] Failed to enter 2D mode cleanly:', err);
         try { remove2DClipping(); } catch {}
         try { remove3DClipping(); } catch {}
       } finally {
@@ -1137,7 +1138,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
       // Re-apply architect color palette — starting from a clean slate
       try {
         const result = applyArchitectColors(viewer);
-        console.log(`[ViewerToolbar] 3D colors restored: ${result.colorized} colorized, ${result.hiddenSpaces} spaces hidden`);
+        logger.log(`[ViewerToolbar] 3D colors restored: ${result.colorized} colorized, ${result.hiddenSpaces} spaces hidden`);
       } catch (err) {
         console.error('[ViewerToolbar] Failed to restore colors:', err);
       }

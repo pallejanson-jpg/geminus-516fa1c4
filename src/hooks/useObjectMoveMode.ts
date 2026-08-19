@@ -10,6 +10,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { normalizeGuid } from '@/lib/utils';
+import { logger } from '@/lib/logger';
 
 import { on } from '@/lib/event-bus';
 export const OBJECT_MOVE_MODE_EVENT = 'OBJECT_MOVE_MODE';
@@ -74,7 +75,7 @@ export function useObjectMoveMode(viewer: any, buildingFmGuid: string) {
     });
 
     if (movedCount > 0 || deletedCount > 0) {
-      console.log(`[ObjectMove] Applied modifications: ${movedCount} moved, ${deletedCount} deleted`);
+      logger.log(`[ObjectMove] Applied modifications: ${movedCount} moved, ${deletedCount} deleted`);
     }
   }, [viewer, buildingFmGuid]);
 

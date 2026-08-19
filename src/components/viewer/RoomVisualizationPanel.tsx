@@ -53,6 +53,7 @@ export const FORCE_SHOW_SPACES_EVENT = 'FORCE_SHOW_SPACES';
 import { emit, on, type FloorSelectionEventDetail } from '@/lib/event-bus';
 import { FLOOR_SELECTION_CHANGED_EVENT, INSIGHTS_COLOR_UPDATE_EVENT, INSIGHTS_COLOR_RESET_EVENT } from '@/lib/viewer-events';
 import { VISUALIZATION_QUICK_SELECT_EVENT } from './VisualizationQuickBar';
+import { logger } from '@/lib/logger';
 
 // LocalStorage key for persisting visualization settings
 const STORAGE_KEY = 'roomVisualizationSettings';
@@ -219,7 +220,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       const assetViewer = viewerRef.current?.assetViewer;
       assetViewer?.onShowSpacesChanged?.(true);
     } catch (e) {
-      console.debug('Could not auto-activate spaces:', e);
+      logger.debug('Could not auto-activate spaces:', e);
     }
   }, [onShowSpaces, viewerRef]);
 
@@ -343,7 +344,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     const floorInfo = visibleFloorFmGuids && visibleFloorFmGuids.length > 0 
       ? `${visibleFloorFmGuids.length} floors selected` 
       : 'all';
-    console.log(`Room visualization: ${filteredRooms.length} rooms (floor: ${floorInfo})`);
+    logger.log(`Room visualization: ${filteredRooms.length} rooms (floor: ${floorInfo})`);
   }, [filteredRooms, visibleFloorFmGuids, liveSensorMap]);
 
   // Build entity ID cache from metaScene (rebuild when cacheKey changes)
@@ -446,7 +447,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         }
       });
       if (fallbackCount > 0) {
-        console.log(`Entity cache: ${fallbackCount} rooms matched via scene object ID fallback`);
+        logger.log(`Entity cache: ${fallbackCount} rooms matched via scene object ID fallback`);
       }
     }
 
@@ -476,13 +477,13 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       }
     });
     if (nameMatchCount > 0) {
-      console.log(`Entity cache: ${nameMatchCount} rooms matched via name-based fallback`);
+      logger.log(`Entity cache: ${nameMatchCount} rooms matched via name-based fallback`);
     }
     
     setEntityIdCache(cache);
     // Expose cache globally so NativeXeokitViewer's INSIGHTS_COLOR handler can use it
     (window as any).__spaceEntityIdCache = cache;
-    console.log(`Built entity ID cache: ${cache.size} entries for spaces`);
+    logger.log(`Built entity ID cache: ${cache.size} entries for spaces`);
   }, [viewerRef, cacheKey, buildingFmGuid, filteredRooms]);
 
   // Get item IDs by FmGuid using cache (fast O(1) lookup)
@@ -562,7 +563,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
 
     // Guard: prevent overlapping executions
     if (isProcessingRef.current) {
-      console.debug('applyVisualization skipped – already in progress');
+      logger.debug('applyVisualization skipped – already in progress');
       return;
     }
 
@@ -618,7 +619,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
     setColorizedCount(Object.keys(colorMap).length);
     setIsProcessing(false);
     isProcessingRef.current = false;
-    console.log(`Applied ${visualizationType} color filter: ${Object.keys(colorMap).length} rooms, ${Object.keys(entityColorMap).length} entity matches`);
+    logger.log(`Applied ${visualizationType} color filter: ${Object.keys(colorMap).length} rooms, ${Object.keys(entityColorMap).length} entity matches`);
   }, [visualizationType, rooms, useMockData, resetColors, entityIdCache, liveSensorMap]);
 
 
@@ -646,7 +647,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         const delay = attempt < 3 ? 300 : attempt < 6 ? 500 : 1000;
         setTimeout(() => applyWithRetry(attempt + 1), delay);
       } else {
-        console.debug('Room visualization: gave up after 12 attempts - cache:', entityIdCache.size, 'rooms:', rooms.length);
+        logger.debug('Room visualization: gave up after 12 attempts - cache:', entityIdCache.size, 'rooms:', rooms.length);
         // Last resort: force rebuild the entity cache
         if (entityIdCache.size === 0) {
           setCacheKey(`${buildingFmGuid}-force-${Date.now()}`);
@@ -750,7 +751,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         });
         scene.setObjectsSelected(idsToSelect, true);
         activeLegendRangeRef.current = { min: rangeMin, max: rangeMax };
-        console.log(`Legend select: ${idsToSelect.length} entities xray-highlighted in range [${rangeMin.toFixed(1)}, ${rangeMax.toFixed(1)}]`);
+        logger.log(`Legend select: ${idsToSelect.length} entities xray-highlighted in range [${rangeMin.toFixed(1)}, ${rangeMax.toFixed(1)}]`);
       } else {
         // No matches: remove xray
         scene.setObjectsXRayed(allIds, false);

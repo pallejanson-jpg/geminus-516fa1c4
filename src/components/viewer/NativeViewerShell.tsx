@@ -36,6 +36,7 @@ import { recolorArchitectObjects } from '@/lib/architect-colors';
 import { Filter, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
+import { logger } from '@/lib/logger';
 
 interface NativeViewerShellProps {
   buildingFmGuid: string;
@@ -88,7 +89,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     const handler = (e: CustomEvent) => {
       const targetGuid = e.detail?.buildingFmGuid;
       if (!targetGuid || targetGuid === buildingFmGuid) {
-        console.log('[NativeViewerShell] Force reloading viewer for fresh XKT');
+        logger.log('[NativeViewerShell] Force reloading viewer for fresh XKT');
         setXeokitViewer(null);
         setIsViewerReady(false);
         startViewAppliedRef.current = null;
@@ -153,7 +154,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
               visualizationMockData: false,
             },
           }));
-          console.log('[NativeViewerShell] Applied start view for', buildingFmGuid);
+          logger.log('[NativeViewerShell] Applied start view for', buildingFmGuid);
         };
 
         window.addEventListener('VIEWER_MODELS_LOADED', handler);
@@ -162,7 +163,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
         return () => window.removeEventListener('VIEWER_MODELS_LOADED', handler);
       } catch (e) {
-        console.warn('[NativeViewerShell] Failed to fetch start view:', e);
+        logger.warn('[NativeViewerShell] Failed to fetch start view:', e);
       }
     };
 
@@ -178,7 +179,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   // Helper: apply a saved view to the xeokit viewer
   const applySavedView = useCallback((viewer: any, detail: LoadSavedViewDetail) => {
     if (!viewer?.camera) return;
-    console.log('[NativeViewerShell] Applying saved view:', detail.viewId);
+    logger.log('[NativeViewerShell] Applying saved view:', detail.viewId);
     viewer.camera.eye = detail.cameraEye;
     viewer.camera.look = detail.cameraLook;
     viewer.camera.up = detail.cameraUp;
@@ -238,7 +239,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
             scene.createSectionPlane({ pos: sp.pos, dir: sp.dir, active: true });
           }
         } catch (e) {
-          console.warn('[NativeViewerShell] Could not restore section plane:', e);
+          logger.warn('[NativeViewerShell] Could not restore section plane:', e);
         }
       });
     }
@@ -476,11 +477,11 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           if (cmd.sensorData?.length) {
             window.dispatchEvent(new CustomEvent('AI_SENSOR_DATA', { detail: cmd.sensorData }));
           }
-          console.log('[NativeViewerShell] Applied pending AI viewer command:', cmd.action);
+          logger.log('[NativeViewerShell] Applied pending AI viewer command:', cmd.action);
         }, 2000);
       }
     } catch (e) {
-      console.warn('[NativeViewerShell] Failed to apply pending AI viewer command', e);
+      logger.warn('[NativeViewerShell] Failed to apply pending AI viewer command', e);
     }
 
     // Apply any pending alarm annotation payload (set by AlarmManagementTab when viewer wasn't mounted)
@@ -494,7 +495,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         }, 2500);
       }
     } catch (e) {
-      console.warn('[NativeViewerShell] Failed to apply pending alarm annotations', e);
+      logger.warn('[NativeViewerShell] Failed to apply pending alarm annotations', e);
     }
 
     // Build comprehensive shim that mimics the Geminus Plus API for all toolbar/settings components
@@ -538,7 +539,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         }
       },
       useTool: (tool: string | null) => {
-        console.debug('[NativeShim] useTool:', tool);
+        logger.debug('[NativeShim] useTool:', tool);
       },
       clearSlices: () => {
         if (!viewer.scene) return;
@@ -593,7 +594,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         window.dispatchEvent(new CustomEvent('TOGGLE_ANNOTATIONS', { detail: { show } }));
       },
       setShowFloorplan: (show: boolean) => {
-        console.debug('[NativeShim] setShowFloorplan:', show);
+        logger.debug('[NativeShim] setShowFloorplan:', show);
       },
     };
 
@@ -716,7 +717,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         });
         const bestAttrs = Object.keys(best.attributes || {}).length;
         if (bestAttrs > 0) {
-          console.log(`[CanonicalResolve] ${rawGuid} → ${best.fmGuid} (matched by name "${metaObj.name}", ${bestAttrs} attrs)`);
+          logger.log(`[CanonicalResolve] ${rawGuid} → ${best.fmGuid} (matched by name "${metaObj.name}", ${bestAttrs} attrs)`);
           return { fmGuid: best.fmGuid, name: entityName };
         }
       }

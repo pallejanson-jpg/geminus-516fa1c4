@@ -12,6 +12,7 @@ import { formatRoomLabel } from '@/lib/utils';
 // Import Cesium — base URL already set by CesiumGlobeView
 import * as Cesium from 'cesium';
 
+import { logger } from '@/lib/logger';
 interface StreetViewOverlayProps {
   lat: number;
   lng: number;
@@ -130,7 +131,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         await loadPanoAtPosition(nextPano.panoId, nextPano.longitude, nextPano.latitude);
       }
     } catch (e: any) {
-      console.warn('No panorama ahead:', e.message || e);
+      logger.warn('No panorama ahead:', e.message || e);
     } finally {
       setMoving(false);
     }
@@ -156,7 +157,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         await loadPanoAtPosition(nextPano.panoId, nextPano.longitude, nextPano.latitude);
       }
     } catch (e: any) {
-      console.warn('No panorama behind:', e.message || e);
+      logger.warn('No panorama behind:', e.message || e);
     } finally {
       setMoving(false);
     }
@@ -223,7 +224,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
             if (panoIdObject) break;
           } catch (e: any) {
             // ZERO_RESULTS or similar — try larger radius
-            console.warn(`Street View search radius ${radius}m: ${e.message || 'no results'}`);
+            logger.warn(`Street View search radius ${radius}m: ${e.message || 'no results'}`);
           }
         }
 

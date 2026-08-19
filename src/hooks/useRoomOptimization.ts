@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 export interface OptimizationSuggestion {
   type: 'underutilized' | 'overcrowded' | 'merge' | 'convert' | 'rezone';
@@ -108,7 +109,7 @@ export function useRoomOptimization(buildingFmGuid: string | null | undefined) {
 
       setData(result.data);
     } catch (e: any) {
-      console.warn('[RoomOptimization] Edge function failed, using mock data:', e.message);
+      logger.warn('[RoomOptimization] Edge function failed, using mock data:', e.message);
       // Keep mock data already shown
     } finally {
       setIsLoading(false);

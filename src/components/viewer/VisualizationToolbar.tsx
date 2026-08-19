@@ -47,6 +47,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { VISUALIZATION_QUICK_SELECT_EVENT } from "./VisualizationQuickBar";
 import { VisualizationType, VISUALIZATION_CONFIGS } from "@/lib/visualization-utils";
 import { emit, on } from '@/lib/event-bus';
+import { logger } from '@/lib/logger';
 // import { LEVEL_LABELS_TOGGLE_EVENT } from "@/hooks/useLevelLabels"; // disabled
 
 /** Navigation Speed slider sub-component */
@@ -476,7 +477,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
           const assetViewer = viewerRef.current?.assetViewer;
           assetViewer?.onShowSpacesChanged?.(shouldShow);
         } catch (err) {
-          console.debug("Force show spaces failed:", err);
+          logger.debug("Force show spaces failed:", err);
         }
       }
     };
@@ -897,7 +898,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
         const assetViewer = viewerRef.current?.assetViewer;
         assetViewer?.onShowSpacesChanged?.(newValue);
       } catch (e) {
-        console.debug("Toggle spaces failed:", e);
+        logger.debug("Toggle spaces failed:", e);
       }
     }
   }, [viewerRef, showSpaces, onShowSpacesChange]);
@@ -909,7 +910,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
       const assetViewer = viewerRef.current?.assetViewer;
       assetViewer?.onToggleAnnotation?.(newValue);
     } catch (e) {
-      console.debug("Toggle annotations failed:", e);
+      logger.debug("Toggle annotations failed:", e);
     }
   }, [viewerRef, showAnnotations]);
 
@@ -925,7 +926,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
   // Handle visible floors change from floor selector
   // Notify parent of floor changes (parent decides whether to reset showSpaces)
   const handleVisibleFloorsChange = useCallback((visibleFloorIds: string[]) => {
-    console.log("Visible floors changed:", visibleFloorIds);
+    logger.log("Visible floors changed:", visibleFloorIds);
     onVisibleFloorsChange?.(visibleFloorIds);
   }, [onVisibleFloorsChange]);
 

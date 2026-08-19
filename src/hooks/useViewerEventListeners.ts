@@ -12,6 +12,7 @@ import { normalizeGuid } from '@/lib/utils';
 import { applyArchitectColors } from '@/lib/architect-colors';
 import { toast } from 'sonner';
 import { emit, on } from '@/lib/event-bus';
+import { logger } from '@/lib/logger';
 import {
   INSIGHTS_COLOR_UPDATE_EVENT,
   INSIGHTS_COLOR_RESET_EVENT,
@@ -280,11 +281,11 @@ export function useViewerEventListeners({
         });
       }
 
-      console.log('[ViewerEvents] INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries,', matchCount, 'matched');
+      logger.log('[ViewerEvents] INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries,', matchCount, 'matched');
 
       if (matchCount === 0) {
         (window as any).__colorFilterActive = false;
-        console.warn('[ViewerEvents] No entity matches for color filter — skipping xray pass');
+        logger.warn('[ViewerEvents] No entity matches for color filter — skipping xray pass');
         return;
       }
 
@@ -642,7 +643,7 @@ export function useViewerEventListeners({
         });
         applyFloorFilter();
       } catch (err) {
-        console.warn('[ViewerEvents] Failed to load annotations:', err);
+        logger.warn('[ViewerEvents] Failed to load annotations:', err);
       }
     };
 

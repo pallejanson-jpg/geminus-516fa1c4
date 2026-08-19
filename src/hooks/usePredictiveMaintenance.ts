@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 export interface MaintenancePrediction {
   equipmentGuid: string | null;
@@ -115,7 +116,7 @@ export function usePredictiveMaintenance(buildingFmGuid: string | null | undefin
       if (e.name === 'AbortError') {
         // Keep the mock data, don't show error
       } else {
-        console.warn('[PredictiveMaintenance] Edge function failed, using mock data:', e.message);
+        logger.warn('[PredictiveMaintenance] Edge function failed, using mock data:', e.message);
         // Keep mock data already shown — don't overwrite with error
       }
     } finally {

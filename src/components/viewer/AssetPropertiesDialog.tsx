@@ -16,6 +16,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { logger } from '@/lib/logger';
 
 // Asset type options for dropdown
 const ASSET_TYPES = [
@@ -312,7 +313,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
           },
         });
       } catch (apiError) {
-        console.warn('Failed to sync to Geminus Plus:', apiError);
+        logger.warn('Failed to sync to Geminus Plus:', apiError);
         // Continue anyway - local save succeeded
       }
 

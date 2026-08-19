@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { logger } from '@/lib/logger';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { Database } from '@/integrations/supabase/types';
@@ -295,7 +296,7 @@ export function useGeminusBaseApi() {
                 systemGuid: node.systemGuid,
                 children,
               };
-              console.log('[GeminusBaseV2] getRootTree found parent root via', path, rootNode.objectName);
+              logger.log('[GeminusBaseV2] getRootTree found parent root via', path, rootNode.objectName);
               return [rootNode];
             }
           } catch {}
@@ -323,7 +324,7 @@ export function useGeminusBaseApi() {
           objectId: 0, // synthetic — no real API object
           children: [kfastNode],
         };
-        console.log('[GeminusBaseV2] getRootTree: synthetic BLM Demo root, kfastChildren:', kfastChildren?.length ?? 'lazy');
+        logger.log('[GeminusBaseV2] getRootTree: synthetic BLM Demo root, kfastChildren:', kfastChildren?.length ?? 'lazy');
         return [blmDemoRoot];
       } catch {}
 
@@ -381,11 +382,11 @@ export function useGeminusBaseApi() {
           // Return the node with children if found, otherwise all nodes
           const withKids = withSubtrees.filter(n => n.children && n.children.length > 0);
           const result = withKids.length > 0 ? withKids : withSubtrees;
-          console.log('[GeminusBaseV2] getRootTree via search:', result.length, 'root nodes');
+          logger.log('[GeminusBaseV2] getRootTree via search:', result.length, 'root nodes');
           return result;
         }
       } catch (e) {
-        console.warn('[GeminusBaseV2] search-based discovery failed:', e);
+        logger.warn('[GeminusBaseV2] search-based discovery failed:', e);
       }
 
       // ── Phase 1: read building_settings for Geminus Base GUIDs ──────────────
@@ -421,12 +422,12 @@ export function useGeminusBaseApi() {
           );
           const nodes = results.filter((n): n is GeminusBaseNode => n !== null);
           if (nodes.length > 0) {
-            console.log('[GeminusBaseV2] getRootTree: found', nodes.length, 'buildings via building_settings');
+            logger.log('[GeminusBaseV2] getRootTree: found', nodes.length, 'buildings via building_settings');
             return nodes;
           }
         }
       } catch (e) {
-        console.warn('[GeminusBaseV2] building_settings query failed:', e);
+        logger.warn('[GeminusBaseV2] building_settings query failed:', e);
       }
 
       const toNodes = (data: any): GeminusBaseNode[] => {
@@ -443,7 +444,7 @@ export function useGeminusBaseApi() {
           const r = await fmCall('proxy', { path: `/api/perspective/root/json/${pid}` });
           const nodes = toNodes(r.data);
           if (r.success && nodes.length > 0) {
-            console.log('[GeminusBaseV2] root via perspective', pid, nodes.length, 'nodes');
+            logger.log('[GeminusBaseV2] root via perspective', pid, nodes.length, 'nodes');
             return nodes;
           }
         } catch {}
@@ -462,7 +463,7 @@ export function useGeminusBaseApi() {
           const r = await fmCall('proxy', { path });
           const nodes = toNodes(r.data);
           if (r.success && nodes.length > 0) {
-            console.log('[GeminusBaseV2] root via', path, nodes.length, 'nodes');
+            logger.log('[GeminusBaseV2] root via', path, nodes.length, 'nodes');
             return nodes;
           }
         } catch {}
@@ -472,7 +473,7 @@ export function useGeminusBaseApi() {
       try {
         const info = await fmCall('proxy', { path: '/api/systeminfo/json' });
         if (info.success && info.data) {
-          console.log('[GeminusBaseV2] systeminfo:', JSON.stringify(info.data).substring(0, 300));
+          logger.log('[GeminusBaseV2] systeminfo:', JSON.stringify(info.data).substring(0, 300));
           // Look for any GUID-like fields that could be a root perspective node
           const str = JSON.stringify(info.data);
           const guids = str.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi) ?? [];
@@ -481,7 +482,7 @@ export function useGeminusBaseApi() {
               const sub = await fmCall('proxy', { path: `/api/perspective/byguid/subtree/json/8/${guid}` });
               const nodes = toNodes(sub.data);
               if (sub.success && nodes.length > 0) {
-                console.log('[GeminusBaseV2] root via systeminfo GUID', guid, nodes.length, 'nodes');
+                logger.log('[GeminusBaseV2] root via systeminfo GUID', guid, nodes.length, 'nodes');
                 return nodes;
               }
             } catch {}
@@ -494,7 +495,7 @@ export function useGeminusBaseApi() {
         const r = await fmCall('proxy', { path: '/api/search/quick?query=&classId=102' });
         const nodes = toNodes(r.data);
         if (r.success && nodes.length > 0) {
-          console.log('[GeminusBaseV2] root via search classId=102', nodes.length, 'nodes');
+          logger.log('[GeminusBaseV2] root via search classId=102', nodes.length, 'nodes');
           return nodes;
         }
       } catch {}
@@ -502,10 +503,10 @@ export function useGeminusBaseApi() {
       // ── Phase 5: discover available perspectives ──────────────────────────
       try {
         const r = await fmCall('proxy', { path: '/api/perspectives/json' });
-        console.log('[GeminusBaseV2] perspectives:', JSON.stringify(r.data).substring(0, 300));
+        logger.log('[GeminusBaseV2] perspectives:', JSON.stringify(r.data).substring(0, 300));
       } catch {}
 
-      console.warn('[GeminusBaseV2] getRootTree: all endpoints failed — deploy edge function for diagnostics');
+      logger.warn('[GeminusBaseV2] getRootTree: all endpoints failed — deploy edge function for diagnostics');
       return null;
     }), [withLoading]);
 

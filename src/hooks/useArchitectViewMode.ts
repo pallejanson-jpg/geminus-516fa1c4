@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useRef } from 'react';
+import { logger } from '@/lib/logger';
 
 // Color definitions (hex to RGB 0-1)
 const ARCHITECT_COLORS = {
@@ -146,7 +147,7 @@ export function useArchitectViewMode() {
     const scene = xeokitViewer?.scene;
     
     if (!scene) {
-      console.warn('Cannot apply architect mode: scene not ready');
+      logger.warn('Cannot apply architect mode: scene not ready');
       return false;
     }
 
@@ -159,7 +160,7 @@ export function useArchitectViewMode() {
       return true;
     }
 
-    console.log('Applying architect view mode...');
+    logger.log('Applying architect view mode...');
 
     // Store original background
     const container = document.getElementById('GeminusPlusViewer');
@@ -222,7 +223,7 @@ export function useArchitectViewMode() {
     }
 
     state.isActive = true;
-    console.log('Architect view mode applied');
+    logger.log('Architect view mode applied');
     return true;
   }, []);
 
@@ -239,7 +240,7 @@ export function useArchitectViewMode() {
       return;
     }
 
-    console.log('Removing architect view mode...');
+    logger.log('Removing architect view mode...');
 
     // Restore background
     const container = document.getElementById('GeminusPlusViewer');
@@ -268,7 +269,7 @@ export function useArchitectViewMode() {
     // Clear stored state
     state.originalColors.clear();
     state.isActive = false;
-    console.log('Architect view mode removed');
+    logger.log('Architect view mode removed');
   }, []);
 
   /**

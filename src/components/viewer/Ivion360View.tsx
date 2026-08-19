@@ -13,6 +13,7 @@ import type { BuildingOrigin } from "@/lib/coordinate-transform";
 import type { IvionBimTransform } from "@/lib/ivion-bim-transform";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { loadIvionSdk, createIvionElement, destroyIvionElement, type IvionApi, type IvionSdkStatus } from "@/lib/ivion-sdk";
+import { logger } from '@/lib/logger';
 
 interface IvionPoiData {
   id: number;
@@ -122,13 +123,13 @@ export default function Ivion360View({
         body: { action: 'get-login-token', buildingFmGuid },
       });
       if (error || !data?.success) {
-        console.warn('[Ivion360View] Failed to fetch loginToken:', error || data?.error);
+        logger.warn('[Ivion360View] Failed to fetch loginToken:', error || data?.error);
         return null;
       }
-      console.log('[Ivion360View] loginToken obtained, expires in', Math.round((data.expiresInMs || 0) / 1000), 's');
+      logger.log('[Ivion360View] loginToken obtained, expires in', Math.round((data.expiresInMs || 0) / 1000), 's');
       return data.loginToken;
     } catch (e) {
-      console.warn('[Ivion360View] loginToken fetch error:', e);
+      logger.warn('[Ivion360View] loginToken fetch error:', e);
       return null;
     }
   }, [buildingFmGuid]);
@@ -139,7 +140,7 @@ export default function Ivion360View({
     if (!sdkContainerRef.current || ivionElementRef.current) return;
     const ivionEl = createIvionElement(sdkContainerRef.current);
     ivionElementRef.current = ivionEl;
-    console.log('[Ivion360View] <ivion> element created on mount');
+    logger.log('[Ivion360View] <ivion> element created on mount');
 
     return () => {
       if (sdkContainerRef.current && ivionElementRef.current) {
@@ -178,12 +179,12 @@ export default function Ivion360View({
         if (cancelled) return;
         
         if (loginToken) {
-          console.log('[Ivion360View] Will use loginToken for SDK auto-auth');
+          logger.log('[Ivion360View] Will use loginToken for SDK auto-auth');
         } else {
-          console.log('[Ivion360View] No loginToken available, SDK will require manual login');
+          logger.log('[Ivion360View] No loginToken available, SDK will require manual login');
         }
         
-        console.log('[Ivion360View] Attempting SDK load from:', baseUrl);
+        logger.log('[Ivion360View] Attempting SDK load from:', baseUrl);
         const api = await loadIvionSdk(baseUrl, 45000, loginToken || undefined, ivionSiteId || undefined);
         
         if (cancelled) return;
@@ -192,14 +193,14 @@ export default function Ivion360View({
         updateStatus('ready');
         setIsLoading(false);
         
-        console.log('[Ivion360View] ✅ SDK mode active', loginToken ? '(auto-authenticated)' : '(manual login needed)');
+        logger.log('[Ivion360View] ✅ SDK mode active', loginToken ? '(auto-authenticated)' : '(manual login needed)');
         toast.success(t('360° SDK ansluten', '360° SDK connected'), {
           description: loginToken ? t('Automatisk autentisering aktiv', 'Automatic authentication active') : t('Automatisk synkronisering aktiv', 'Automatic synchronization active'),
         });
       } catch (err) {
         if (cancelled) return;
         
-        console.log('[Ivion360View] SDK load failed, falling back to iframe:', err);
+        logger.log('[Ivion360View] SDK load failed, falling back to iframe:', err);
         updateStatus('failed');
       }
     };
@@ -265,10 +266,10 @@ export default function Ivion360View({
         const newToken = await fetchLoginToken();
         if (newToken && ivApiRef.current?.auth) {
           ivApiRef.current.auth.updateToken(newToken);
-          console.log('[Ivion360View] Token refreshed successfully');
+          logger.log('[Ivion360View] Token refreshed successfully');
         }
       } catch (e) {
-        console.warn('[Ivion360View] Token refresh failed (SDK may still work):', e);
+        logger.warn('[Ivion360View] Token refresh failed (SDK may still work):', e);
       }
     };
 
@@ -292,13 +293,13 @@ export default function Ivion360View({
             item.isVisible = () => false;
           }
         });
-        console.log('[Ivion360View] Hidden', menuItems.length, 'sidebar menu items on mobile');
+        logger.log('[Ivion360View] Hidden', menuItems.length, 'sidebar menu items on mobile');
       }
 
       // Try to close the sidebar menu
       ivApiRef.current.closeMenu?.();
     } catch (e) {
-      console.warn('[Ivion360View] Could not hide SDK sidebar items:', e);
+      logger.warn('[Ivion360View] Could not hide SDK sidebar items:', e);
     }
   }, [sdkStatus, isMobile]);
 
@@ -309,13 +310,13 @@ export default function Ivion360View({
       const api = ivApiRef.current as any;
       if (api.camera?.setHeading) {
         api.camera.setHeading(initialHeading);
-        console.log('[Ivion360View] Applied initial heading from Street View:', initialHeading);
+        logger.log('[Ivion360View] Applied initial heading from Street View:', initialHeading);
       } else if (api.resolveMoveTo) {
         api.resolveMoveTo({ heading: initialHeading });
-        console.log('[Ivion360View] Applied heading via resolveMoveTo:', initialHeading);
+        logger.log('[Ivion360View] Applied heading via resolveMoveTo:', initialHeading);
       }
     } catch (e) {
-      console.warn('[Ivion360View] Could not apply initial heading:', e);
+      logger.warn('[Ivion360View] Could not apply initial heading:', e);
     }
   }, [sdkStatus, initialHeading]);
 
@@ -336,13 +337,13 @@ export default function Ivion360View({
         });
         
         if (error) {
-          console.warn('Ivion token validation failed:', error);
+          logger.warn('Ivion token validation failed:', error);
           setConnectionStatus('error');
         } else if (data?.success) {
-          console.log('Ivion token valid/renewed:', data.message);
+          logger.log('Ivion token valid/renewed:', data.message);
           setConnectionStatus('connected');
         } else {
-          console.warn('Ivion token check returned unsuccessful:', data);
+          logger.warn('Ivion token check returned unsuccessful:', data);
           setConnectionStatus('expired');
         }
       } catch (e) {
@@ -372,7 +373,7 @@ export default function Ivion360View({
               params: { visible: false }
             }, '*');
           } catch (e) {
-            console.warn('[Ivion360View] Could not send sidebar postMessage:', e);
+            logger.warn('[Ivion360View] Could not send sidebar postMessage:', e);
           }
         }, delay);
       });

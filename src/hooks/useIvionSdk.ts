@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { loadIvionSdk, createIvionElement, destroyIvionElement, type IvionApi, type IvionSdkStatus } from '@/lib/ivion-sdk';
+import { logger } from '@/lib/logger';
 
 interface UseIvionSdkOptions {
   /** Base URL of the Ivion instance (origin only) */
@@ -56,13 +57,13 @@ export function useIvionSdk({
         body: { action: 'get-login-token', buildingFmGuid },
       });
       if (error || !data?.success) {
-        console.warn('[useIvionSdk] Failed to fetch loginToken:', error || data?.error);
+        logger.warn('[useIvionSdk] Failed to fetch loginToken:', error || data?.error);
         return null;
       }
-      console.log('[useIvionSdk] loginToken obtained');
+      logger.log('[useIvionSdk] loginToken obtained');
       return data.loginToken;
     } catch (e) {
-      console.warn('[useIvionSdk] loginToken fetch error:', e);
+      logger.warn('[useIvionSdk] loginToken fetch error:', e);
       return null;
     }
   }, [buildingFmGuid]);
@@ -90,7 +91,7 @@ export function useIvionSdk({
           if (!cancelled) setSdkStatus('failed');
           return;
         }
-        console.log('[useIvionSdk] Will use loginToken for auto-auth');
+        logger.log('[useIvionSdk] Will use loginToken for auto-auth');
 
         // Step 2: Create <ivion> element in container
         if (containerRef.current && !ivionElementRef.current) {
@@ -99,14 +100,14 @@ export function useIvionSdk({
 
         // Step 3: Load SDK
         const cleanBaseUrl = baseUrl.replace(/\/$/, '');
-        console.log('[useIvionSdk] Loading SDK from:', cleanBaseUrl, 'site:', siteId);
+        logger.log('[useIvionSdk] Loading SDK from:', cleanBaseUrl, 'site:', siteId);
 
         const api = await loadIvionSdk(cleanBaseUrl, 45000, loginToken || undefined, siteId);
         if (cancelled) return;
 
         ivApiRef.current = api;
         setSdkStatus('ready');
-        console.log('[useIvionSdk] ✅ SDK ready');
+        logger.log('[useIvionSdk] ✅ SDK ready');
       } catch (err: any) {
         console.error('[useIvionSdk] SDK load failed:', err);
         if (!cancelled) {
@@ -143,10 +144,10 @@ export function useIvionSdk({
         const newToken = await fetchLoginToken();
         if (newToken && ivApiRef.current?.auth) {
           ivApiRef.current.auth.updateToken(newToken);
-          console.log('[useIvionSdk] Token refreshed');
+          logger.log('[useIvionSdk] Token refreshed');
         }
       } catch (e) {
-        console.warn('[useIvionSdk] Token refresh failed:', e);
+        logger.warn('[useIvionSdk] Token refresh failed:', e);
       }
     };
 

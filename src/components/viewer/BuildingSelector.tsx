@@ -13,6 +13,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
 import { LOAD_SAVED_VIEW_EVENT, LoadSavedViewDetail } from '@/lib/viewer-events';
+import { logger } from '@/lib/logger';
 
 interface SavedView {
   id: string;
@@ -152,7 +153,7 @@ const BuildingSelector: React.FC = () => {
       };
       
       window.dispatchEvent(new CustomEvent(LOAD_SAVED_VIEW_EVENT, { detail: eventDetail }));
-      console.log('Dispatched LOAD_SAVED_VIEW_EVENT:', eventDetail);
+      logger.log('Dispatched LOAD_SAVED_VIEW_EVENT:', eventDetail);
     }, 100);
     
     toast({ title: "Loading view", description: `Opening "${view.name}"` });

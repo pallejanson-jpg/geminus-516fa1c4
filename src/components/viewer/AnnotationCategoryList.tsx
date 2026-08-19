@@ -5,6 +5,7 @@ import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { emit } from '@/lib/event-bus';
 import { useLanguage } from '@/context/LanguageContext';
+import { logger } from '@/lib/logger';
 
 interface AnnotationCategory {
   category: string;       // Internal key (asset_type)
@@ -102,9 +103,9 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
           });
         }
       } catch (e) {
-        console.debug('Could not toggle local annotations:', e);
+        logger.debug('Could not toggle local annotations:', e);
       }
-      
+
       return updated;
     });
   }, [viewerRef]);
@@ -133,7 +134,7 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
         });
       }
     } catch (e) {
-      console.debug('Could not toggle all local annotations:', e);
+      logger.debug('Could not toggle all local annotations:', e);
     }
   }, [allVisible, viewerRef]);
 

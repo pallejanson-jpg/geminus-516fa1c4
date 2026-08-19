@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
+import { logger } from '@/lib/logger';
 const STALE_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutes — detect stale faster
 const STALE_CHECK_INTERVAL_MS = 30_000; // re-evaluate every 30s
 
@@ -82,7 +83,7 @@ export const SyncProgressBanner: React.FC = () => {
           }
 
           if (stuckCount >= MAX_STUCK_ITERATIONS || iterations >= MAX_TOTAL_ITERATIONS) {
-            console.warn(`[SyncProgressBanner] Aborting sync loop — no progress after ${stuckCount} attempts (total iterations: ${iterations})`);
+            logger.warn(`[SyncProgressBanner] Aborting sync loop — no progress after ${stuckCount} attempts (total iterations: ${iterations})`);
             toast({
               variant: 'destructive',
               title: 'Sync stuck',
@@ -186,7 +187,7 @@ export const SyncProgressBanner: React.FC = () => {
   //   );
   //   if (staleSync) {
   //     autoResumedRef.current = true;
-  //     console.log(`[SyncProgressBanner] Auto-resuming stale ${staleSync.subtree_id} sync`);
+  //     logger.log(`[SyncProgressBanner] Auto-resuming stale ${staleSync.subtree_id} sync`);
   //     handleResume(staleSync.subtree_id);
   //   }
   // }, [activeSyncs, isStale, handleResume, isResuming]);

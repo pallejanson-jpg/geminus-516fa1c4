@@ -10,6 +10,7 @@
 import { useRef, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
+import { logger } from '@/lib/logger';
 
 interface LevelLabel {
   storeyId: string;          // metaObject id
@@ -121,7 +122,7 @@ export function useLevelLabels(
           floorNamesRef.current = map;
         }
       } catch (e) {
-        console.debug('[level-labels] Could not fetch floor names:', e);
+        logger.debug('[level-labels] Could not fetch floor names:', e);
       }
     })();
   }, [buildingFmGuid]);
@@ -265,7 +266,7 @@ export function useLevelLabels(
     if (visibleIds.length === 0) {
       // Safety: no geometry found, restore
       scene.setObjectsVisible(scene.objectIds, true);
-      console.warn('[level-labels] No geometry found for floor, aborting isolation');
+      logger.warn('[level-labels] No geometry found for floor, aborting isolation');
       return;
     }
     scene.setObjectsVisible(visibleIds, true);
@@ -447,7 +448,7 @@ export function useLevelLabels(
       labelsRef.current.set(metaObj.id, labelData);
     });
 
-    console.log(`[level-labels] Created ${labelsRef.current.size} level labels`);
+    logger.log(`[level-labels] Created ${labelsRef.current.size} level labels`);
     updateLabelPositions();
   }, [getXeokitViewer, ensureContainer, updateLabelPositions, isolateFloor, restoreAllFloors]);
 

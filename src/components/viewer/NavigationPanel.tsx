@@ -34,6 +34,7 @@ import { getXeokitViewerFromRef } from '@/hooks/useFloorVisibility';
 import { generateFloorNavGraph, collectVerticalNodes, mergeGeneratedFloor } from '@/lib/nav-graph-autogen';
 import { getFloorAabb } from '@/lib/indoor-route-3d';
 import { formatRoomLabel } from '@/lib/utils';
+import { logger } from '@/lib/logger';
 
 function normalizeGuid(v?: string | null): string {
   return (v || '').toLowerCase().replace(/-/g, '');
@@ -106,7 +107,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
         .eq('building_fm_guid', buildingFmGuid);
 
       if (error) {
-        console.warn('[NavigationPanel] Failed to load graph:', error);
+        logger.warn('[NavigationPanel] Failed to load graph:', error);
         return;
       }
 
@@ -127,7 +128,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
     const endNode = findNodeByRoom(graph, toRoom);
 
     if (!startNode || !endNode) {
-      console.warn('[NavigationPanel] Could not find nodes for selected rooms');
+      logger.warn('[NavigationPanel] Could not find nodes for selected rooms');
       setRoute(null);
       onRouteCalculated(null);
       return;

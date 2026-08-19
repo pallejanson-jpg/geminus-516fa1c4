@@ -45,6 +45,7 @@ import {
   calculatePitchFromCamera,
   calculateLookFromHeadingPitch,
 } from '@/lib/coordinate-transform';
+import { logger } from '@/lib/logger';
 
 interface GeminusPlusViewerProps {
   fmGuid: string;
@@ -336,7 +337,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     initialVisAppliedRef.current = true;
 
     // Dispatch event to activate room visualization via RoomVisualizationPanel
-    console.log('[GeminusPlusViewer] Auto-activating visualization:', initialVisualization);
+    logger.log('[GeminusPlusViewer] Auto-activating visualization:', initialVisualization);
     emit('INITIAL_VISUALIZATION_REQUESTED', { type: initialVisualization },);
   }, [initialVisualization, modelLoadState, initStep]);
 
@@ -362,7 +363,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         const parsed = JSON.parse(raw);
         insightsColorMapCacheRef.current = { mode: parsed.mode || insightsColorMode, colorMap: parsed.colorMap || {} };
         sessionStorage.removeItem('insights_color_map');
-        console.log('[GeminusPlusViewer] Cached insights color map from sessionStorage:', Object.keys(insightsColorMapCacheRef.current.colorMap).length, 'entries');
+        logger.log('[GeminusPlusViewer] Cached insights color map from sessionStorage:', Object.keys(insightsColorMapCacheRef.current.colorMap).length, 'entries');
       } catch { /* ignore */ }
     }
   }, [insightsColorMode, insightsColorMapProp]);
@@ -370,18 +371,18 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
   useEffect(() => {
     if (!insightsColorMode) return;
     if (!spacesCacheReady) {
-      console.log('[GeminusPlusViewer] Insights waiting for spacesCacheReady...');
+      logger.log('[GeminusPlusViewer] Insights waiting for spacesCacheReady...');
       return;
     }
     if (modelLoadState !== 'loaded' || initStep !== 'ready') {
-      console.log('[GeminusPlusViewer] Insights waiting for model:', modelLoadState, initStep);
+      logger.log('[GeminusPlusViewer] Insights waiting for model:', modelLoadState, initStep);
       return;
     }
 
     // Determine color map from cache
     const cached = insightsColorMapCacheRef.current;
     if (!cached || Object.keys(cached.colorMap).length === 0) {
-      console.warn('[GeminusPlusViewer] insightsColorMode set but no color map available (cached:', !!cached, ')');
+      logger.warn('[GeminusPlusViewer] insightsColorMode set but no color map available (cached:', !!cached, ')');
       return;
     }
     const colorMap = cached.colorMap;
@@ -403,7 +404,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         assetViewer?.onShowSpacesChanged?.(true);
       } catch {}
 
-      console.log('[GeminusPlusViewer] Applying insights color mode:', mode, 'keys:', Object.keys(colorMap).length);
+      logger.log('[GeminusPlusViewer] Applying insights color mode:', mode, 'keys:', Object.keys(colorMap).length);
 
       // Step 1: X-ray ALL objects for transparent ghosting (issue #175)
       const allIds = scene.objectIds || [];
@@ -417,7 +418,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
 
           // Step 1: Find the storey's xeokit entity ID via Geminus Plus's FM GUID lookup
           const storeyItemIds = assetView.getItemsByPropertyValue("fmguid", floorGuid.toUpperCase()) || [];
-          console.log('[Insights] Floor', floorGuid, '-> storeyItemIds:', storeyItemIds.length);
+          logger.log('[Insights] Floor', floorGuid, '-> storeyItemIds:', storeyItemIds.length);
 
           // Step 2: For each storey entity, find ALL children in the metaObject tree
           const allChildIds: string[] = [];
@@ -435,7 +436,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
             allChildIds.push(itemId);
           });
 
-          console.log('[Insights] Floor', floorGuid, '-> total children:', allChildIds.length);
+          logger.log('[Insights] Floor', floorGuid, '-> total children:', allChildIds.length);
 
           // Step 3: Un-xray and colorize all children
           allChildIds.forEach(id => {
@@ -525,7 +526,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
       const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
       if (!xeokitViewer?.scene) {
         insightsColorMapCacheRef.current = { mode: detail.mode, colorMap: detail.colorMap };
-        console.log('[GeminusPlusViewer] Queued INSIGHTS_COLOR_UPDATE until viewer is ready');
+        logger.log('[GeminusPlusViewer] Queued INSIGHTS_COLOR_UPDATE until viewer is ready');
         return;
       }
 
@@ -673,7 +674,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         insightsColorModeRef.current = mode;
       }
 
-      console.log('[GeminusPlusViewer] Applied INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries');
+      logger.log('[GeminusPlusViewer] Applied INSIGHTS_COLOR_UPDATE:', mode, Object.keys(colorMap).length, 'entries');
     };
 
     const off = on('INSIGHTS_COLOR_UPDATE', handler);
@@ -725,7 +726,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           .limit(200);
 
         if (error) {
-          console.warn('[AlarmAnnotations] Failed to load fallback alarms:', error);
+          logger.warn('[AlarmAnnotations] Failed to load fallback alarms:', error);
           return;
         }
 
@@ -756,7 +757,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
 
         const roomItemIds = assetView.getItemsByPropertyValue?.('fmguid', roomGuid.toUpperCase()) || [];
         if (roomItemIds.length === 0) {
-          console.debug('[AlarmAnnotations] No BIM entities for room:', roomGuid);
+          logger.debug('[AlarmAnnotations] No BIM entities for room:', roomGuid);
           continue;
         }
 
@@ -824,11 +825,11 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
             duration: 1,
           });
         } catch (err) {
-          console.warn('[AlarmAnnotations] flyTo failed:', err);
+          logger.warn('[AlarmAnnotations] flyTo failed:', err);
         }
       }
 
-      console.log('[GeminusPlusViewer] ALARM_ANNOTATIONS_SHOW:', alarmsToRender.length, 'alarms, rooms found:', allRoomEntityIds.length);
+      logger.log('[GeminusPlusViewer] ALARM_ANNOTATIONS_SHOW:', alarmsToRender.length, 'alarms, rooms found:', allRoomEntityIds.length);
     };
 
     const offHandler = on('ALARM_ANNOTATIONS_SHOW', handler);
@@ -941,11 +942,11 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         }
         
         if (result.syncing) {
-          console.log('On-demand XKT sync triggered for building:', buildingFmGuid);
+          logger.log('On-demand XKT sync triggered for building:', buildingFmGuid);
           setXktSyncStatus('syncing');
           // Keep syncing status - it will naturally resolve when models are loaded
         } else if (result.cached && result.count > 0) {
-          console.log(`Building ${buildingFmGuid} has ${result.count} cached XKT models`);
+          logger.log(`Building ${buildingFmGuid} has ${result.count} cached XKT models`);
           setXktSyncStatus('done');
         } else {
           // No models cached and not syncing - either no models exist or sync will happen later
@@ -996,7 +997,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
 
     spacesByFloorCacheRef.current = cache;
     allSpaceIdsRef.current = allIds;
-    console.debug(`[spacesByFloor] Cache built: ${cache.size} floors, ${allIds.length} spaces`);
+    logger.debug(`[spacesByFloor] Cache built: ${cache.size} floors, ${allIds.length} spaces`);
     setSpacesCacheReady(true);
   }, [modelLoadState]);
 
@@ -1005,35 +1006,35 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     const viewer = viewerInstanceRef.current;
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (!xeokitViewer?.scene) {
-      console.debug('filterSpacesToVisibleFloors: No viewer available');
+      logger.debug('filterSpacesToVisibleFloors: No viewer available');
       return;
     }
 
     const scene = xeokitViewer.scene;
     const effectiveIsAllVisible = isAllVisible ?? isAllFloorsVisibleRef.current;
     
-    console.debug(`Filtering spaces - showSpaces: ${forceShow}, visibleFloors: ${visibleFloorGuids.length}, isAllVisible: ${effectiveIsAllVisible}`);
+    logger.debug(`Filtering spaces - showSpaces: ${forceShow}, visibleFloors: ${visibleFloorGuids.length}, isAllVisible: ${effectiveIsAllVisible}`);
     
     const allSpaceIds = allSpaceIdsRef.current;
     
     // If showSpaces is OFF, hide ALL IfcSpace entities
     if (!forceShow) {
       allSpaceIds.forEach(id => { const e = scene.objects?.[id]; if (e && e.visible) e.visible = false; });
-      console.debug(`Spaces hidden: ${allSpaceIds.length} (showSpaces is OFF)`);
+      logger.debug(`Spaces hidden: ${allSpaceIds.length} (showSpaces is OFF)`);
       return;
     }
     
     // All floors visible → show all spaces
     if (effectiveIsAllVisible) {
       allSpaceIds.forEach(id => { const e = scene.objects?.[id]; if (e && !e.visible) e.visible = true; });
-      console.debug(`All spaces shown (all floors visible)`);
+      logger.debug(`All spaces shown (all floors visible)`);
       return;
     }
     
     // No floor filter and not all-visible → hide all
     if (visibleFloorGuids.length === 0) {
       allSpaceIds.forEach(id => { const e = scene.objects?.[id]; if (e && e.visible) e.visible = false; });
-      console.debug(`Spaces hidden (empty filter, not all-visible)`);
+      logger.debug(`Spaces hidden (empty filter, not all-visible)`);
       return;
     }
 
@@ -1051,7 +1052,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
       if (e) e.visible = visibleSpaceIds.has(id);
     });
     
-    console.debug(`Spaces filtered - shown: ${visibleSpaceIds.size}, hidden: ${allSpaceIds.length - visibleSpaceIds.size}`);
+    logger.debug(`Spaces filtered - shown: ${visibleSpaceIds.size}, hidden: ${allSpaceIds.length - visibleSpaceIds.size}`);
   }, []);
 
   // Debounced version to avoid 6+ calls per floor toggle
@@ -1072,7 +1073,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
       const assetViewer = viewerInstanceRef.current?.assetViewer;
       assetViewer?.onShowSpacesChanged?.(show);
     } catch (e) {
-      console.debug('onShowSpacesChanged failed:', e);
+      logger.debug('onShowSpacesChanged failed:', e);
     }
     
     // Apply floor filtering with current isAllFloorsVisible state
@@ -1123,7 +1124,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     const handleViewModeChange = (detail: ViewModeEventDetail) => {
       const mode = detail?.mode as '2d' | '3d';
       if (mode && updateLabelsViewMode) {
-        console.log('GeminusPlusViewer: View mode changed to', mode, '- updating room labels');
+        logger.log('GeminusPlusViewer: View mode changed to', mode, '- updating room labels');
         updateLabelsViewMode(mode);
       }
     };
@@ -1139,7 +1140,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     const handleFloorSelectionChange = (detail: FloorSelectionEventDetail) => {
       const { visibleFloorFmGuids: newGuids, isAllFloorsVisible } = detail;
       
-      console.log('GeminusPlusViewer: Floor selection changed', {
+      logger.log('GeminusPlusViewer: Floor selection changed', {
         guids: newGuids?.length,
         isAllVisible: isAllFloorsVisible,
       });
@@ -1199,7 +1200,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         viewer.onToggleAnnotation(show);
       }
     } catch (e) {
-      console.debug('Could not toggle annotations:', e);
+      logger.debug('Could not toggle annotations:', e);
     }
   }, []);
 
@@ -1519,7 +1520,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     switch (displayAction?.action?.toLowerCase()) {
       case "cutoutfloor":
         if (displayAction.parameter && typeof displayAction.parameter.fmGuid === "string") {
-          console.log("Cutting out floor with FMGUID", displayAction.parameter.fmGuid, "includeRelatedFloors:", displayAction.parameter.includeRelatedFloors);
+          logger.log("Cutting out floor with FMGUID", displayAction.parameter.fmGuid, "includeRelatedFloors:", displayAction.parameter.includeRelatedFloors);
           viewer.cutOutFloorsByFmGuid(displayAction.parameter.fmGuid, displayAction.parameter.includeRelatedFloors);
         }
         break;
@@ -1527,14 +1528,14 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         if (displayAction.parameter && typeof displayAction.parameter.fmGuid === "string") {
           // Use floorFmGuid if provided (for parent floor cutout), otherwise fall back to fmGuid
           const floorGuid = displayAction.parameter.floorFmGuid || displayAction.parameter.fmGuid;
-          console.log("Cutting out floor (fmGuid:", floorGuid, ") & looking at Space with FMGUID", displayAction.parameter.fmGuid);
+          logger.log("Cutting out floor (fmGuid:", floorGuid, ") & looking at Space with FMGUID", displayAction.parameter.fmGuid);
           viewer.cutOutFloorsByFmGuid(floorGuid, displayAction.parameter.includeRelatedFloors, { doViewFit: false });
           lookAtSpaceFromAngle(displayAction.parameter.fmGuid, displayAction.parameter.heightAboveAABB ?? defaultHeightAboveAABB);
         }
         break;
       case "cutoutfloor_and_lookatinstance":
         if (displayAction.parameter && typeof displayAction.parameter.fmGuid === "string") {
-          console.log("Cutting out floor & looking at Instance with FMGUID", displayAction.parameter.fmGuid);
+          logger.log("Cutting out floor & looking at Instance with FMGUID", displayAction.parameter.fmGuid);
           viewer.cutOutFloorsByFmGuid(displayAction.parameter.fmGuid, displayAction.parameter.includeRelatedFloors, { doViewFit: false });
           lookAtInstanceFromAngle(
             displayAction.parameter.fmGuid, 
@@ -1544,14 +1545,14 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         }
         break;
       case "viewall":
-        console.log("Viewing all and adjusting camera.");
+        logger.log("Viewing all and adjusting camera.");
         viewer.assetViewer?.$refs?.assetView?.viewFit(undefined, true);
         break;
       case "viewfitfirstperson":
         if (displayAction.parameter && typeof displayAction.parameter.fmGuid === "string") {
           const matches = viewer.assetViewer?.$refs?.assetView?.getItemsByPropertyValue("fmguid", displayAction.parameter.fmGuid.toUpperCase());
           if (matches?.length > 0) {
-            console.log("ViewFit (First Person Mode) FMGUID", displayAction.parameter.fmGuid);
+            logger.log("ViewFit (First Person Mode) FMGUID", displayAction.parameter.fmGuid);
             viewer.assetViewer.$refs.assetView.viewFit(matches, false);
             viewer.assetViewer.$refs.assetView.setNavMode("firstPerson");
           }
@@ -1590,7 +1591,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     const viewer = viewerInstanceRef.current;
     if (!viewer) return;
 
-    console.log("doDisplayFmGuid:", fmGuidToShow);
+    logger.log("doDisplayFmGuid:", fmGuidToShow);
 
     setModelLoadState('requested');
     setInitStep('request_models');
@@ -1608,10 +1609,10 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     deferredDisplayActionRef.current = undefined;
 
     if (!deferCallsRef.current) {
-      console.log("displayFmGuid: Not deferring calls, showing immediately");
+      logger.log("displayFmGuid: Not deferring calls, showing immediately");
       doDisplayFmGuid(fmGuidToShow, displayAction);
     } else {
-      console.log("displayFmGuid: Deferring calls, will show later");
+      logger.log("displayFmGuid: Deferring calls, will show later");
       if (fmGuidToShow) {
         deferredFmGuidRef.current = fmGuidToShow;
       }
@@ -1652,14 +1653,14 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
   const loadLocalAnnotations = useCallback(async () => {
     const resolvedBuildingGuid = resolveBuildingFmGuid();
     if (!resolvedBuildingGuid) {
-      console.debug('loadLocalAnnotations: No building GUID available');
+      logger.debug('loadLocalAnnotations: No building GUID available');
       return;
     }
 
     const viewer = viewerInstanceRef.current;
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (!xeokitViewer) {
-      console.debug('loadLocalAnnotations: xeokit viewer not ready');
+      logger.debug('loadLocalAnnotations: xeokit viewer not ready');
       return;
     }
 
@@ -1678,7 +1679,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
       }
 
       if (!assets || assets.length === 0) {
-        console.log('No local annotations found for building:', resolvedBuildingGuid);
+        logger.log('No local annotations found for building:', resolvedBuildingGuid);
         return;
       }
 
@@ -1850,7 +1851,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
       // Initial position update
       setTimeout(updateHandler, 100);
 
-      console.log(`Created ${assets.length} local annotations for building:`, resolvedBuildingGuid);
+      logger.log(`Created ${assets.length} local annotations for building:`, resolvedBuildingGuid);
     } catch (e) {
       console.error('Error loading local annotations:', e);
     }
@@ -1866,7 +1867,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     const viewer = viewerInstanceRef.current;
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (!xeokitViewer?.metaScene?.metaObjects || !xeokitViewer?.scene) {
-      console.log('Cannot load sensor annotations - viewer not ready');
+      logger.log('Cannot load sensor annotations - viewer not ready');
       return;
     }
 
@@ -1900,11 +1901,11 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         .limit(1000);
 
       if (error || !alarms || alarms.length === 0) {
-        console.log('No alarms found for building:', resolvedBuildingGuid);
+        logger.log('No alarms found for building:', resolvedBuildingGuid);
         return;
       }
 
-      console.log(`Found ${alarms.length} alarm assets, looking up BIM positions...`);
+      logger.log(`Found ${alarms.length} alarm assets, looking up BIM positions...`);
 
       const metaObjects = xeokitViewer.metaScene.metaObjects;
       const scene = xeokitViewer.scene;
@@ -1915,7 +1916,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         const key = (m.originalSystemId || m.id)?.toUpperCase();
         if (key) metaLookup.set(key, m);
       });
-      console.log(`Built metaObject lookup map with ${metaLookup.size} entries`);
+      logger.log(`Built metaObject lookup map with ${metaLookup.size} entries`);
 
       // Find alarms in BIM geometry and calculate their positions
       let foundCount = 0;
@@ -1962,7 +1963,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         foundCount++;
       });
 
-      console.log(`Found ${foundCount} alarm annotations with BIM positions`);
+      logger.log(`Found ${foundCount} alarm annotations with BIM positions`);
 
       if (foundCount === 0) return;
 
@@ -2090,7 +2091,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         setTimeout(() => sensorAnnotationsManager.updatePositions(), 100);
       }
 
-      console.log(`Created ${foundCount} sensor annotations for building:`, resolvedBuildingGuid);
+      logger.log(`Created ${foundCount} sensor annotations for building:`, resolvedBuildingGuid);
       sensorAnnotationsLoadedRef.current = true;
 
       // NOTE: Do NOT bulk-update symbol_id here — it triggers 100+ sequential DB requests
@@ -2109,7 +2110,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     const viewer = viewerInstanceRef.current;
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (!xeokitViewer?.scene) {
-      console.debug('loadIssueAnnotations: xeokit viewer not ready');
+      logger.debug('loadIssueAnnotations: xeokit viewer not ready');
       return;
     }
 
@@ -2123,11 +2124,11 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         .not('viewpoint_json', 'is', null);
 
       if (error || !issues || issues.length === 0) {
-        console.log('No issue annotations to load for building:', resolvedBuildingGuid);
+        logger.log('No issue annotations to load for building:', resolvedBuildingGuid);
         return;
       }
 
-      console.log(`Loading ${issues.length} issue annotations...`);
+      logger.log(`Loading ${issues.length} issue annotations...`);
 
       // Get or create a dedicated issue annotations manager and container
       let issueAnnotationsManager = (viewerInstanceRef.current as any)?._issueAnnotationsManager;
@@ -2292,7 +2293,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         setTimeout(() => issueAnnotationsManager.updatePositions(), 100);
       }
 
-      console.log(`Created ${createdCount} issue annotations for building:`, resolvedBuildingGuid);
+      logger.log(`Created ${createdCount} issue annotations for building:`, resolvedBuildingGuid);
 
       // Subscribe to realtime changes on bcf_issues for this building
       const channel = supabase
@@ -2303,10 +2304,10 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           table: 'bcf_issues',
           filter: `building_fm_guid=eq.${resolvedBuildingGuid}`,
         }, (payload) => {
-          console.log('[IssueAnnotations] Realtime update:', payload.eventType);
+          logger.log('[IssueAnnotations] Realtime update:', payload.eventType);
           // On any change, reload issue annotations
           loadIssueAnnotationsRef.current?.().catch(e => {
-            console.debug('Issue annotations reload failed:', e);
+            logger.debug('Issue annotations reload failed:', e);
           });
         })
         .subscribe();
@@ -2398,12 +2399,12 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
 
     if (!accModels || accModels.length === 0) return;
 
-    console.log(`[ACC Direct] Found ${accModels.length} non-XKT models to load directly`);
+    logger.log(`[ACC Direct] Found ${accModels.length} non-XKT models to load directly`);
 
     const viewer = viewerInstanceRef.current;
     const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (!xeokitViewer) {
-      console.warn('[ACC Direct] xeokit viewer not available');
+      logger.warn('[ACC Direct] xeokit viewer not available');
       return;
     }
 
@@ -2415,12 +2416,12 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           .createSignedUrl(model.storage_path, 3600);
 
         if (!urlData?.signedUrl) {
-          console.warn(`[ACC Direct] No signed URL for ${model.model_id}`);
+          logger.warn(`[ACC Direct] No signed URL for ${model.model_id}`);
           continue;
         }
 
         const modelFormat = model.storage_path?.endsWith('.obj') ? 'obj' : 'glb';
-        console.log(`[ACC Direct] Loading ${modelFormat.toUpperCase()} model: ${model.model_id}`);
+        logger.log(`[ACC Direct] Loading ${modelFormat.toUpperCase()} model: ${model.model_id}`);
 
         if (modelFormat === 'glb') {
           // Use GLTFLoaderPlugin
@@ -2436,7 +2437,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
                   gltfLoader = new sdk.GLTFLoaderPlugin(xeokitViewer);
                 }
               } catch (e) {
-                console.warn('[ACC Direct] Failed to load xeokit SDK for GLTFLoaderPlugin:', e);
+                logger.warn('[ACC Direct] Failed to load xeokit SDK for GLTFLoaderPlugin:', e);
               }
             } else {
               gltfLoader = new GLTFLoaderPlugin(xeokitViewer);
@@ -2452,9 +2453,9 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
               src: urlData.signedUrl,
               edges: true,
             });
-            console.log(`[ACC Direct] GLB model loaded: ${model.model_id}`);
+            logger.log(`[ACC Direct] GLB model loaded: ${model.model_id}`);
           } else {
-            console.warn('[ACC Direct] GLTFLoaderPlugin not available');
+            logger.warn('[ACC Direct] GLTFLoaderPlugin not available');
           }
         } else if (modelFormat === 'obj') {
           // Use OBJLoaderPlugin
@@ -2469,7 +2470,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
                   objLoader = new sdk.OBJLoaderPlugin(xeokitViewer);
                 }
               } catch (e) {
-                console.warn('[ACC Direct] Failed to load xeokit SDK for OBJLoaderPlugin:', e);
+                logger.warn('[ACC Direct] Failed to load xeokit SDK for OBJLoaderPlugin:', e);
               }
             } else {
               objLoader = new OBJLoaderPlugin(xeokitViewer);
@@ -2485,13 +2486,13 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
               src: urlData.signedUrl,
               edges: true,
             });
-            console.log(`[ACC Direct] OBJ model loaded: ${model.model_id}`);
+            logger.log(`[ACC Direct] OBJ model loaded: ${model.model_id}`);
           } else {
-            console.warn('[ACC Direct] OBJLoaderPlugin not available');
+            logger.warn('[ACC Direct] OBJLoaderPlugin not available');
           }
         }
       } catch (e) {
-        console.warn(`[ACC Direct] Failed to load ${model.model_id}:`, e);
+        logger.warn(`[ACC Direct] Failed to load ${model.model_id}:`, e);
       }
     }
   }, [buildingFmGuid]);
@@ -2499,7 +2500,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
   // allModelsLoadedCallback - executed when all models are loaded
   const handleAllModelsLoaded = useCallback(() => {
     try {
-      console.log("allModelsLoadedCallback");
+      logger.log("allModelsLoadedCallback");
 
       // Cancel the model load fallback timer since models loaded successfully
       const fallbackTimer = (viewerInstanceRef.current as any)?.__modelFallbackTimer;
@@ -2516,7 +2517,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
 
       // Load ACC models (GLB/OBJ) directly via xeokit loader plugins
       loadAccDirectModels().catch(e => {
-        console.warn('[handleAllModelsLoaded] ACC direct model load failed:', e);
+        logger.warn('[handleAllModelsLoaded] ACC direct model load failed:', e);
       });
 
       // ─── Deferred models are NOT auto-loaded ───
@@ -2524,7 +2525,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
       // enables them via the model visibility selector in the right panel.
       // This prevents heavy fire/structural/electrical models from slowing initial load.
       if (allowedModelIdsRef.current) {
-        console.log('[handleAllModelsLoaded] Non-A models deferred — user must enable manually via model selector');
+        logger.log('[handleAllModelsLoaded] Non-A models deferred — user must enable manually via model selector');
       }
 
       // Virtual Twin: apply ghost opacity after all models load
@@ -2541,7 +2542,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
             }
           }
         } catch (e) {
-          console.debug('Ghost opacity apply error:', e);
+          logger.debug('Ghost opacity apply error:', e);
         }
       }
       
@@ -2563,11 +2564,11 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           const assetViewer = viewer?.assetViewer;
           if (assetViewer?.onToggleAnnotation) {
             assetViewer.onToggleAnnotation(true);
-            console.log("Annotations enabled");
+            logger.log("Annotations enabled");
             // NOTE: Do NOT call getAnnotations() here — SDK handles it internally
           }
         } catch (e) {
-          console.warn("Could not enable annotations (models not ready):", e);
+          logger.warn("Could not enable annotations (models not ready):", e);
         }
       }, 500);
 
@@ -2579,7 +2580,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           const assetViewer = viewer?.assetViewer;
           if (assetViewer?.onShowSpacesChanged) {
             assetViewer.onShowSpacesChanged(false);
-            console.log("Spaces hidden by default via Geminus Plus API");
+            logger.log("Spaces hidden by default via Geminus Plus API");
           }
           
           const xeokitViewer = viewer?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
@@ -2596,7 +2597,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
                 }
               }
             });
-            console.log(`Spaces hidden directly: ${hiddenCount} IfcSpace entities`);
+            logger.log(`Spaces hidden directly: ${hiddenCount} IfcSpace entities`);
 
             // Auto-hide "Area" objects globally — these block selection in both 2D and 3D
             let areaHiddenCount = 0;
@@ -2613,21 +2614,21 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
               }
             });
             if (areaHiddenCount > 0) {
-              console.log(`Area objects hidden & unpickable: ${areaHiddenCount}`);
+              logger.log(`Area objects hidden & unpickable: ${areaHiddenCount}`);
             }
           }
         } catch (e) {
-          console.debug("Could not hide spaces:", e);
+          logger.debug("Could not hide spaces:", e);
         }
       } else {
-        console.log("[GeminusPlusViewer] Skipping default space-hiding — insightsColorMode active");
+        logger.log("[GeminusPlusViewer] Skipping default space-hiding — insightsColorMode active");
       }
 
       // Check if we should auto-enable local annotations (triggered from AssetsView)
       const shouldAutoEnableLocalAnnotations = localStorage.getItem('viewer-show-local-annotations') === 'true';
       if (shouldAutoEnableLocalAnnotations) {
         localStorage.removeItem('viewer-show-local-annotations');
-        console.log('Auto-enabling local annotations from AssetsView trigger');
+        logger.log('Auto-enabling local annotations from AssetsView trigger');
       }
       
       // Load local annotations from database
@@ -2667,13 +2668,13 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
             bottomColor: '#FFFF55',
             hoverColor: '#00FFFF',
           });
-          console.log("NavCube initialized successfully");
+          logger.log("NavCube initialized successfully");
         }
       } else if (!NavCubePlugin) {
-        console.debug("NavCubePlugin not loaded yet");
+        logger.debug("NavCubePlugin not loaded yet");
       }
     } catch (e) {
-      console.debug("Could not initialize NavCube:", e);
+      logger.debug("Could not initialize NavCube:", e);
     }
 
     // Intercept Geminus Plus DevExtreme context menu at capture phase so Geminus menu is the only one shown
@@ -2745,7 +2746,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           openGeminusMenuAt(ev.clientX, ev.clientY);
         }, { capture: true });
         (canvas as any).__geminusContextMenuAttached = true;
-        console.log('[ContextMenu] Capturing listener attached to xeokit canvas');
+        logger.log('[ContextMenu] Capturing listener attached to xeokit canvas');
       }
 
       // Container capture listener (catches non-canvas targets inside viewer)
@@ -2757,7 +2758,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           openGeminusMenuAt(ev.clientX, ev.clientY);
         }, { capture: true });
         (apvDiv as any).__geminusContextMenuContainerAttached = true;
-        console.log('[ContextMenu] Capturing listener attached to #GeminusPlusViewer');
+        logger.log('[ContextMenu] Capturing listener attached to #GeminusPlusViewer');
       }
 
       // MutationObserver to remove any DevExtreme context menus/load spinners that slip through
@@ -2786,10 +2787,10 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
                 node.style.cssText = 'display:none!important;visibility:hidden!important;pointer-events:none!important;opacity:0!important;';
                 node.remove();
                 if (containsCtx) {
-                  console.log('[ContextMenu] Removed Geminus Plus DevExtreme context menu from DOM');
+                  logger.log('[ContextMenu] Removed Geminus Plus DevExtreme context menu from DOM');
                 }
                 if (containsLoadSpinner) {
-                  console.log('[GeminusPlusViewer] Removed Geminus Plus internal load spinner from DOM');
+                  logger.log('[GeminusPlusViewer] Removed Geminus Plus internal load spinner from DOM');
                 }
               }
             });
@@ -2799,7 +2800,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         (window as any).__dxContextMenuObserver = observer;
       }
     } catch (e) {
-      console.debug('Could not attach context menu interceptor:', e);
+      logger.debug('Could not attach context menu interceptor:', e);
     }
 
     // ─── Zero-object recovery ───
@@ -2809,14 +2810,14 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
       const xv = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
       const objectCount = xv?.scene?.objectIds?.length ?? 0;
       if (objectCount === 0 && allowedModelIdsRef.current) {
-        console.warn('[handleAllModelsLoaded] 0 objects loaded with active whitelist — disabling filter and reloading all models');
+        logger.warn('[handleAllModelsLoaded] 0 objects loaded with active whitelist — disabling filter and reloading all models');
         allowedModelIdsRef.current = null; // Allow all models
         const resolvedGuid = assetDataRef.current?.buildingFmGuid || assetDataRef.current?.fmGuid || fmGuid;
         if (resolvedGuid) {
           try {
             viewerInstanceRef.current?.setAvailableModelsByFmGuid(resolvedGuid);
           } catch (e) {
-            console.warn('[handleAllModelsLoaded] Reload failed:', e);
+            logger.warn('[handleAllModelsLoaded] Reload failed:', e);
           }
         }
         // Don't proceed with display — wait for the next allModelsLoadedCallback
@@ -2825,7 +2826,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     }
 
     if (deferredFmGuidForDisplayRef.current) {
-      console.log("allModelsLoadedCallback - got an FMGUID to look at");
+      logger.log("allModelsLoadedCallback - got an FMGUID to look at");
       const fmGuidToShow = deferredFmGuidForDisplayRef.current;
       const displayAction = deferredDisplayActionForDisplayRef.current;
 
@@ -2834,19 +2835,19 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
 
       // If we're not cutting the floor, then select + viewfit (zoom)
       if (!displayAction) {
-        console.log("allModelsLoadedCallback - just select + zoom");
+        logger.log("allModelsLoadedCallback - just select + zoom");
         viewerInstanceRef.current?.selectFmGuidAndViewFit(fmGuidToShow);
         // Fallback: if selection yielded 0 items (building GUID not in model), zoom to all geometry
         setTimeout(() => {
           const assetView = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView;
           const scene = assetView?.viewer?.scene;
           if (scene && (!scene.selectedObjectIds || Object.keys(scene.selectedObjectIds).length === 0)) {
-            console.log("allModelsLoadedCallback - selection empty, falling back to viewFitAll");
+            logger.log("allModelsLoadedCallback - selection empty, falling back to viewFitAll");
             assetView?.viewFit?.(undefined, true);
           }
         }, 300);
       } else {
-        console.log("allModelsLoadedCallback - display action + select");
+        logger.log("allModelsLoadedCallback - display action + select");
         executeDisplayAction(displayAction);
         viewerInstanceRef.current?.selectFmGuid(fmGuidToShow);
       }
@@ -2865,17 +2866,17 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
   const setupPickModeListenerInternal = useCallback(() => {
     const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (!xeokitViewer?.scene) {
-      console.warn('Pick mode: viewer or scene not ready');
+      logger.warn('Pick mode: viewer or scene not ready');
       toast.error('Viewer not ready. Please try again.');
       return false;
     }
 
-    console.log('Pick mode: Setting up click listener...');
+    logger.log('Pick mode: Setting up click listener...');
 
     const handlePick = (pickResult: any) => {
       if (pickResult?.worldPos) {
         const [x, y, z] = pickResult.worldPos;
-        console.log('Picked coordinates:', { x, y, z });
+        logger.log('Picked coordinates:', { x, y, z });
         
         // Store as PENDING coordinates (not final yet)
         const coords = { x, y, z };
@@ -2956,7 +2957,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
                   category: 'Space',
                   children: [],
                 };
-                console.log('Found parent space from pick:', parentNode);
+                logger.log('Found parent space from pick:', parentNode);
                 break;
               }
             }
@@ -3023,27 +3024,27 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
             if (assetViewer?.onToggleAnnotation) {
               assetViewer.onToggleAnnotation(true);
               setShowAnnotations(true);
-              console.log('Annotations auto-enabled for position picking');
+              logger.log('Annotations auto-enabled for position picking');
             }
           } catch (e) {
-            console.debug('Could not auto-enable annotations:', e);
+            logger.debug('Could not auto-enable annotations:', e);
           }
         }
 
         // Check if this pick is for the inventory form sheet
         if (inventoryPickModeRef.current) {
-          console.log('Routing pick result to inventory form sheet');
+          logger.log('Routing pick result to inventory form sheet');
           setInventoryPendingPosition(coords);
           inventoryPickModeRef.current = false;
           setIsPickMode(false);
         } else if (onCoordinatePicked) {
           // External callback is provided, use it (asset registration flow)
-          console.log('Calling external onCoordinatePicked callback');
+          logger.log('Calling external onCoordinatePicked callback');
           onCoordinatePicked(coords, parentNode);
           setIsPickMode(false);
         } else {
           // Internal dialog flow - open asset creation dialog
-          console.log('Opening internal AddAssetDialog with parent:', parentNode);
+          logger.log('Opening internal AddAssetDialog with parent:', parentNode);
           setAddAssetParentNode(parentNode);
           setIsPickMode(false);
           // Use setTimeout to ensure state updates before opening dialog
@@ -3069,7 +3070,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         e.clientY - rect.top
       ];
       
-      console.log('Pick mode click at canvas position:', canvasPos);
+      logger.log('Pick mode click at canvas position:', canvasPos);
       
       // Use xeokit's pickSurface for accurate 3D coordinates
       const pickResult = xeokitViewer.scene.pick({
@@ -3078,7 +3079,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
       });
       
       if (pickResult) {
-        console.log('Pick result:', pickResult);
+        logger.log('Pick result:', pickResult);
         handlePick(pickResult);
       } else {
         toast.warning('No surface found. Try clicking on a visible object.', {
@@ -3094,7 +3095,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     // Store cleanup function
     pickModeListenerRef.current = () => {
       canvas.removeEventListener('click', handleClick, { capture: true });
-      console.log('Pick mode listener cleaned up');
+      logger.log('Pick mode listener cleaned up');
     };
 
     return true;
@@ -3277,7 +3278,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         viewer.cutOutFloorsByFmGuid(floor.fmGuid, true, { doViewFit: true });
         toast.success(`Navigerar till ${floor.name}`);
       } catch (e) {
-        console.debug('Could not cut out floor:', e);
+        logger.debug('Could not cut out floor:', e);
       }
     }
   }, []);
@@ -3292,7 +3293,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         setShowAnnotations(newValue);
       }
     } catch (error) {
-      console.warn('Toggle annotations failed:', error);
+      logger.warn('Toggle annotations failed:', error);
     }
   }, [showAnnotations]);
 
@@ -3300,7 +3301,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
   const setupHoverHighlight = useCallback(() => {
     const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (!xeokitViewer?.scene || !xeokitViewer?.cameraControl) {
-      console.warn('[GeminusPlusViewer] Hover setup failed - viewer/cameraControl not available');
+      logger.warn('[GeminusPlusViewer] Hover setup failed - viewer/cameraControl not available');
       return;
     }
 
@@ -3353,7 +3354,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     cameraControl.on('hoverOut', onHoverOut);
     cameraControl.on('hoverOff', onHoverOff);
 
-    console.log('[GeminusPlusViewer] Hover highlight active (4 events subscribed)');
+    logger.log('[GeminusPlusViewer] Hover highlight active (4 events subscribed)');
 
     hoverListenerRef.current = () => {
       cameraControl.off('hover', onHover);
@@ -3385,12 +3386,12 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
   // Listen for saved view loading events
   useEffect(() => {
     const handleLoadSavedView = (viewData: LoadSavedViewDetail) => {
-      console.log('LOAD_SAVED_VIEW_EVENT received:', viewData);
-      console.log('LOAD_SAVED_VIEW_EVENT received:', viewData);
+      logger.log('LOAD_SAVED_VIEW_EVENT received:', viewData);
+      logger.log('LOAD_SAVED_VIEW_EVENT received:', viewData);
       
       // Wait for viewer to be initialized and model loaded
       if (!state.isInitialized || modelLoadState !== 'loaded') {
-        console.log('Viewer not ready yet, will retry after model loads');
+        logger.log('Viewer not ready yet, will retry after model loads');
         // Store the pending view data and apply after model loads
         const retryHandler = () => {
           setTimeout(() => {
@@ -3408,11 +3409,11 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     const applyViewSettings = (viewData: LoadSavedViewDetail) => {
       const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
       if (!xeokitViewer) {
-        console.warn('Could not get xeokit viewer for saved view');
+        logger.warn('Could not get xeokit viewer for saved view');
         return;
       }
       
-      console.log('Applying saved view settings:', viewData);
+      logger.log('Applying saved view settings:', viewData);
       
       // 1. Set camera position
       if (viewData.cameraEye && viewData.cameraLook && viewData.cameraUp) {
@@ -3449,7 +3450,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           const assetViewer = viewerInstanceRef.current?.assetViewer;
           assetViewer?.onShowSpacesChanged?.(true);
         } catch (e) {
-          console.debug('Could not set show spaces:', e);
+          logger.debug('Could not set show spaces:', e);
         }
       }
       
@@ -3462,7 +3463,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
             setShowAnnotations(true);
           }
         } catch (e) {
-          console.debug('Could not set show annotations:', e);
+          logger.debug('Could not set show annotations:', e);
         }
       }
       
@@ -3564,7 +3565,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         try {
           viewer.cutOutFloorsByFmGuid(detail.floorFmGuid, true, { doViewFit: true });
         } catch (err) {
-          console.debug('Could not cut to floor:', err);
+          logger.debug('Could not cut to floor:', err);
         }
       }
     };
@@ -3597,7 +3598,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
   // Listen for Architect View Mode requests
   useEffect(() => {
     const handleArchitectModeRequest = (detail: { enabled: boolean }) => {
-      console.log('ARCHITECT_MODE_REQUESTED:', detail.enabled);
+      logger.log('ARCHITECT_MODE_REQUESTED:', detail.enabled);
       const success = toggleArchitectMode(viewerInstanceRef, detail.enabled);
       
       // Dispatch confirmation event
@@ -3616,7 +3617,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
   // Listen for architect background color changes
   useEffect(() => {
     const handleBackgroundChange = (detail: { presetId: string }) => {
-      console.log('ARCHITECT_BACKGROUND_CHANGED:', detail.presetId);
+      logger.log('ARCHITECT_BACKGROUND_CHANGED:', detail.presetId);
       // Directly apply background since we know architect mode is active (palette is visible)
       applyBackgroundPreset(detail.presetId as BackgroundPresetId);
     };
@@ -3630,7 +3631,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
   // Listen for room labels toggle from VisualizationToolbar
   useEffect(() => {
     const handleRoomLabelsToggle = (detail: { enabled: boolean }) => {
-      console.log('ROOM_LABELS_TOGGLE:', detail.enabled);
+      logger.log('ROOM_LABELS_TOGGLE:', detail.enabled);
       setRoomLabelsEnabled(detail.enabled);
     };
     
@@ -3727,7 +3728,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           });
           if (coveringIds.length > 0) {
             scene.setObjectsVisible(coveringIds, false);
-            console.debug(`[MobileFloor] Hidden ${coveringIds.length} IfcCovering objects in solo mode`);
+            logger.debug(`[MobileFloor] Hidden ${coveringIds.length} IfcCovering objects in solo mode`);
           }
         }
 
@@ -3742,7 +3743,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         return newFloors;
       });
     } catch (e) {
-      console.debug('Error toggling floor visibility:', e);
+      logger.debug('Error toggling floor visibility:', e);
     }
   }, []);
 
@@ -3763,7 +3764,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         });
       }
     } catch (e) {
-      console.debug('Error resetting camera:', e);
+      logger.debug('Error resetting camera:', e);
     }
   }, []);
 
@@ -3773,17 +3774,17 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
   const setupCacheInterceptor = useCallback(() => {
     // Skip if already set up
     if (originalFetchRef.current) {
-      console.log('XKT cache: Interceptor already active');
+      logger.log('XKT cache: Interceptor already active');
       return;
     }
     
     const resolvedBuildingGuid = buildingFmGuid;
     if (!resolvedBuildingGuid) {
-      console.log('XKT cache: No building GUID, skipping interceptor');
+      logger.log('XKT cache: No building GUID, skipping interceptor');
       return;
     }
     
-    console.log('XKT cache: Setting up Cache-on-Load interceptor');
+    logger.log('XKT cache: Setting up Cache-on-Load interceptor');
     originalFetchRef.current = window.fetch;
     
     window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -3791,7 +3792,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
       // an intercepted fetch was still in flight), fall back to the native fetch.
       const original = originalFetchRef.current;
       if (!original) {
-        console.debug('XKT cache: Interceptor cleaned up, using native fetch');
+        logger.debug('XKT cache: Interceptor cleaned up, using native fetch');
         return fetch(input, init);
       }
       
@@ -3837,9 +3838,9 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
             // Request object — rebuild with modified URL, preserve headers/method
             effectiveInput = new Request(scopedUrl, input as Request);
           }
-          console.log(`[XKT] 🏢 Scoped to building — bimobjectid=${bimId.substring(0, 8)}… injected`);
+          logger.log(`[XKT] 🏢 Scoped to building — bimobjectid=${bimId.substring(0, 8)}… injected`);
         } else {
-          console.warn('[XKT] ⚠️ GetXktData called but buildingBimObjectId is empty — scoping skipped');
+          logger.warn('[XKT] ⚠️ GetXktData called but buildingBimObjectId is empty — scoping skipped');
         }
       }
       // ─────────────────────────────────────────────────────────────────────────
@@ -3858,7 +3859,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           const stripped = lower.replace(/\.xkt$/i, '');
           const isAllowed = allowed.has(modelId) || allowed.has(lower) || allowed.has(stripped);
           if (!isAllowed) {
-            console.log(`XKT filter: Non-initial model ${modelId} — passing through without caching`);
+            logger.log(`XKT filter: Non-initial model ${modelId} — passing through without caching`);
             return original!(effectiveInput, init);
           }
         }
@@ -3867,7 +3868,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         const memoryData = getModelFromMemory(modelId, resolvedBuildingGuid);
         if (memoryData) {
           const elapsed = Math.round(performance.now() - diagStart);
-          console.log(`%c[XKT DIAG] ✅ MEMORY HIT — ${modelId} — ${(memoryData.byteLength / 1024 / 1024).toFixed(1)} MB — ${elapsed}ms`, 'color:#22c55e;font-weight:bold');
+          logger.log(`%c[XKT DIAG] ✅ MEMORY HIT — ${modelId} — ${(memoryData.byteLength / 1024 / 1024).toFixed(1)} MB — ${elapsed}ms`, 'color:#22c55e;font-weight:bold');
           // Return cached data as a Response
           return new Response(memoryData.slice(0), {
             status: 200,
@@ -3884,7 +3885,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           if (cacheResult.cached && cacheResult.url) {
             // Age-stale check (>7 days)
             if (cacheResult.stale) {
-              console.log(`%c[XKT DIAG] ⏳ STALE (>7d) — ${modelId} — DB check: ${dbCheckMs}ms — fetching fresh`, 'color:#eab308;font-weight:bold');
+              logger.log(`%c[XKT DIAG] ⏳ STALE (>7d) — ${modelId} — DB check: ${dbCheckMs}ms — fetching fresh`, 'color:#eab308;font-weight:bold');
             } else {
               // Fetch from storage
               const storeFetchStart = performance.now();
@@ -3899,21 +3900,21 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
                 if (data.byteLength >= MIN_XKT_BYTES && firstByte !== '<' && firstByte !== '{') {
                   storeModelInMemory(modelId, resolvedBuildingGuid, data);
                   const totalMs = Math.round(performance.now() - diagStart);
-                  console.log(`%c[XKT DIAG] 💾 STORAGE HIT — ${modelId} — ${(data.byteLength / 1024 / 1024).toFixed(1)} MB — DB: ${dbCheckMs}ms + fetch: ${storeFetchMs}ms = ${totalMs}ms total`, 'color:#3b82f6;font-weight:bold');
+                  logger.log(`%c[XKT DIAG] 💾 STORAGE HIT — ${modelId} — ${(data.byteLength / 1024 / 1024).toFixed(1)} MB — DB: ${dbCheckMs}ms + fetch: ${storeFetchMs}ms = ${totalMs}ms total`, 'color:#3b82f6;font-weight:bold');
                   return new Response(data, {
                     status: 200,
                     headers: { 'Content-Type': 'application/octet-stream' }
                   });
                 } else {
-                  console.warn(`%c[XKT DIAG] ❌ CORRUPT — ${modelId} — ${data.byteLength} bytes — falling through`, 'color:#ef4444;font-weight:bold');
+                  logger.warn(`%c[XKT DIAG] ❌ CORRUPT — ${modelId} — ${data.byteLength} bytes — falling through`, 'color:#ef4444;font-weight:bold');
                 }
               }
             }
           } else {
-            console.log(`%c[XKT DIAG] 🔍 CACHE MISS — ${modelId} — DB check: ${dbCheckMs}ms — will fetch from Geminus Plus API`, 'color:#f97316;font-weight:bold');
+            logger.log(`%c[XKT DIAG] 🔍 CACHE MISS — ${modelId} — DB check: ${dbCheckMs}ms — will fetch from Geminus Plus API`, 'color:#f97316;font-weight:bold');
           }
         } catch (e) {
-          console.debug('XKT cache: Database check failed, fetching from source', e);
+          logger.debug('XKT cache: Database check failed, fetching from source', e);
         }
       }
       
@@ -3923,7 +3924,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
       const apiFetchMs = Math.round(performance.now() - apiFetchStart);
       const totalMs = Math.round(performance.now() - diagStart);
       if (modelId) {
-        console.log(`%c[XKT DIAG] 🌐 API FETCH — ${modelId} — status: ${response.status} — API: ${apiFetchMs}ms — total: ${totalMs}ms`, 'color:#a855f7;font-weight:bold');
+        logger.log(`%c[XKT DIAG] 🌐 API FETCH — ${modelId} — status: ${response.status} — API: ${apiFetchMs}ms — total: ${totalMs}ms`, 'color:#a855f7;font-weight:bold');
       }
       
       // Only process successful XKT responses
@@ -3959,18 +3960,18 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
                 sourceLastModified
               ).then(saved => {
                 if (saved) {
-                  console.log(`XKT cache: Saved ${modelId} to backend`);
+                  logger.log(`XKT cache: Saved ${modelId} to backend`);
                 }
               }).catch(e => {
-                console.debug(`XKT cache: Failed to save ${modelId} to backend:`, e);
+                logger.debug(`XKT cache: Failed to save ${modelId} to backend:`, e);
               });
             } else if (!isLargeEnough) {
-              console.warn(`XKT cache: Rejected ${modelId} — only ${data.byteLength} bytes (< 50 KB minimum, likely corrupt)`);
+              logger.warn(`XKT cache: Rejected ${modelId} — only ${data.byteLength} bytes (< 50 KB minimum, likely corrupt)`);
             } else if (isHtmlOrJsonResponse) {
-              console.warn(`XKT cache: Rejected ${modelId} — starts with '${firstChar}', looks like HTML/JSON error response`);
+              logger.warn(`XKT cache: Rejected ${modelId} — starts with '${firstChar}', looks like HTML/JSON error response`);
             }
           } catch (e) {
-            console.debug('XKT cache: Failed to process response for caching:', e);
+            logger.debug('XKT cache: Failed to process response for caching:', e);
           }
         })();
       }
@@ -3979,7 +3980,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     };
     
     const stats = getMemoryStats();
-    console.log(`XKT cache: Interceptor active (memory: ${stats.modelCount} models, ${(stats.usedBytes / 1024 / 1024).toFixed(1)} MB)`);
+    logger.log(`XKT cache: Interceptor active (memory: ${stats.modelCount} models, ${(stats.usedBytes / 1024 / 1024).toFixed(1)} MB)`);
   }, [buildingFmGuid]);
 
   // Keep callback refs in sync for stable initializeViewer dependency array
@@ -3994,7 +3995,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     if (originalFetchRef.current) {
       window.fetch = originalFetchRef.current;
       originalFetchRef.current = null;
-      console.log('XKT cache: Interceptor removed');
+      logger.log('XKT cache: Interceptor removed');
     }
   }, []);
 
@@ -4063,7 +4064,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
 
     // Re-check container after settlement — React may have unmounted us during the wait
     if (!viewerContainerRef.current) {
-      console.warn('[GeminusPlusViewer] Container lost after settlement wait, aborting init');
+      logger.warn('[GeminusPlusViewer] Container lost after settlement wait, aborting init');
       return;
     }
 
@@ -4075,9 +4076,9 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     if (buildingFmGuid) {
       const stats = getMemoryStats();
       if (stats.modelCount === 0) {
-        console.log('GeminusPlusViewer: No preloaded models in memory');
+        logger.log('GeminusPlusViewer: No preloaded models in memory');
       } else {
-        console.log(`GeminusPlusViewer: ${stats.modelCount} preloaded models in memory (${(stats.usedBytes / 1024 / 1024).toFixed(1)} MB) — preserving for cache hits`);
+        logger.log(`GeminusPlusViewer: ${stats.modelCount} preloaded models in memory (${(stats.usedBytes / 1024 / 1024).toFixed(1)} MB) — preserving for cache hits`);
       }
     }
 
@@ -4137,7 +4138,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           const jwtExpiry = getJwtExpiry(token);
           if (Date.now() >= jwtExpiry) {
             sessionStorage.removeItem(TOKEN_CACHE_KEY); // JWT expired: force refresh
-            console.log('GeminusPlusViewer: JWT expired, cleared stale cached token');
+            logger.log('GeminusPlusViewer: JWT expired, cleared stale cached token');
           }
         } catch {
           sessionStorage.removeItem(TOKEN_CACHE_KEY); // Bad cache: clear
@@ -4152,7 +4153,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           const jwtExpiry = getJwtExpiry(token);
           if (Date.now() < jwtExpiry) { // JWT still valid
             accessToken = token;
-            console.log('GeminusPlusViewer: Using cached token (saves ~500ms)');
+            logger.log('GeminusPlusViewer: Using cached token (saves ~500ms)');
           } else {
             sessionStorage.removeItem(TOKEN_CACHE_KEY); // Race condition: expired between checks
           }
@@ -4180,7 +4181,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         if (import.meta.env.DEV) {
           tokenPayload = await devFetch('getToken');
           if (tokenPayload?.accessToken) {
-            console.log('GeminusPlusViewer: Token via local dev proxy ✅');
+            logger.log('GeminusPlusViewer: Token via local dev proxy ✅');
           }
         }
 
@@ -4191,9 +4192,9 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           });
           if (!tokenError && efData?.accessToken) {
             tokenPayload = efData;
-            console.log('GeminusPlusViewer: Token via edge function ✅');
+            logger.log('GeminusPlusViewer: Token via edge function ✅');
           } else if (tokenError) {
-            console.warn('GeminusPlusViewer: Edge function token failed:', tokenError.message);
+            logger.warn('GeminusPlusViewer: Edge function token failed:', tokenError.message);
           }
         }
 
@@ -4212,18 +4213,18 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           token: accessToken,
           expiresAt: getJwtExpiry(accessToken),
         }));
-        console.log('GeminusPlusViewer: Fresh token fetched and cached with JWT expiry');
+        logger.log('GeminusPlusViewer: Fresh token fetched and cached with JWT expiry');
       }
 
       accessTokenRef.current = accessToken;
-      console.log("GeminusPlusViewer: Access token ready");
+      logger.log("GeminusPlusViewer: Access token ready");
 
       setInitStep('check_script');
       // Load the Geminus Plus viewer script on-demand if not already loaded
       let assetplusviewer = (window as any).assetplusviewer;
       
       if (!assetplusviewer) {
-        console.log('GeminusPlusViewer: Loading UMD script on-demand...');
+        logger.log('GeminusPlusViewer: Loading UMD script on-demand...');
         await new Promise<void>((resolve, reject) => {
           const script = document.createElement('script');
           script.src = '/lib/assetplus/assetplusviewer.umd.min.js';
@@ -4235,7 +4236,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         if (!assetplusviewer) {
           throw new Error('Geminus Plus 3D Viewer package failed to initialize after loading.');
         }
-        console.log('GeminusPlusViewer: UMD script loaded successfully');
+        logger.log('GeminusPlusViewer: UMD script loaded successfully');
       }
 
       setInitStep('fetch_config');
@@ -4249,7 +4250,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           const parsed = JSON.parse(cachedConfig);
           baseUrl = parsed.apiUrl || '';
           apiKey = parsed.apiKey || '';
-          console.log('GeminusPlusViewer: Using cached config (saves ~500ms)');
+          logger.log('GeminusPlusViewer: Using cached config (saves ~500ms)');
         } catch { /* ignore */ }
       }
       
@@ -4312,7 +4313,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           }
         } catch { /* non-critical */ }
         if (buildingBimObjectIdRef.current) {
-          console.log(`[XKT] Building BIM Object ID resolved: ${buildingBimObjectIdRef.current}`);
+          logger.log(`[XKT] Building BIM Object ID resolved: ${buildingBimObjectIdRef.current}`);
           // The preload hook may have cached XKT from Supabase Storage before bimobjectid was known.
           // Those files might contain full-complex geometry (all buildings, not just this one).
           // Clear the in-memory data so every GetXktData call goes through the fetch interceptor,
@@ -4320,7 +4321,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           // We keep globalPreloadedBuildings intact to prevent a redundant re-download from storage.
           clearBuildingMemoryDataOnly(buildingFmGuid);
         } else {
-          console.warn(`[XKT] Building BIM Object ID NOT found for ${buildingFmGuid} — XKT will not be scoped to this building`);
+          logger.warn(`[XKT] Building BIM Object ID NOT found for ${buildingFmGuid} — XKT will not be scoped to this building`);
         }
       }
 
@@ -4342,7 +4343,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
             const hasRealNames = dbModels.some(m => m.model_name && !UUID_RE.test(m.model_name));
             if (hasRealNames) {
               dbModels.forEach(m => { if (m.model_name) nameMap.set(m.model_id, m.model_name); });
-              console.log(`XKT filter: ${nameMap.size} model name(s) from xkt_models DB cache`);
+              logger.log(`XKT filter: ${nameMap.size} model name(s) from xkt_models DB cache`);
             }
           }
 
@@ -4380,7 +4381,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
                       .find(id => id && /^[0-9a-f]{8}-/i.test(id));
                     if (firstBuildingBimId) {
                       buildingBimObjectIdRef.current = firstBuildingBimId;
-                      console.log(`[XKT] Building BIM Object ID from GetAllRelatedModels: ${firstBuildingBimId}`);
+                      logger.log(`[XKT] Building BIM Object ID from GetAllRelatedModels: ${firstBuildingBimId}`);
                       // Supabase-lookup above had no bimObjectId, so clearBuildingMemoryDataOnly
                       // was not called yet. Clear now so preloaded (possibly unscoped) blobs don't
                       // bypass the fetch interceptor that injects this bimobjectid.
@@ -4416,7 +4417,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
                     });
 
                     if (nameMap.size > 0) {
-                      console.log(`XKT filter: ${apiModels.length} model(s) from ${base}/GetAllRelatedModels → ${nameMap.size} keys`);
+                      logger.log(`XKT filter: ${apiModels.length} model(s) from ${base}/GetAllRelatedModels → ${nameMap.size} keys`);
                     }
                   }
 
@@ -4424,9 +4425,9 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
                   break;
                 } catch { /* try next base */ }
               }
-              if (!foundModels) console.debug('XKT filter: GetAllRelatedModels returned nothing for all candidate bases');
+              if (!foundModels) logger.debug('XKT filter: GetAllRelatedModels returned nothing for all candidate bases');
             } catch (e) {
-              console.debug('XKT filter: GetAllRelatedModels failed:', e);
+              logger.debug('XKT filter: GetAllRelatedModels failed:', e);
             }
           }
 
@@ -4453,11 +4454,11 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
                   }
                 });
                 if (nameMap.size > 0) {
-                  console.log(`XKT filter: ${nameMap.size} model(s) from storey parentBimObjectId fallback`);
+                  logger.log(`XKT filter: ${nameMap.size} model(s) from storey parentBimObjectId fallback`);
                 }
               }
             } catch (e) {
-              console.debug('XKT filter: Storey attributes fallback failed:', e);
+              logger.debug('XKT filter: Storey attributes fallback failed:', e);
             }
           }
 
@@ -4492,28 +4493,28 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
 
             if (aModelIdsOriginal.size > 0 && aModelIdsOriginal.size < totalUniqueModels) {
               allowedModelIdsRef.current = aModelIds;
-              console.log(`XKT filter ✅ A-models: ${aModelIdsOriginal.size} of ${totalUniqueModels} total (${aModelIds.size} whitelist keys)`);
-              console.log('XKT filter sample:', [...aModelIds].slice(0, 8).join(', '));
+              logger.log(`XKT filter ✅ A-models: ${aModelIdsOriginal.size} of ${totalUniqueModels} total (${aModelIds.size} whitelist keys)`);
+              logger.log('XKT filter sample:', [...aModelIds].slice(0, 8).join(', '));
             } else if (allModelIds.size > 0) {
               allowedModelIdsRef.current = allModelIds;
-              console.log(`XKT filter ✅ All building models: ${totalUniqueModels} model(s) (${allModelIds.size} whitelist keys)`);
-              console.log('XKT filter sample:', [...allModelIds].slice(0, 8).join(', '));
+              logger.log(`XKT filter ✅ All building models: ${totalUniqueModels} model(s) (${allModelIds.size} whitelist keys)`);
+              logger.log('XKT filter sample:', [...allModelIds].slice(0, 8).join(', '));
             }
             // else: allModelIds empty — something went wrong, fall through to null
           } else {
-            console.warn(`XKT filter ⚠️ No model info for building ${resolvedGuid} — loading whatever Geminus Plus returns`);
+            logger.warn(`XKT filter ⚠️ No model info for building ${resolvedGuid} — loading whatever Geminus Plus returns`);
             allowedModelIdsRef.current = null;
           }
         }
       } catch (e) {
-        console.debug('Model filter setup failed — loading all models:', e);
+        logger.debug('Model filter setup failed — loading all models:', e);
         allowedModelIdsRef.current = null;
       }
 
       // Save a reference to the real fetch before interceptor patches it
       const original_fetch_ref = window.fetch;
 
-      console.log("GeminusPlusViewer: Init - Calling assetplusviewer with baseUrl:", baseUrl);
+      logger.log("GeminusPlusViewer: Init - Calling assetplusviewer with baseUrl:", baseUrl);
 
       setInitStep('mount_viewer');
       // Initialize the viewer following EXACT Geminus Plus external_viewer.html pattern
@@ -4522,7 +4523,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         apiKey,   // API Key in UUID format
         // getAccessTokenCallback — always returns a valid (non-expired) token
         async () => {
-          console.log("getAccessTokenCallback");
+          logger.log("getAccessTokenCallback");
           const TOKEN_CACHE_KEY = 'geminus_ap_token';
           // Validate cached token against JWT exp directly (not cached expiresAt)
           const raw = sessionStorage.getItem(TOKEN_CACHE_KEY);
@@ -4540,7 +4541,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
             } catch { /* fall through to refresh */ }
           }
           // Token expired or missing — fetch fresh
-          console.log("getAccessTokenCallback: JWT expired, fetching fresh token");
+          logger.log("getAccessTokenCallback: JWT expired, fetching fresh token");
           try {
             let freshToken: string | null = null;
 
@@ -4586,14 +4587,14 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         },
         // selectionChangedCallback - flash highlight on selection (if enabled)
         (items: any[], added: any[], removed: any[]) => {
-          console.log("selectionChangedCallback -", items?.length, "items.", added?.length, "added.", removed?.length, "removed.");
+          logger.log("selectionChangedCallback -", items?.length, "items.", added?.length, "added.", removed?.length, "removed.");
           
           // Flash highlight newly selected items only if enabled
           if (added?.length > 0 && flashOnSelectEnabledRef.current) {
             const xeokitViewer = viewerInstanceRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
             if (xeokitViewer?.scene) {
               // Log the item structure for debugging
-              console.log("itemIds", added.map((item: any) => item?.id || item));
+              logger.log("itemIds", added.map((item: any) => item?.id || item));
               
               // Flash each newly added item
               added.forEach((item: any) => {
@@ -4615,7 +4616,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         // selectedFmGuidsChangedCallback - Track selection for properties dialog
         (items: string[], added: string[], removed: string[]) => {
           if (!isMountedRef.current) return; // Guard against state updates during unmount
-          console.log("selectedFmGuidsChangedCallback -", items?.length, "items.", added?.length, "added.", removed?.length, "removed.");
+          logger.log("selectedFmGuidsChangedCallback -", items?.length, "items.", added?.length, "added.", removed?.length, "removed.");
           setSelectedFmGuids(items || []);
         },
         // allModelsLoadedCallback - call via ref for stable identity
@@ -4624,7 +4625,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         undefined,
         // isFmGuidEditableCallback
         async (fmGuidParam: string) => {
-          console.log("isFmGuidEditableCallback - fmGuid:", fmGuidParam);
+          logger.log("isFmGuidEditableCallback - fmGuid:", fmGuidParam);
           return false; // Read-only for now
         },
         // additionalDefaultPredicate - filter to only load allowed models (A-model whitelist)
@@ -4635,7 +4636,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           if (!allowedModelIdsRef.current) {
             // Log first few calls even when unfiltered — tells us what format the SDK uses
             if (logCount < 5) {
-              console.log(`[XKT predicate] NO FILTER — modelId="${modelId}" (all models pass through)`);
+              logger.log(`[XKT predicate] NO FILTER — modelId="${modelId}" (all models pass through)`);
               (window as any).__xktPredicateLogCount++;
             }
             return true; // no filter → load all
@@ -4647,7 +4648,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           const accepted = whitelist.has(modelId) || whitelist.has(lower) || whitelist.has(stripped);
 
           if (logCount < 12) {
-            console.log(`[XKT predicate] modelId="${modelId}" → ${accepted ? '✅ ACCEPT' : '❌ REJECT'} (whitelist: ${whitelist.size} keys)`);
+            logger.log(`[XKT predicate] modelId="${modelId}" → ${accepted ? '✅ ACCEPT' : '❌ REJECT'} (whitelist: ${whitelist.size} keys)`);
             (window as any).__xktPredicateLogCount++;
           }
           return accepted;
@@ -4660,7 +4661,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         undefined,
       );
 
-      console.log("GeminusPlusViewer: Viewer mounted successfully");
+      logger.log("GeminusPlusViewer: Viewer mounted successfully");
       viewerInstanceRef.current = viewer;
       // Expose instance globally for Virtual Twin mode
       (window as any).__geminusPlusViewerInstance = viewer;
@@ -4721,7 +4722,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         if (floorFmGuid) {
           // Delay to allow viewer to finish loading models
           setTimeout(() => {
-            console.log('GeminusPlusViewer: Dispatching initial floor selection for', floorFmGuid);
+            logger.log('GeminusPlusViewer: Dispatching initial floor selection for', floorFmGuid);
             emit('FLOOR_SELECTION_CHANGED', {
                 floorId: floorFmGuid,
                 visibleMetaFloorIds: [],
@@ -4743,7 +4744,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
       clearTimeout(timeoutId); // Cancel the initialization timeout on success
 
       const initDuration = ((performance.now() - initStartTime) / 1000).toFixed(1);
-      console.log(`[GeminusPlusViewer] ⏱ Initialization completed in ${initDuration}s`);
+      logger.log(`[GeminusPlusViewer] ⏱ Initialization completed in ${initDuration}s`);
 
       // Safety fallback: if allModelsLoadedCallback never fires (e.g. model parse error),
       // force the toolbar to become available after a timeout so the UI doesn't freeze.
@@ -4752,7 +4753,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         if (!isMountedRef.current) return;
         setModelLoadState(prev => {
           if (prev !== 'loaded') {
-            console.warn('[GeminusPlusViewer] Model load fallback triggered — forcing toolbar ready');
+            logger.warn('[GeminusPlusViewer] Model load fallback triggered — forcing toolbar ready');
             setInitStep('ready');
             setXktSyncStatus('done');
             return 'loaded';
@@ -4802,7 +4803,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
   const handleRetry = useCallback(() => {
     // If we're already initializing, ignore retry clicks.
     if (initializingRef.current) {
-      console.debug('GeminusPlusViewer: Retry ignored (initialization in progress)');
+      logger.debug('GeminusPlusViewer: Retry ignored (initialization in progress)');
       return;
     }
 
@@ -4839,7 +4840,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     
     // Prevent concurrent initializations
     if (initializingRef.current) {
-      console.debug('GeminusPlusViewer: Skipping duplicate initialization (already in progress)');
+      logger.debug('GeminusPlusViewer: Skipping duplicate initialization (already in progress)');
       return;
     }
     
@@ -4890,7 +4891,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
             container.innerHTML = '';
           }
         } catch (e) {
-          console.debug('Viewer DOM cleanup:', e);
+          logger.debug('Viewer DOM cleanup:', e);
         }
         
         // Deferred data cleanup — safe because we already detached from DOM
@@ -4900,7 +4901,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
               viewer.clearData();
             }
           } catch (e) {
-            console.debug('Viewer cleanup (expected during teardown):', e);
+            logger.debug('Viewer cleanup (expected during teardown):', e);
           }
         }, 0);
       }
@@ -4937,7 +4938,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     };
 
     const handleContextRestored = () => {
-      console.log('[GeminusPlusViewer] WebGL context restored');
+      logger.log('[GeminusPlusViewer] WebGL context restored');
       // Clear the error and retry initialization
       setState(prev => ({ ...prev, error: null }));
       setShowError(false);
@@ -4959,7 +4960,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
       const { modelId } = detail;
       if (!modelId) return;
 
-      console.log(`[GeminusPlusViewer] On-demand model load requested: ${modelId}`);
+      logger.log(`[GeminusPlusViewer] On-demand model load requested: ${modelId}`);
 
       // Add to whitelist so the cache interceptor allows it
       if (allowedModelIdsRef.current) {

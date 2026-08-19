@@ -69,6 +69,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import UniversalPropertiesDialog from '@/components/common/UniversalPropertiesDialog';
 
+import { logger } from '@/lib/logger';
 interface AssetData {
   fmGuid: string;
   [key: string]: any;
@@ -252,12 +253,12 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       setHasTriedSync(true);
       setIsSyncingAssets(true);
       
-      console.log('AssetsView: Initializing assets for building', facility.fmGuid);
+      logger.log('AssetsView: Initializing assets for building', facility.fmGuid);
       
       try {
         // Step 1: Always fetch from database first
         const existingAssets = await fetchAssetsForBuilding(facility.fmGuid!);
-        console.log('AssetsView: Found', existingAssets.length, 'existing assets in database');
+        logger.log('AssetsView: Found', existingAssets.length, 'existing assets in database');
         
         if (existingAssets.length > 0) {
           const mapped = existingAssets.map((asset: any) => ({
@@ -283,7 +284,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
         }
         
         // Step 2: No local assets - trigger sync
-        console.log('AssetsView: No local assets, triggering sync...');
+        logger.log('AssetsView: No local assets, triggering sync...');
         const result = await syncBuildingAssetsIfNeeded(facility.fmGuid!);
         
         if (result.synced && result.count > 0) {
@@ -313,7 +314,7 @@ const AssetsView: React.FC<AssetsViewProps> = ({
             description: `Fetched ${result.count} assets for this building`,
           });
         } else if (!result.synced) {
-          console.log('AssetsView: Sync not triggered (already in sync or error)');
+          logger.log('AssetsView: Sync not triggered (already in sync or error)');
         }
       } catch (error: any) {
         console.error('AssetsView: Failed to sync assets:', error);

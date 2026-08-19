@@ -10,6 +10,7 @@ import {
   calculatePitchFromCamera,
   calculateLookFromHeadingPitch,
 } from '@/lib/coordinate-transform';
+import { logger } from '@/lib/logger';
 
 interface UseViewerCameraSyncOptions {
   /** Reference to the xeokit viewer instance */
@@ -74,7 +75,7 @@ export function useViewerCameraSync({
     const heading = calculateHeadingFromCamera(eye, look);
     const pitch = calculatePitchFromCamera(eye, look);
 
-    console.log('[3D Sync] Broadcasting camera:', { position, heading, pitch });
+    logger.log('[3D Sync] Broadcasting camera:', { position, heading, pitch });
     updateFrom3D(position, heading, pitch);
   }, [enabled, syncLocked, getXeokitViewer, updateFrom3D]);
 
@@ -113,7 +114,7 @@ export function useViewerCameraSync({
     // Prevent feedback loop
     isSyncing.current = true;
 
-    console.log('[3D Sync] Received from Ivion:', syncState);
+    logger.log('[3D Sync] Received from Ivion:', syncState);
 
     // Call the callback if provided (for custom fly-to behavior)
     if (onSyncReceived) {

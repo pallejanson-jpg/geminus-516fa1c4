@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useLanguage } from '@/context/LanguageContext';
 
+import { logger } from '@/lib/logger';
 interface UniversalPropertiesDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -242,7 +243,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                   return bCount > aCount ? b : a;
                 });
                 if (Object.keys(best.attributes || {}).length > 0) {
-                  console.log(`[Properties] Canonical resolve: ${fmGuids[0]} → ${best.fm_guid} via name "${spaceName}"`);
+                  logger.log(`[Properties] Canonical resolve: ${fmGuids[0]} → ${best.fm_guid} via name "${spaceName}"`);
                   assetData = [best];
                 }
               }
@@ -363,7 +364,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                   .single();
 
                 if (!insertError && insertedData) {
-                  console.log('[UniversalPropertiesDialog] Auto-created asset from BIM:', fmGuid);
+                  logger.log('[UniversalPropertiesDialog] Auto-created asset from BIM:', fmGuid);
                   assetData = [insertedData];
                   setAssets([insertedData]);
                   setFormData({
@@ -375,11 +376,11 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                   });
                 } else {
                   // If insert fails (e.g. duplicate), still show BIM fallback
-                  console.warn('[UniversalPropertiesDialog] Auto-create failed, showing BIM fallback:', insertError?.message);
+                  logger.warn('[UniversalPropertiesDialog] Auto-create failed, showing BIM fallback:', insertError?.message);
                   setBimFallbackFromMeta(metaObj, entityId);
                 }
               } catch (e) {
-                console.warn('[UniversalPropertiesDialog] Auto-create error:', e);
+                logger.warn('[UniversalPropertiesDialog] Auto-create error:', e);
                 setBimFallbackFromMeta(metaObj, entityId);
               }
             }
@@ -887,12 +888,12 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           if (Object.keys(fmaProps).length > 0) {
             for (const guid of fmGuids) {
               pushPropertyChangesToGeminusBase(guid, fmaProps).catch(e => 
-                console.warn('Geminus Base property sync failed for', guid, e)
+                logger.warn('Geminus Base property sync failed for', guid, e)
               );
             }
           }
         } catch (e) {
-          console.warn('Geminus Base property push skipped:', e);
+          logger.warn('Geminus Base property push skipped:', e);
         }
 
         // Update remaining local-only fields (coordinates, asset_type) directly
@@ -968,7 +969,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           try {
             await deleteGeminusBaseObject(guid);
           } catch (fmaErr) {
-            console.warn(`Geminus Base delete failed for ${guid}:`, fmaErr);
+            logger.warn(`Geminus Base delete failed for ${guid}:`, fmaErr);
           }
         }
         toast.success(`${result.summary.deleted} object(s) deleted`);
@@ -1029,7 +1030,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
         if (result.success) succeeded++;
         else {
           failed++;
-          console.warn(`Geminus Base push failed for ${fmGuid}:`, result.error);
+          logger.warn(`Geminus Base push failed for ${fmGuid}:`, result.error);
         }
       }
       if (succeeded > 0) {

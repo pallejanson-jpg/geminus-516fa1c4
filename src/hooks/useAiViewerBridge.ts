@@ -3,6 +3,7 @@
  * controls the xeokit viewer via highlightEntities / resetView.
  */
 import { useEffect, useCallback } from 'react';
+import { logger } from '@/lib/logger';
 
 import { emit, on } from '@/lib/event-bus';
 export const AI_VIEWER_COMMAND_EVENT = 'AI_VIEWER_COMMAND';
@@ -62,7 +63,7 @@ export function useAiViewerBridge(viewer: any, isReady: boolean) {
     // Resolve IDs with fuzzy matching
     const resolved = resolveIds(entityIds, scene);
     if (!resolved.length) {
-      console.warn(`[AiViewerBridge] No matching entities found for ${entityIds.length} IDs`);
+      logger.warn(`[AiViewerBridge] No matching entities found for ${entityIds.length} IDs`);
       return;
     }
 
@@ -79,7 +80,7 @@ export function useAiViewerBridge(viewer: any, isReady: boolean) {
       viewer.cameraFlight.flyTo({ aabb: scene.getAABB(resolved), duration: 1.0 });
     }
 
-    console.log(`[AiViewerBridge] Highlighted ${resolved.length}/${entityIds.length} entities (colorized orange)`);
+    logger.log(`[AiViewerBridge] Highlighted ${resolved.length}/${entityIds.length} entities (colorized orange)`);
   }, [viewer, resolveIds]);
 
   const filterToEntities = useCallback((entityIds: string[]) => {
@@ -97,7 +98,7 @@ export function useAiViewerBridge(viewer: any, isReady: boolean) {
       viewer.cameraFlight.flyTo({ aabb: scene.getAABB(entityIds), duration: 1.0 });
     }
 
-    console.log(`[AiViewerBridge] Filtered to ${entityIds.length} entities`);
+    logger.log(`[AiViewerBridge] Filtered to ${entityIds.length} entities`);
   }, [viewer]);
 
   const colorizeEntities = useCallback((colorMap: Record<string, [number, number, number]>) => {
@@ -131,7 +132,7 @@ export function useAiViewerBridge(viewer: any, isReady: boolean) {
       viewer.cameraFlight.flyTo({ aabb: scene.getAABB(entityIds), duration: 1.0 });
     }
 
-    console.log(`[AiViewerBridge] Colorized ${entityIds.length} entities`);
+    logger.log(`[AiViewerBridge] Colorized ${entityIds.length} entities`);
   }, [viewer]);
 
   const resetView = useCallback(() => {
@@ -147,7 +148,7 @@ export function useAiViewerBridge(viewer: any, isReady: boolean) {
     scene.setObjectsColorized(scene.colorizedObjectIds, null);
     scene.setObjectsSelected(scene.selectedObjectIds, false);
 
-    console.log(`[AiViewerBridge] View reset`);
+    logger.log(`[AiViewerBridge] View reset`);
   }, [viewer]);
 
   useEffect(() => {

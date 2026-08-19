@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { buildTransformFromSettings, IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
 import { IVION_DEFAULT_BASE_URL } from '@/lib/constants';
 import type { BuildingOrigin } from '@/lib/coordinate-transform';
+import { logger } from '@/lib/logger';
 
 export interface StartViewData {
   cameraEye: number[] | null;
@@ -78,7 +79,7 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
         return;
       }
 
-      console.log('[BuildingViewerData] Looking for building:', buildingFmGuid, 'in allData count:', allData.length);
+      logger.log('[BuildingViewerData] Looking for building:', buildingFmGuid, 'in allData count:', allData.length);
 
       // Find building in allData (direct Building entries from FM system)
       let building: any = allData.find(
@@ -96,7 +97,7 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
             (node.category === 'Building' || node.category === 'IfcBuilding')
         );
         if (building) {
-          console.log('[BuildingViewerData] Found building in navigatorTreeData (synthesized):', building.commonName || building.name);
+          logger.log('[BuildingViewerData] Found building in navigatorTreeData (synthesized):', building.commonName || building.name);
         }
       }
 
@@ -118,10 +119,10 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
               commonName: dbBuilding.common_name,
               category: dbBuilding.category,
             };
-            console.log('[BuildingViewerData] Found building via direct DB query:', building.commonName || building.name);
+            logger.log('[BuildingViewerData] Found building via direct DB query:', building.commonName || building.name);
           }
         } catch (dbErr) {
-          console.warn('[BuildingViewerData] DB fallback query failed:', dbErr);
+          logger.warn('[BuildingViewerData] DB fallback query failed:', dbErr);
         }
       }
 
@@ -139,13 +140,13 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
             commonName: attrs.buildingCommonName || null,
             category: 'Building',
           };
-          console.log('[BuildingViewerData] Inferred building from storey child:', building.name);
+          logger.log('[BuildingViewerData] Inferred building from storey child:', building.name);
         }
       }
 
       if (!building) {
         if (isLoadingData) return; // data still loading — effect re-runs when complete
-        console.warn('[BuildingViewerData] Building not found for GUID:', buildingFmGuid,
+        logger.warn('[BuildingViewerData] Building not found for GUID:', buildingFmGuid,
           'Available in allData:', allData.filter((i: any) => i.category === 'Building' || i.category === 'IfcBuilding')
             .map((i: any) => ({ fmGuid: i.fmGuid, name: i.commonName || i.name }))
         );
@@ -154,7 +155,7 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
         return;
       }
 
-      console.log('[BuildingViewerData] Found building:', building.commonName || building.name);
+      logger.log('[BuildingViewerData] Found building:', building.commonName || building.name);
 
       setError(null);
 

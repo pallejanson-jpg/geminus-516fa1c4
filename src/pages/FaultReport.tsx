@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Loader2, AlertTriangle, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import FaultReportForm from '@/components/fault-report/FaultReportForm';
@@ -50,7 +51,7 @@ const FaultReport: React.FC = () => {
         return;
       }
 
-      console.log('[FaultReport] API config response:', data);
+      logger.log('[FaultReport] API config response:', data);
 
       const errorCodes: ErrorCode[] = [];
       if (data?.errorCodes && Array.isArray(data.errorCodes)) {
@@ -109,7 +110,7 @@ const FaultReport: React.FC = () => {
 
         if (error) throw error;
 
-        console.log('[FaultReport] Submit response:', responseData);
+        logger.log('[FaultReport] Submit response:', responseData);
 
         const refId = responseData?.referenceNumber || responseData?.id || responseData?.externalId || `FR-${Date.now()}`;
         setSubmittedId(String(refId));

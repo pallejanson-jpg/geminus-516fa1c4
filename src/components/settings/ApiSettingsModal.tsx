@@ -42,6 +42,7 @@ import ApiProfilesManager from './ApiProfilesManager';
 import TenantsManager from './TenantsManager';
 import type { TranslationStatus } from '@/services/acc-xkt-converter';
 
+import { logger } from '@/lib/logger';
 interface ApiSettingsModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -1186,7 +1187,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
         const bimItems = allItems.filter((item: any) => item.versionUrn);
         if (bimItems.length === 0) {
             const bimWithoutUrn = allItems.filter((i: any) => i.isBim && !i.versionUrn);
-            console.warn('[BIM Sync] No items with versionUrn. All items:', allItems.length, 'BIM without URN:', bimWithoutUrn.length, bimWithoutUrn.map((i: any) => i.name));
+            logger.warn('[BIM Sync] No items with versionUrn. All items:', allItems.length, 'BIM without URN:', bimWithoutUrn.length, bimWithoutUrn.map((i: any) => i.name));
             toast({ 
                 variant: 'destructive', 
                 title: 'No BIM files', 
@@ -1196,7 +1197,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             });
             return;
         }
-        console.log(`[BIM Sync] Starting sync: ${bimItems.length} files with versionUrn`, bimItems.map((i: any) => ({ name: i.name, urn: i.versionUrn?.slice(-30) })));
+        logger.log(`[BIM Sync] Starting sync: ${bimItems.length} files with versionUrn`, bimItems.map((i: any) => ({ name: i.name, urn: i.versionUrn?.slice(-30) })));
 
         setSyncingBimFolderId(folder.id);
         
@@ -1799,7 +1800,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                 if (data?.interrupted) {
                     // Continue syncing - call again after a short delay
-                    console.log(`XKT sync progress: ${data.synced} synced, continuing...`);
+                    logger.log(`XKT sync progress: ${data.synced} synced, continuing...`);
                     toast({
                         title: "Syncing XKT Models",
                         description: `${totalSyncedOverall} models synced. Continuing...`,
@@ -1808,7 +1809,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     setTimeout(() => runResumableSync(), 1000);
                 } else {
                     // Completed
-                    console.log(`XKT sync completed: ${totalSyncedOverall} total`);
+                    logger.log(`XKT sync completed: ${totalSyncedOverall} total`);
 
                     if (totalSyncedOverall > 0) {
                         // Clear all building caches and reload viewer
@@ -1888,7 +1889,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
             if (buildError) throw buildError;
             
             if (!allBuildings || allBuildings.length === 0) {
-                console.log('No buildings found in assets table');
+                logger.log('No buildings found in assets table');
                 setFavoriteBuildings([]);
                 return;
             }
@@ -2229,7 +2230,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
             // Get unique building GUIDs
             const uniqueBuildingGuids = [...new Set(allItems.map(a => a.building_fm_guid).filter(Boolean))] as string[];
-            console.log('[Geminus Base] Unique buildings to ensure hierarchy for:', uniqueBuildingGuids.length);
+            logger.log('[Geminus Base] Unique buildings to ensure hierarchy for:', uniqueBuildingGuids.length);
 
             // 3. Auto-create hierarchy for each building if needed
             const { ensureGeminusBaseHierarchy } = await import('@/services/geminus-base-service');
@@ -2241,7 +2242,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     const hResult = await ensureGeminusBaseHierarchy(bldGuid);
                     if (hResult.success && hResult.action === 'created') {
                         hierarchyCreated++;
-                        console.log('[Geminus Base] Hierarchy created for building:', bldGuid, hResult.created);
+                        logger.log('[Geminus Base] Hierarchy created for building:', bldGuid, hResult.created);
                     } else {
                         hierarchySkipped++;
                     }
@@ -2306,7 +2307,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                     .select('fm_guid', { count: 'exact', head: true })
                     .not('building_fm_guid', 'is', null)
                     .eq('created_in_model', false);
-                console.log('[Geminus Base] Inventoried asset count:', count, 'error:', error);
+                logger.log('[Geminus Base] Inventoried asset count:', count, 'error:', error);
                 if (!error) {
                     setGeminusBaseLocalCount(count ?? 0);
                 } else {

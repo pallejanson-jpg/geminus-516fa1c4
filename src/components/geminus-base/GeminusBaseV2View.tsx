@@ -20,6 +20,7 @@ import GeminusBaseV2ViewerPanel, { GeminusBaseV2ViewerHandle } from './GeminusBa
 import GeminusBaseV2ObjectGrid from './GeminusBaseV2ObjectGrid';
 import GeminusBaseLegendPanel, { LegendFilter } from './GeminusBaseLegendPanel';
 
+import { logger } from '@/lib/logger';
 // ── Viewer toolbar ────────────────────────────────────────────────────────────
 // 2d-fma = FM Access vector drawing (Tessel embedded viewer).
 // All other modes render the Geminus UnifiedViewer (/viewer) embedded in an iframe.
@@ -299,7 +300,7 @@ const GeminusBaseV2View: React.FC = () => {
         ...standaloneByggnader,
       ].sort((a, b) => (a.objectName || '').localeCompare(b.objectName || '', 'sv'));
 
-      console.log('[GeminusBaseV2] buildTree done —', allChildren.length, 'nodes:',
+      logger.log('[GeminusBaseV2] buildTree done —', allChildren.length, 'nodes:',
         allChildren.map(f => f.objectName));
 
       setRootNode({ objectName: 'BLM Demo', classId: 102, objectId: -1, children: allChildren });

@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 interface CacheCheckResult {
   cached: boolean;
@@ -94,7 +95,7 @@ export class XktCacheService {
 
           const MIN_VALID_XKT_BYTES = 50_000;
           if (match && typeof (match as any).file_size === 'number' && (match as any).file_size > 0 && (match as any).file_size < MIN_VALID_XKT_BYTES) {
-            console.warn(`XKT cache: Skipping corrupt DB entry for ${modelId} (${(match as any).file_size} bytes)`);
+            logger.warn(`XKT cache: Skipping corrupt DB entry for ${modelId} (${(match as any).file_size} bytes)`);
             return { cached: false };
           }
 
@@ -108,10 +109,10 @@ export class XktCacheService {
             if (urlData?.signedUrl) {
               const modelFormat = (match as any).format || 'xkt';
               if (isStale) {
-                console.log('XKT cache hit but STALE (>7 days):', modelId);
+                logger.log('XKT cache hit but STALE (>7 days):', modelId);
                 return { cached: true, url: urlData.signedUrl, stale: true, sourceUpdatedAt: match.source_updated_at || undefined, format: modelFormat };
               }
-              console.log('XKT cache hit (signed URL):', modelId, 'format:', modelFormat);
+              logger.log('XKT cache hit (signed URL):', modelId, 'format:', modelFormat);
               return { cached: true, url: urlData.signedUrl, sourceUpdatedAt: match.source_updated_at || undefined, format: modelFormat };
             }
           }
@@ -128,7 +129,7 @@ export class XktCacheService {
       });
 
       if (error) {
-        console.warn('XKT cache check failed:', error);
+        logger.warn('XKT cache check failed:', error);
         return { cached: false };
       }
 
@@ -137,7 +138,7 @@ export class XktCacheService {
         url: data?.url,
       };
     } catch (e) {
-      console.warn('XKT cache check error:', e);
+      logger.warn('XKT cache check error:', e);
       failedChecks.set(retryKey, attempts + 1);
       return { cached: false };
     }
@@ -169,7 +170,7 @@ export class XktCacheService {
 
       return data?.url || null;
     } catch (e) {
-      console.warn('XKT cache get error:', e);
+      logger.warn('XKT cache get error:', e);
       return null;
     }
   }
@@ -186,7 +187,7 @@ export class XktCacheService {
     // Prevent duplicate stores for the same model
     const cacheKey = `${buildingFmGuid || 'global'}/${modelId}`;
     if (this.pendingStores.has(cacheKey)) {
-      console.log('XKT cache: Store already in progress for', cacheKey);
+      logger.log('XKT cache: Store already in progress for', cacheKey);
       return { success: false, error: 'Store already in progress' };
     }
 
@@ -211,17 +212,17 @@ export class XktCacheService {
       });
 
       if (error) {
-        console.warn('XKT cache store failed:', error);
+        logger.warn('XKT cache store failed:', error);
         return { success: false, error: error.message };
       }
 
-      console.log('XKT model cached successfully:', modelId);
+      logger.log('XKT model cached successfully:', modelId);
       return {
         success: data?.success || false,
         url: data?.url,
       };
     } catch (e) {
-      console.warn('XKT cache store error:', e);
+      logger.warn('XKT cache store error:', e);
       return { 
         success: false, 
         error: e instanceof Error ? e.message : 'Unknown error' 
@@ -248,13 +249,13 @@ export class XktCacheService {
     
     // Skip if already saving this model
     if (savingModels.has(cacheKey)) {
-      console.log('XKT save: Already saving', modelId);
+      logger.log('XKT save: Already saving', modelId);
       return false;
     }
     
     // Rate limit concurrent saves
     if (currentSaveCount >= MAX_CONCURRENT_SAVES) {
-      console.log('XKT save: Rate limited, skipping', modelId);
+      logger.log('XKT save: Rate limited, skipping', modelId);
       return false;
     }
     
@@ -269,7 +270,7 @@ export class XktCacheService {
       const fileName = `${bareModelId}.xkt`;
       const storagePath = `${buildingFmGuid}/${fileName}`;
       
-      console.log(`XKT save: Uploading ${bareModelId} (${(xktData.byteLength / 1024 / 1024).toFixed(2)} MB)`);
+      logger.log(`XKT save: Uploading ${bareModelId} (${(xktData.byteLength / 1024 / 1024).toFixed(2)} MB)`);
       
       // Upload directly to storage — avoids the 8 MB edge function body limit
       const blob = new Blob([xktData], { type: 'application/octet-stream' });
@@ -278,7 +279,7 @@ export class XktCacheService {
         .upload(storagePath, blob, { upsert: true, contentType: 'application/octet-stream', cacheControl: '0' });
 
       if (uploadError) {
-        console.warn('XKT save: Direct storage upload failed', uploadError);
+        logger.warn('XKT save: Direct storage upload failed', uploadError);
         return false;
       }
       
@@ -300,11 +301,11 @@ export class XktCacheService {
         });
       
       if (dbError) {
-        console.warn('XKT save: DB insert failed', dbError);
+        logger.warn('XKT save: DB insert failed', dbError);
         // Still return true since storage upload succeeded
       }
       
-      console.log(`XKT save: Cached ${modelId} successfully`);
+      logger.log(`XKT save: Cached ${modelId} successfully`);
       return true;
     } catch (e) {
       console.error('XKT save: Error', e);
@@ -375,11 +376,11 @@ export class XktCacheService {
 
     const result = await this.checkCache(modelId, buildingFmGuid);
     if (result.cached && result.url) {
-      console.log('XKT cache hit for:', modelId);
+      logger.log('XKT cache hit for:', modelId);
       return result.url;
     }
 
-    console.log('XKT cache miss for:', modelId);
+    logger.log('XKT cache miss for:', modelId);
     return null;
   }
 
@@ -401,7 +402,7 @@ export class XktCacheService {
         .eq('building_fm_guid', buildingFmGuid);
       
       if (dbError) {
-        console.warn('XKT cache invalidation DB error:', dbError);
+        logger.warn('XKT cache invalidation DB error:', dbError);
         return false;
       }
 
@@ -415,10 +416,10 @@ export class XktCacheService {
         await supabase.storage.from('xkt-models').remove(paths);
       }
 
-      console.log(`XKT cache: Invalidated all models for ${buildingFmGuid}`);
+      logger.log(`XKT cache: Invalidated all models for ${buildingFmGuid}`);
       return true;
     } catch (e) {
-      console.warn('XKT cache invalidation error:', e);
+      logger.warn('XKT cache invalidation error:', e);
       return false;
     }
   }
@@ -434,22 +435,22 @@ export class XktCacheService {
         .eq('building_fm_guid', buildingFmGuid);
 
       if (error) {
-        console.warn('XKT cache: Error checking models:', error);
+        logger.warn('XKT cache: Error checking models:', error);
         return { cached: false, count: 0, syncing: false };
       }
 
       if (count && count > 0) {
-        console.log(`XKT cache: ${count} models found for ${buildingFmGuid}`);
+        logger.log(`XKT cache: ${count} models found for ${buildingFmGuid}`);
         return { cached: true, count, syncing: false };
       }
 
       // 2. Don't trigger server-side sync - it won't work due to API restrictions
       // Instead, models will be cached via Cache-on-Load when the viewer loads them
-      console.log(`XKT cache: No models for ${buildingFmGuid} - will cache on first load`);
+      logger.log(`XKT cache: No models for ${buildingFmGuid} - will cache on first load`);
       
       return { cached: false, count: 0, syncing: false };
     } catch (e) {
-      console.warn('XKT ensureBuildingModels error:', e);
+      logger.warn('XKT ensureBuildingModels error:', e);
       return { cached: false, count: 0, syncing: false };
     }
   }

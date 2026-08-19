@@ -20,6 +20,7 @@ import { emit, on, type InsightsColorUpdateDetail } from '@/lib/event-bus';
 import { useXeokitInstance } from '@/hooks/useXeokitInstance';
 import { useModelLoader, type ModelInfo } from '@/hooks/useModelLoader';
 import { useViewerEventListeners } from '@/hooks/useViewerEventListeners';
+import { logger } from '@/lib/logger';
 
 type LoadPhase = 'init' | 'loading_sdk' | 'creating_viewer' | 'syncing' | 'bootstrapping' | 'loading_models' | 'ready' | 'error';
 
@@ -62,7 +63,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     if (!canvas) return;
     const handler = (e: Event) => {
       e.preventDefault();
-      console.warn('[NativeViewer] webglcontextlost — destroying secondary models');
+      logger.warn('[NativeViewer] webglcontextlost — destroying secondary models');
       try {
         const v = (window as any).__nativeXeokitViewer;
         if (v?.scene?.models) {
@@ -153,35 +154,35 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
       const { viewer, xktLoader } = instance;
 
       setPhase('creating_viewer');
-      console.log(`[NativeViewer] SDK + viewer created in ${Math.round(performance.now() - t0)}ms`);
+      logger.log(`[NativeViewer] SDK + viewer created in ${Math.round(performance.now() - t0)}ms`);
 
       // 2. Load models: try cache first, fall back to Geminus Plus if cache is empty
       let models: any[] = [];
       setPhase('syncing');
 
       // Try local cache first (fast path)
-      console.log('[NativeViewer] Checking local cache...');
+      logger.log('[NativeViewer] Checking local cache...');
       const { models: cachedModels } = await fetchModelMetadata();
       if (!mountedRef.current) return;
 
       if (cachedModels && cachedModels.length > 0) {
         // Cache has models — use them
         models = cachedModels;
-        console.log(`[NativeViewer] ✅ Loaded ${models.length} models from cache`);
+        logger.log(`[NativeViewer] ✅ Loaded ${models.length} models from cache`);
       } else if (forceBootstrap) {
         // Cache is empty AND forceBootstrap is set: fetch from Geminus Plus
-        console.log('[NativeViewer] Cache empty — fetching from Geminus Plus');
+        logger.log('[NativeViewer] Cache empty — fetching from Geminus Plus');
         const bootstrapped = await bootstrapFromGeminusPlus();
         if (!mountedRef.current) return;
         models = bootstrapped;
-        console.log(`[NativeViewer] Got ${models.length} models from Geminus Plus`);
+        logger.log(`[NativeViewer] Got ${models.length} models from Geminus Plus`);
       } else {
         // Cache is empty AND forceBootstrap is false: still try Geminus Plus (first visit)
-        console.log('[NativeViewer] Cache empty — trying Geminus Plus (first visit)');
+        logger.log('[NativeViewer] Cache empty — trying Geminus Plus (first visit)');
         const bootstrapped = await bootstrapFromGeminusPlus();
         if (!mountedRef.current) return;
         models = bootstrapped;
-        console.log(`[NativeViewer] Got ${models.length} models from Geminus Plus`);
+        logger.log(`[NativeViewer] Got ${models.length} models from Geminus Plus`);
       }
 
       if (models.length === 0) {
@@ -209,7 +210,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         // Check for empty scene — if A-model loaded but produced 0 entities,
         // force-load secondary models (e.g. RIV) immediately
         if (allIds.length === 0 && secondaryQueue.length > 0) {
-          console.warn(`[NativeViewer] A-model produced 0 entities — loading ${secondaryQueue.length} secondary models as fallback`);
+          logger.warn(`[NativeViewer] A-model produced 0 entities — loading ${secondaryQueue.length} secondary models as fallback`);
           const metadataFileSet = new Set<string>();
           for (const model of secondaryQueue) {
             if (!mountedRef.current) break;
@@ -267,7 +268,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         const userWantsNative = savedTheme === 'none';
 
         if (userWantsNative) {
-          console.log('[NativeViewer] Native colors requested — skipping architect palette');
+          logger.log('[NativeViewer] Native colors requested — skipping architect palette');
           // Clear any colorize overrides that might have been set by a previous
           // session, so objects use their XKT-embedded material colors.
           // Objects that xeokit would show as raw red (no XKT material) get a
@@ -292,21 +293,21 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           // (sample 500 objects, keep native colors if <5% are red) let models with
           // genuinely red XKT materials (roofs, facade strips) through unstyled —
           // so always apply the palette unless the user explicitly chose native.
-          console.log('[NativeViewer] Applying architect colors (default palette)');
-          try { applyArchitectColors(viewer); } catch (e) { console.warn('[NativeViewer] applyArchitectColors failed', e); }
+          logger.log('[NativeViewer] Applying architect colors (default palette)');
+          try { applyArchitectColors(viewer); } catch (e) { logger.warn('[NativeViewer] applyArchitectColors failed', e); }
         }
 
         // Log AABB for diagnostics
         try {
           const aabb = viewer.scene.aabb;
-          console.log(`[NativeViewer] Scene AABB: [${aabb?.map((v: number) => v.toFixed(1)).join(', ')}]`);
+          logger.log(`[NativeViewer] Scene AABB: [${aabb?.map((v: number) => v.toFixed(1)).join(', ')}]`);
         } catch {}
       }
 
       const totalTime = Math.round(performance.now() - t0);
-      console.log(`%c[NativeViewer] 🎉 All ${loaded} models loaded in ${totalTime}ms`, 'color:#22c55e;font-weight:bold;font-size:14px');
+      logger.log(`%c[NativeViewer] 🎉 All ${loaded} models loaded in ${totalTime}ms`, 'color:#22c55e;font-weight:bold;font-size:14px');
       const memStats = getMemoryStats();
-      console.log(`[NativeViewer] Memory: ${memStats.modelCount} models, ${(memStats.usedBytes / 1024 / 1024).toFixed(1)} MB / ${(memStats.maxBytes / 1024 / 1024).toFixed(0)} MB`);
+      logger.log(`[NativeViewer] Memory: ${memStats.modelCount} models, ${(memStats.usedBytes / 1024 / 1024).toFixed(1)} MB / ${(memStats.maxBytes / 1024 / 1024).toFixed(0)} MB`);
 
       if (mountedRef.current) {
         setPhase('ready');
@@ -365,7 +366,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
             if (xktToFm.size > 0) {
               (window as any).__xktIdToFmGuid = xktToFm;
-              console.log(`[NativeViewer] Built XKT→FM GUID name-bridge: ${xktToFm.size} entries`);
+              logger.log(`[NativeViewer] Built XKT→FM GUID name-bridge: ${xktToFm.size} entries`);
             }
           })
           .catch(() => {});

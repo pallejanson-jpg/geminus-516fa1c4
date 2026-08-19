@@ -1,5 +1,6 @@
 import { useRef, useCallback, useEffect } from 'react';
 import { on } from '@/lib/event-bus';
+import { logger } from '@/lib/logger';
 
 interface RoomLabel {
   fmGuid: string;
@@ -563,7 +564,7 @@ export function useRoomLabels(
       createdCount++;
     });
 
-    console.log(`✅ Created ${createdCount} room labels (${filteredCount} filtered by floor)`);
+    logger.log(`✅ Created ${createdCount} room labels (${filteredCount} filtered by floor)`);
 
     // Set up camera change listener with double-rAF throttling for performance
     const scene2 = viewer.scene;
@@ -618,7 +619,7 @@ export function useRoomLabels(
     // Clear occlusion cache
     occlusionCacheRef.current.clear();
 
-    console.log('Room labels destroyed');
+    logger.log('Room labels destroyed');
   }, []);
 
   // Toggle labels on/off with optional floor filtering
@@ -654,7 +655,7 @@ export function useRoomLabels(
   const updateViewMode = useCallback((mode: '2d' | '3d') => {
     if (viewModeRef.current === mode) return;
     
-    console.log(`Room labels: Updating view mode to ${mode}`);
+    logger.log(`Room labels: Updating view mode to ${mode}`);
     viewModeRef.current = mode;
 
     if (mode === '2d') {
@@ -693,7 +694,7 @@ export function useRoomLabels(
   // Listen for config change events
   useEffect(() => {
     const handleConfigChange = (detail: RoomLabelsConfigDetail) => {
-      console.log('Room labels: Config changed', detail);
+      logger.log('Room labels: Config changed', detail);
       updateConfig(detail);
     };
 

@@ -9,6 +9,7 @@ import { useCallback, useRef, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 import { emit } from '@/lib/event-bus';
+import { logger } from '@/lib/logger';
 // Types for color mappings stored in database
 export interface ThemeColorMapping {
   color: string;
@@ -108,7 +109,7 @@ export function useViewerTheme() {
     const scene = xeokitViewer?.scene;
     
     if (!scene) {
-      console.warn('Cannot apply theme: scene not ready');
+      logger.warn('Cannot apply theme: scene not ready');
       return false;
     }
 

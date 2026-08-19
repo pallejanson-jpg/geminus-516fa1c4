@@ -28,6 +28,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { NavigatorNode } from './TreeNode';
 
+import { logger } from '@/lib/logger';
 /**
  * Generate a 128-bit UUID/GUID for fmGuid
  */
@@ -194,7 +195,7 @@ export function AddAssetDialog({ open, onOpenChange, parentNode, onAssetCreated,
           : undefined,
       };
 
-      console.log('Creating asset with payload:', payload);
+      logger.log('Creating asset with payload:', payload);
 
       const { data, error } = await supabase.functions.invoke('geminus-plus-create', {
         body: payload,

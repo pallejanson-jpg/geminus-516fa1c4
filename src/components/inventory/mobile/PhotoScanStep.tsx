@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import type { WizardFormData } from './MobileInventoryWizard';
 
+import { logger } from '@/lib/logger';
 interface PhotoScanStepProps {
   formData: WizardFormData;
   updateFormData: (updates: Partial<WizardFormData>) => void;
@@ -158,7 +159,7 @@ const PhotoScanStep: React.FC<PhotoScanStepProps> = ({
         updateFormData({ imageUrl: publicUrlData.publicUrl });
       }
     } catch (e) {
-      console.warn('[PhotoScanStep] Image upload failed:', e);
+      logger.warn('[PhotoScanStep] Image upload failed:', e);
     }
   };
 

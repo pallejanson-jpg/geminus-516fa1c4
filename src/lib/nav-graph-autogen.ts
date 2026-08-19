@@ -16,6 +16,7 @@ import { getDescendantIds } from '@/hooks/useFloorVisibility';
 import type { FloorInfo } from '@/hooks/useFloorData';
 import type { NavGraph, NavNode, NavEdge } from '@/lib/pathfinding';
 import { getFloorAabb, resolveFloorMetaObjectIds, pctDistanceToMeters, type Aabb6 } from '@/lib/indoor-route-3d';
+import { logger } from '@/lib/logger';
 
 const SPACE_TYPES = new Set(['ifcspace']);
 const DOOR_TYPES = new Set(['ifcdoor', 'ifcdoorstandardcase']);
@@ -329,7 +330,7 @@ export function mergeGeneratedFloor(
   });
 
   if (unverifiedUnitCount > 0) {
-    console.warn(
+    logger.warn(
       `[nav-graph-autogen] mergeGeneratedFloor: merging a freshly auto-generated floor ` +
       `(real-world-meter edge weights) with ${unverifiedUnitCount} pre-existing edge(s) on ` +
       `other floor(s) whose unit could not be verified or converted (most likely percent-of-image ` +

@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import { FLOOR_SELECTION_CHANGED_EVENT, FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { AppContext } from '@/context/AppContext';
+import { logger } from '@/lib/logger';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -493,7 +494,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
       };
       window.dispatchEvent(new CustomEvent(FLOOR_SELECTION_CHANGED_EVENT, { detail: eventDetail }));
     } catch (e) {
-      console.debug('ViewerTreePanel: Error applying visibility:', e);
+      logger.debug('ViewerTreePanel: Error applying visibility:', e);
     }
   }, [getXeokitViewer]);
 
@@ -552,7 +553,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
         xeokitViewer.cameraFlight?.flyTo({ aabb: firstEntity.aabb, duration: 0.5 });
       }
     } catch (e) {
-      console.debug('ViewerTreePanel: select error:', e);
+      logger.debug('ViewerTreePanel: select error:', e);
     }
   }, [getXeokitViewer, onNodeSelect, setSelectedId]);
 

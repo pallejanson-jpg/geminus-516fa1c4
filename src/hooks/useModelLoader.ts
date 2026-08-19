@@ -16,6 +16,7 @@ import { applyArchitectColors } from '@/lib/architect-colors';
 import { isRealTiling, getTilesToLoad } from '@/hooks/useFloorPriorityLoading';
 import { INSIGHTS_COLOR_UPDATE_EVENT, type InsightsColorUpdateDetail } from '@/lib/viewer-events';
 import type { GeometryManifest } from '@/lib/types';
+import { logger } from '@/lib/logger';
 
 export interface ModelInfo {
   model_id: string;
@@ -160,23 +161,23 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
    */
   const bootstrapFromGeminusPlus = useCallback(async (): Promise<ModelCandidate[]> => {
     clearBuildingFromMemory(buildingFmGuid);
-    console.log(`[ModelLoader] bootstrapFromGeminusPlus started for ${buildingFmGuid}`);
+    logger.log(`[ModelLoader] bootstrapFromGeminusPlus started for ${buildingFmGuid}`);
 
     // Fire-and-forget structure sync so building/storey/space names appear in the Navigator.
     // Runs in background — doesn't block XKT loading.
     supabase.functions.invoke('geminus-plus-sync', {
       body: { action: 'sync-structure', buildingFmGuid, force: false },
     }).then(({ error }) => {
-      if (error) console.warn('[ModelLoader] Background sync-structure failed:', error);
+      if (error) logger.warn('[ModelLoader] Background sync-structure failed:', error);
       else {
-        console.log('[ModelLoader] Background sync-structure complete — emitting building-data-changed');
+        logger.log('[ModelLoader] Background sync-structure complete — emitting building-data-changed');
         window.dispatchEvent(new Event('building-data-changed'));
       }
     }).catch(() => {});
 
     // Step 1: Server-side sync with timeout (fail-fast on slow networks)
     try {
-      console.log('[ModelLoader] Trying server-side sync with force=true...');
+      logger.log('[ModelLoader] Trying server-side sync with force=true...');
 
       const { data: syncResult, error: syncError } = await supabase.functions.invoke('geminus-plus-sync', {
         body: { action: 'sync-xkt-building', buildingFmGuid, force: true },
@@ -191,13 +192,13 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       });
 
       if (syncError) {
-        console.warn('[ModelLoader] Server sync error:', syncError);
+        logger.warn('[ModelLoader] Server sync error:', syncError);
         throw syncError;
       }
-      console.log('[ModelLoader] Server sync result:', JSON.stringify(syncResult));
+      logger.log('[ModelLoader] Server sync result:', JSON.stringify(syncResult));
 
       if (syncResult?.synced > 0) {
-        console.log(`[ModelLoader] Server synced ${syncResult.synced} models — reading fresh DB records`);
+        logger.log(`[ModelLoader] Server synced ${syncResult.synced} models — reading fresh DB records`);
         const { data: freshModels } = await supabase
           .from('xkt_models')
           .select('model_id, model_name, storage_path, file_size, storey_fm_guid, synced_at, is_chunk, chunk_order, parent_model_id, source_url')
@@ -205,14 +206,14 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
           .order('file_size', { ascending: true });
         if (freshModels?.length) return freshModels.map((m: any) => ({ ...m, source: 'db' as const }));
       } else {
-        console.log(`[ModelLoader] Server sync returned 0 synced (hint: ${syncResult?.hint || 'none'})`);
+        logger.log(`[ModelLoader] Server sync returned 0 synced (hint: ${syncResult?.hint || 'none'})`);
       }
     } catch (e) {
-      console.warn('[ModelLoader] Server sync failed (timeout or error):', e instanceof Error ? e.message : String(e));
+      logger.warn('[ModelLoader] Server sync failed (timeout or error):', e instanceof Error ? e.message : String(e));
     }
 
     // Step 2: Client-side bootstrap (direct download from Geminus Plus API)
-    console.log('[ModelLoader] Starting client-side bootstrap...');
+    logger.log('[ModelLoader] Starting client-side bootstrap...');
     try {
       const [tokenRes, configRes] = await Promise.all([
         supabase.functions.invoke('geminus-plus-query', { body: { action: 'getToken', buildingFmGuid } }),
@@ -311,7 +312,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
           model.buildingBimObjectId || model.BuildingBimObjectId ||
           matchedRevision?.buildingBimObjectId || matchedRevision?.BuildingBimObjectId || '';
         if (!modelId) {
-          console.warn('[ModelLoader] Skipping model with unresolved modelId:', rawModelName || modelFmGuid || buildingFmGuid);
+          logger.warn('[ModelLoader] Skipping model with unresolved modelId:', rawModelName || modelFmGuid || buildingFmGuid);
           continue;
         }
         
@@ -357,7 +358,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       }
       return bootstrapped;
     } catch (e) {
-      console.warn('[ModelLoader] Client-side bootstrap failed:', e);
+      logger.warn('[ModelLoader] Client-side bootstrap failed:', e);
       return [];
     }
   }, [buildingFmGuid]);
@@ -387,7 +388,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       ? model.source_url.slice('direct-stream:'.length)
       : modelId;
 
-    console.log(`[ModelLoader] 🌐 Direct-stream → ${modelId} (bimObjectId: ${bimObjectId.substring(0, 8)}…)`);
+    logger.log(`[ModelLoader] 🌐 Direct-stream → ${modelId} (bimObjectId: ${bimObjectId.substring(0, 8)}…)`);
 
     try {
       const [tokenRes, configRes] = await Promise.all([
@@ -398,7 +399,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       const apiUrl = configRes.data?.apiUrl;
       const apiKey = configRes.data?.apiKey;
       if (!accessToken || !apiUrl) {
-        console.warn('[ModelLoader] Direct-stream: missing credentials');
+        logger.warn('[ModelLoader] Direct-stream: missing credentials');
         return false;
       }
 
@@ -425,11 +426,11 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         const loaded = viewer.scene?.models?.[modelId];
         const count = loaded?.numEntities ?? Object.keys(loaded?.objects || {}).length ?? 0;
         if (count === 0) { try { loaded?.destroy?.(); } catch {} return false; }
-        console.log(`%c[ModelLoader] 🌐 Asset+ → ${modelId} (${(arrayBuf.byteLength / 1024 / 1024).toFixed(1)} MB, ctx=${ctx}) ${Math.round(performance.now() - modelStart)}ms`, 'color:#f97316;font-weight:bold');
+        logger.log(`%c[ModelLoader] 🌐 Asset+ → ${modelId} (${(arrayBuf.byteLength / 1024 / 1024).toFixed(1)} MB, ctx=${ctx}) ${Math.round(performance.now() - modelStart)}ms`, 'color:#f97316;font-weight:bold');
         return true;
       }
     } catch (e) {
-      console.warn('[ModelLoader] Direct-stream failed:', e);
+      logger.warn('[ModelLoader] Direct-stream failed:', e);
     }
     return false;
   }, [buildingFmGuid]);
@@ -474,7 +475,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         const loaded = viewer.scene?.models?.[modelId];
         const count = loaded?.numEntities ?? Object.keys(loaded?.objects || {}).length ?? 0;
         if (count === 0) { try { loaded?.destroy?.(); } catch {} return false; }
-        console.log(`%c[ModelLoader] ✅ Memory → ${modelId} (${(memData.byteLength / 1024 / 1024).toFixed(1)} MB) ${Math.round(performance.now() - modelStart)}ms`, 'color:#22c55e;font-weight:bold');
+        logger.log(`%c[ModelLoader] ✅ Memory → ${modelId} (${(memData.byteLength / 1024 / 1024).toFixed(1)} MB) ${Math.round(performance.now() - modelStart)}ms`, 'color:#22c55e;font-weight:bold');
         return true;
       }
 
@@ -492,7 +493,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
           const loaded = viewer.scene?.models?.[modelId];
           const count = loaded?.numEntities ?? Object.keys(loaded?.objects || {}).length ?? 0;
           if (count === 0) { try { loaded?.destroy?.(); } catch {} return false; }
-          console.log(`%c[ModelLoader] ⚡ IDB → ${modelId} (${(idbData.byteLength / 1024 / 1024).toFixed(1)} MB) ${Math.round(performance.now() - modelStart)}ms`, 'color:#a855f7;font-weight:bold');
+          logger.log(`%c[ModelLoader] ⚡ IDB → ${modelId} (${(idbData.byteLength / 1024 / 1024).toFixed(1)} MB) ${Math.round(performance.now() - modelStart)}ms`, 'color:#a855f7;font-weight:bold');
           return true;
         }
       }
@@ -532,10 +533,10 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       const loaded2 = viewer.scene?.models?.[modelId];
       const count2 = loaded2?.numEntities ?? Object.keys(loaded2?.objects || {}).length ?? 0;
       if (count2 === 0) { try { loaded2?.destroy?.(); } catch {} return false; }
-      console.log(`%c[ModelLoader] 💾 Storage → ${modelId} (${(arrayBuf.byteLength / 1024 / 1024).toFixed(1)} MB) ${Math.round(performance.now() - modelStart)}ms`, 'color:#3b82f6;font-weight:bold');
+      logger.log(`%c[ModelLoader] 💾 Storage → ${modelId} (${(arrayBuf.byteLength / 1024 / 1024).toFixed(1)} MB) ${Math.round(performance.now() - modelStart)}ms`, 'color:#3b82f6;font-weight:bold');
       return true;
     } catch (e) {
-      console.warn(`[ModelLoader] Error loading ${modelId}:`, e);
+      logger.warn(`[ModelLoader] Error loading ${modelId}:`, e);
       return false;
     }
   }, [buildingFmGuid, loadFromAssetPlus]);
@@ -594,7 +595,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
 
     // Mobile guard: never auto-load engineering models — let user opt in
     if (isMobile && secondaryQueue.length > 0) {
-      console.log(`[ModelLoader] Mobile mode — deferring ${secondaryQueue.length} secondary models (user can load via toolbar)`);
+      logger.log(`[ModelLoader] Mobile mode — deferring ${secondaryQueue.length} secondary models (user can load via toolbar)`);
     }
 
     // Memory guard: estimate combined size and abort secondary auto-promote on overflow
@@ -602,7 +603,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
     const primarySize = loadList.reduce((s, m) => s + (m.file_size ?? 0), 0);
     const secondarySize = secondaryQueue.reduce((s, m) => s + (m.file_size ?? 0), 0);
     if (primarySize + secondarySize > SOFT_LIMIT_BYTES) {
-      console.warn(`[ModelLoader] Memory guard: estimated ${((primarySize+secondarySize)/1024/1024).toFixed(1)}MB exceeds soft limit ${(SOFT_LIMIT_BYTES/1024/1024).toFixed(0)}MB — keeping secondary deferred`);
+      logger.warn(`[ModelLoader] Memory guard: estimated ${((primarySize+secondarySize)/1024/1024).toFixed(1)}MB exceeds soft limit ${(SOFT_LIMIT_BYTES/1024/1024).toFixed(0)}MB — keeping secondary deferred`);
     }
 
     if (loadList.length === 0) return { loaded: 0, secondaryQueue: [], chunkModels, hasRealTiles };

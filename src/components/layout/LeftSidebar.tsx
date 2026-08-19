@@ -7,6 +7,7 @@ import { useSidebarOrder } from '@/hooks/useSidebarOrder';
 import { supabase } from '@/integrations/supabase/client';
 import { SIDEBAR_ITEM_META, getCurrentContext } from '@/lib/sidebar-config';
 
+import { logger } from '@/lib/logger';
 const LeftSidebar: React.FC = () => {
     const { 
         activeApp, 
@@ -55,7 +56,7 @@ const LeftSidebar: React.FC = () => {
                         return;
                     }
                 } catch (e) {
-                    console.debug('Failed to fetch ivion settings for radar:', e);
+                    logger.debug('Failed to fetch ivion settings for radar:', e);
                 }
             }
 

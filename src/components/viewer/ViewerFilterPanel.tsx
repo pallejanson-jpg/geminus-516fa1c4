@@ -21,6 +21,7 @@ import { recolorArchitectObjects } from '@/lib/architect-colors';
 import { VIEWER_THEME_CHANGED_EVENT, VIEWER_THEME_REQUESTED_EVENT } from '@/hooks/useViewerTheme';
 
 import { emit, on } from '@/lib/event-bus';
+import { logger } from '@/lib/logger';
 /** Safe accessor for scene.objectIds – the getter throws if internal maps are null */
 function safeObjectIds(scene: any): string[] {
   try { return scene.objectIds ?? []; } catch { return []; }
@@ -768,7 +769,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     nonASpaceIdsRef.current = nonASpaceIds;
 
     if (xeokitStoreys.length === 0) {
-      console.warn('[FilterPanel] No IfcBuildingStorey found in metaScene');
+      logger.warn('[FilterPanel] No IfcBuildingStorey found in metaScene');
       // Still save the typeIndex even if no storeys
       entityMapRef.current = map;
       entityMapBuilt.current = true;
@@ -900,7 +901,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
     entityMapRef.current = map;
     entityMapBuilt.current = true;
     setEntityMapVersion(v => v + 1);
-    console.log('[FilterPanel] Entity map built:', map.size, 'entries.',
+    logger.log('[FilterPanel] Entity map built:', map.size, 'entries.',
       'Levels matched:', levels.filter(l => map.has(l.fmGuid)).length, '/', levels.length,
       'Spaces matched:', allAssetSpaces.filter((s: any) => map.has(s.fmGuid || s.fm_guid)).length, '/', allAssetSpaces.length,
       'Type index:', tIdx.size, 'types',
@@ -1155,13 +1156,13 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       requestedModelIds.forEach(modelId => {
         const normalizedModelId = modelId.replace(/\.xkt$/i, '');
         if (!sceneModels2[normalizedModelId] && !sceneModels2[`${normalizedModelId}.xkt`]) {
-          console.log(`[FilterPanel] Requesting deferred load for model: ${normalizedModelId}`);
+          logger.log(`[FilterPanel] Requesting deferred load for model: ${normalizedModelId}`);
           emit('MODEL_LOAD_REQUESTED', { modelId: normalizedModelId });
         }
       });
       
       if (sourceIds.size === 0) {
-        console.warn('[FilterPanel] Source filter produced 0 IDs — falling back to all objects');
+        logger.warn('[FilterPanel] Source filter produced 0 IDs — falling back to all objects');
         sourceIds = null;
       }
     } else {
@@ -1627,7 +1628,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
         skipClipping: visibleFmGuids.length !== 1,
       } as FloorSelectionEventDetail);
 
-    console.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', safeObjectIds(scene).length, 'delta: show', toShow.length, 'hide', toHide.length);
+    logger.debug('[FilterPanel] Applied filter. solidIds:', solidIds.size, '/', safeObjectIds(scene).length, 'delta: show', toShow.length, 'hide', toHide.length);
 
     // Re-apply active theme after filter to prevent "native colors flash"
     // But skip if color filter is active — it takes precedence

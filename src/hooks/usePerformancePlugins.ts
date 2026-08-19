@@ -9,6 +9,7 @@
  * to the initial bundle.
  */
 import { useEffect, useRef } from 'react';
+import { logger } from '@/lib/logger';
 
 const XEOKIT_CDN = '/lib/xeokit/xeokit-sdk.es.js';
 
@@ -42,7 +43,7 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
     const install = async () => {
       const xeokitViewer = getXeokitViewer();
       if (!xeokitViewer?.scene) {
-        console.debug('[perf-plugins] No xeokit viewer available');
+        logger.debug('[perf-plugins] No xeokit viewer available');
         return;
       }
 
@@ -58,17 +59,17 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
 
         // 1. FastNavPlugin — SKIPPED: already installed by NativeXeokitViewer
         // Avoid double installation which wastes resources
-        console.log('[perf-plugins] FastNavPlugin skipped (handled by NativeXeokitViewer)');
+        logger.log('[perf-plugins] FastNavPlugin skipped (handled by NativeXeokitViewer)');
 
         // 2. ViewCullPlugin (frustum culling)
         if (sdk.ViewCullPlugin && !pluginsRef.current.viewCull) {
           pluginsRef.current.viewCull = new sdk.ViewCullPlugin(xeokitViewer, {
             maxTreeDepth: 20,
           });
-          console.log('[perf-plugins] ViewCullPlugin installed');
+          logger.log('[perf-plugins] ViewCullPlugin installed');
         }
       } catch (e) {
-        console.warn('[perf-plugins] Could not load xeokit SDK plugins:', e);
+        logger.warn('[perf-plugins] Could not load xeokit SDK plugins:', e);
       }
 
       // 3. SAO (Scalable Ambient Obscurance) — soft contact shadows
@@ -87,13 +88,13 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
           sao.numSamples = 32;
           sao.blendFactor = 1.0;
           sao.blur = true;
-          console.log('[perf-plugins] SAO enabled (desktop)', { objectCount: sceneObjectCount });
+          logger.log('[perf-plugins] SAO enabled (desktop)', { objectCount: sceneObjectCount });
         } else if (sao) {
           sao.enabled = false;
-          console.log('[perf-plugins] SAO disabled (mobile/heavy scene)', { objectCount: sceneObjectCount });
+          logger.log('[perf-plugins] SAO disabled (mobile/heavy scene)', { objectCount: sceneObjectCount });
         }
       } catch (e) {
-        console.debug('[perf-plugins] SAO setup error:', e);
+        logger.debug('[perf-plugins] SAO setup error:', e);
       }
 
       // 3. LOD distance culling — hide small entities when camera is far
@@ -143,9 +144,9 @@ export function usePerformancePlugins({ viewerRef, ready, isMobile }: UsePerform
           };
           // Run LOD cull less frequently (every 1s instead of 500ms)
           pluginsRef.current.lodInterval = setInterval(runLodCull, 1000);
-          console.log('[perf-plugins] LOD distance culling started (batched)', { objectCount });
+          logger.log('[perf-plugins] LOD distance culling started (batched)', { objectCount });
         } else {
-          console.log('[perf-plugins] LOD culling skipped — too many objects:', objectCount);
+          logger.log('[perf-plugins] LOD culling skipped — too many objects:', objectCount);
         }
       }
     };

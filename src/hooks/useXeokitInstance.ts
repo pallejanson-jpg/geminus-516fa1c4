@@ -7,6 +7,7 @@
 
 import { useEffect, useRef, useCallback } from 'react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { logger } from '@/lib/logger';
 
 const XEOKIT_CDN = '/lib/xeokit/xeokit-sdk.es.js';
 
@@ -210,7 +211,7 @@ export function useXeokitInstance({ canvasRef, buildingFmGuid, onContextLost }: 
   const destroy = useCallback(() => {
     if (viewerRef.current) {
       try { viewerRef.current.destroy(); } catch (e) {
-        console.debug('[useXeokitInstance] Viewer destroy error:', e);
+        logger.debug('[useXeokitInstance] Viewer destroy error:', e);
       }
       viewerRef.current = null;
       (window as any).__nativeXeokitViewer = null;

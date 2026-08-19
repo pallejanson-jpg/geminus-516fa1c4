@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 
 export type GeminusPlusFilter = any[];
 
@@ -355,7 +356,7 @@ export async function syncAssetToGeminusPlus(assetFmGuid: string): Promise<{ suc
     .eq("fm_guid", assetFmGuid);
 
   if (updateError) {
-    console.warn("Failed to update local sync status:", updateError);
+    logger.warn("Failed to update local sync status:", updateError);
     // Don't fail - the sync to Geminus Plus succeeded
   }
 
@@ -437,11 +438,11 @@ export async function syncBuildingAssetsIfNeeded(buildingFmGuid: string): Promis
   }
 
   if (count && count > 0) {
-    console.log(`Building ${buildingFmGuid} already has ${count} assets`);
+    logger.log(`Building ${buildingFmGuid} already has ${count} assets`);
     return { synced: false, count };
   }
 
-  console.log(`Building ${buildingFmGuid} has no assets, triggering sync...`);
+  logger.log(`Building ${buildingFmGuid} has no assets, triggering sync...`);
 
   // Trigger sync for this building
   const { data, error } = await supabase.functions.invoke("geminus-plus-sync", {
@@ -482,7 +483,7 @@ export async function ensureBuildingAssets(
   }
 
   // 2. Trigger background sync
-  console.log(`No assets for ${buildingFmGuid}, triggering sync...`);
+  logger.log(`No assets for ${buildingFmGuid}, triggering sync...`);
   
   const syncPromise = supabase.functions.invoke("geminus-plus-sync", {
     body: { action: "sync-single-building", buildingFmGuid }
@@ -499,13 +500,13 @@ export async function ensureBuildingAssets(
         .eq("category", "Instance");
       return { hasAssets: (newCount || 0) > 0, count: newCount || 0, syncing: false };
     } catch (e) {
-      console.warn("Asset sync failed:", e);
+      logger.warn("Asset sync failed:", e);
       return { hasAssets: false, count: 0, syncing: false };
     }
   }
 
   // Fire-and-forget background sync
-  syncPromise.catch(e => console.warn("Background asset sync failed:", e));
+  syncPromise.catch(e => logger.warn("Background asset sync failed:", e));
 
   return { hasAssets: false, count: 0, syncing: true };
 }

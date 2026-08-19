@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 import { useLanguage } from '@/context/LanguageContext';
 
+import { logger } from '@/lib/logger';
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -126,7 +127,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
       if (proxyError) {
         console.error('SWG proxy error:', proxyError);
       } else {
-        console.log('SWG create-request response:', proxyResult);
+        logger.log('SWG create-request response:', proxyResult);
       }
 
       // Also save local backup
@@ -147,7 +148,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
         desired_date: desiredDate ? desiredDate.toISOString() : null,
         external_reference: proxyResult?.data?.id ? String(proxyResult.data.id) : null,
       }).then(({ error }) => {
-        if (error) console.warn('Local backup save failed:', error);
+        if (error) logger.warn('Local backup save failed:', error);
       });
 
       toast({ title: 'Case created' });

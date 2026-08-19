@@ -8,6 +8,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { cn } from "@/lib/utils";
 import { toast } from 'sonner';
 
+import { logger } from '@/lib/logger';
 const VOICE_SETTINGS_KEY = 'voice-control-settings';
 
 export interface VoiceSettingsData {
@@ -38,7 +39,7 @@ export function getVoiceSettings(): VoiceSettingsData {
       return { ...DEFAULT_VOICE_SETTINGS, ...parsed };
     }
   } catch (e) {
-    console.debug("Failed to load voice settings:", e);
+    logger.debug("Failed to load voice settings:", e);
   }
   return DEFAULT_VOICE_SETTINGS;
 }
@@ -48,7 +49,7 @@ export function saveVoiceSettings(settings: VoiceSettingsData): void {
     localStorage.setItem(VOICE_SETTINGS_KEY, JSON.stringify(settings));
     window.dispatchEvent(new CustomEvent(VOICE_SETTINGS_CHANGED_EVENT, { detail: settings }));
   } catch (e) {
-    console.debug("Failed to save voice settings:", e);
+    logger.debug("Failed to save voice settings:", e);
   }
 }
 

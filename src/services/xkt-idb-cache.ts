@@ -17,6 +17,8 @@
  *   Explicit eviction only if StorageManager reports < MIN_FREE_BYTES left.
  */
 
+import { logger } from '@/lib/logger';
+
 const DB_NAME = 'geminus-xkt-cache';
 const DB_VERSION = 1;
 const MODELS_STORE = 'models';
@@ -92,7 +94,7 @@ class XktIdbCache {
       });
     } catch (e) {
       this.available = false;
-      console.warn('[IDB Cache] get failed:', e);
+      logger.warn('[IDB Cache] get failed:', e);
       return null;
     }
   }
@@ -123,9 +125,9 @@ class XktIdbCache {
           this.req(tx.objectStore(META_STORE).put(meta)),
         ]);
       });
-      console.log(`[IDB Cache] 💾 Stored ${modelId} (${(data.byteLength / 1024 / 1024).toFixed(1)} MB)`);
+      logger.log(`[IDB Cache] 💾 Stored ${modelId} (${(data.byteLength / 1024 / 1024).toFixed(1)} MB)`);
     } catch (e) {
-      console.warn('[IDB Cache] put failed:', e);
+      logger.warn('[IDB Cache] put failed:', e);
     }
   }
 
@@ -168,9 +170,9 @@ class XktIdbCache {
           this.req(tx.objectStore(META_STORE).delete(m.key)),
         ]));
       });
-      console.log(`[IDB Cache] Cleared ${metas.length} entries for building ${buildingFmGuid.substring(0, 8)}…`);
+      logger.log(`[IDB Cache] Cleared ${metas.length} entries for building ${buildingFmGuid.substring(0, 8)}…`);
     } catch (e) {
-      console.warn('[IDB Cache] clearBuilding failed:', e);
+      logger.warn('[IDB Cache] clearBuilding failed:', e);
     }
   }
 
@@ -184,7 +186,7 @@ class XktIdbCache {
           this.req(tx.objectStore(META_STORE).clear()),
         ]);
       });
-      console.log('[IDB Cache] Cleared all entries');
+      logger.log('[IDB Cache] Cleared all entries');
     } catch {}
   }
 
@@ -224,7 +226,7 @@ class XktIdbCache {
           this.req(tx.objectStore(META_STORE).delete(m.key)),
         ]));
       });
-      console.warn(`[IDB Cache] Quota low — evicted ${toDelete.length} old entries (freed ~${(freed / 1024 / 1024).toFixed(1)} MB)`);
+      logger.warn(`[IDB Cache] Quota low — evicted ${toDelete.length} old entries (freed ~${(freed / 1024 / 1024).toFixed(1)} MB)`);
     } catch {}
   }
 }

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from "react";
 import { Box } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { logger } from '@/lib/logger';
 
 interface XrayToggleProps {
   viewerRef: React.MutableRefObject<any>;
@@ -28,7 +29,7 @@ const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef, initialEnabled = fal
     setXrayEnabled(enabled);
     const xeokitViewer = viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
     if (!xeokitViewer?.scene) {
-      console.warn('[XrayToggle] Viewer not available');
+      logger.warn('[XrayToggle] Viewer not available');
       return;
     }
 
@@ -74,7 +75,7 @@ const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef, initialEnabled = fal
       };
       requestAnimationFrame(processBatch);
 
-      console.log('[XrayToggle] xray ON, protected viz entities:', vizGuids?.size ?? 0, 'xraying:', idsToXray.length);
+      logger.log('[XrayToggle] xray ON, protected viz entities:', vizGuids?.size ?? 0, 'xraying:', idsToXray.length);
     } else {
       // Batched OFF processing
       let i = 0;
@@ -93,7 +94,7 @@ const XrayToggle: React.FC<XrayToggleProps> = ({ viewerRef, initialEnabled = fal
       };
       requestAnimationFrame(processBatchOff);
 
-      console.log('[XrayToggle] xray OFF');
+      logger.log('[XrayToggle] xray OFF');
     }
   }, [viewerRef]);
 

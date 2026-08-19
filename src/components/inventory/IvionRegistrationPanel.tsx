@@ -18,6 +18,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
 import { INVENTORY_CATEGORIES } from './InventoryForm';
 
+import { logger } from '@/lib/logger';
 interface AnnotationSymbol {
   id: string;
   name: string;
@@ -191,11 +192,11 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
          });
       } else if (data?.error) {
         // Show error but don't block the form
-        console.warn('POI fetch warning:', data.error);
+        logger.warn('POI fetch warning:', data.error);
       }
     } catch (err) {
       // Silent fail - auto-fetch is a bonus feature
-      console.log('Auto-fetch POI failed:', err);
+      logger.log('Auto-fetch POI failed:', err);
     } finally {
       setIsFetchingPoi(false);
     }
@@ -438,9 +439,9 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
               },
             },
           });
-          console.log('FMGUID written back to Ivion POI:', fetchedPoiId);
+          logger.log('FMGUID written back to Ivion POI:', fetchedPoiId);
         } catch (ivionErr) {
-          console.warn('Failed to write FMGUID back to Ivion (non-critical):', ivionErr);
+          logger.warn('Failed to write FMGUID back to Ivion (non-critical):', ivionErr);
           // Don't throw - asset is saved, Ivion update is optional
         }
       }

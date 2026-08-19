@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 
 /**
  * Geminus Base (Tessel HDC) service layer.
@@ -230,7 +231,7 @@ export async function ensureGeminusBaseHierarchy(buildingFmGuid: string): Promis
       levelFmGuid: r.level_fm_guid || undefined,
     }));
 
-    console.log(`[Geminus Base] ensureGeminusBaseHierarchy: ${buildingName}, ${levels.length} levels, ${rooms.length} rooms`);
+    logger.log(`[Geminus Base] ensureGeminusBaseHierarchy: ${buildingName}, ${levels.length} levels, ${rooms.length} rooms`);
 
     // 4. Call ensure-hierarchy action
     const { data, error } = await supabase.functions.invoke("geminus-base-query", {

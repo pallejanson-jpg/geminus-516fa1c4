@@ -16,6 +16,7 @@
  */
 
 import { useCallback, useRef } from 'react';
+import { logger } from '@/lib/logger';
 
 interface StoreyChunk {
   modelId: string;
@@ -135,7 +136,7 @@ export function applyFloorPriorityVisibility(options: FloorVisibilityOptions): v
     }
   });
 
-  console.log(`[FloorPriority] Floor ${floorFmGuid}: ${shownCount} shown, ${hiddenCount} xrayed`);
+  logger.log(`[FloorPriority] Floor ${floorFmGuid}: ${shownCount} shown, ${hiddenCount} xrayed`);
 }
 
 /**
@@ -156,7 +157,7 @@ export function useFloorPriorityLoading() {
 
     // For real tiles, dynamic loading is handled by the viewer
     if (isRealTiling(chunksRef.current)) {
-      console.log(`[FloorPriority] Real tiling active — floor switch to ${floorFmGuid} handled by viewer`);
+      logger.log(`[FloorPriority] Real tiling active — floor switch to ${floorFmGuid} handled by viewer`);
       window.dispatchEvent(new CustomEvent('FLOOR_TILE_SWITCH', { 
         detail: { floorFmGuid, tiles: getTilesToLoad(chunksRef.current, floorFmGuid) }
       }));

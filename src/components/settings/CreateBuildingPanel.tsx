@@ -24,6 +24,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { useLanguage } from '@/context/LanguageContext';
 import { useTenant } from '@/context/TenantContext';
 
+import { logger } from '@/lib/logger';
 interface CreatedBuilding {
   complexFmGuid: string;
   buildingFmGuid: string;
@@ -179,7 +180,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
             error_message: 'Auto-reset: stale job detected (no progress for 3+ minutes)',
             updated_at: new Date().toISOString(),
           }).eq('id', job.id);
-          console.warn(`Auto-reset stale conversion job: ${job.id} (${job.model_name})`);
+          logger.warn(`Auto-reset stale conversion job: ${job.id} (${job.model_name})`);
         }
       }
     })();
@@ -518,7 +519,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
               }
             });
             if (retryErr) {
-              console.warn('Metadata-only hierarchy fallback failed:', retryErr);
+              logger.warn('Metadata-only hierarchy fallback failed:', retryErr);
               addLog('⚠️ Metadata fallback also failed — hierarchy will be populated after browser conversion');
             } else {
               const levels = retryData?.levelsCreated ?? 0;
@@ -527,10 +528,10 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
               addLog(`✅ Hierarchy populated (metadata fallback): ${levels} levels, ${spaces} spaces, ${instances} instances`);
             }
           } catch (retryE) {
-            console.warn('Metadata fallback retry failed:', retryE);
+            logger.warn('Metadata fallback retry failed:', retryE);
           }
         } else if (error) {
-          console.warn('Immediate hierarchy population failed:', error);
+          logger.warn('Immediate hierarchy population failed:', error);
           addLog('⚠️ Hierarchy pre-population failed (browser conversion will handle it)');
         } else {
           const levels = data?.levelsCreated ?? 0;
@@ -539,7 +540,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           addLog(`✅ Hierarchy populated: ${levels} levels, ${spaces} spaces, ${instances} instances`);
         }
       }).catch(e => {
-        console.warn('Immediate hierarchy population failed:', e);
+        logger.warn('Immediate hierarchy population failed:', e);
       });
 
       activeJobIdRef.current = jobId;

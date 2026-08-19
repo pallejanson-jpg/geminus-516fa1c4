@@ -3,6 +3,8 @@
  * Used at load time and after reset/show-all to maintain consistent coloring.
  */
 
+import { logger } from '@/lib/logger';
+
 export const IFC_TYPE_COLORS: Record<string, number[]> = {
   'ifcwall': [0.686, 0.667, 0.529],
   'ifcwallstandardcase': [0.761, 0.745, 0.635],
@@ -79,13 +81,13 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
   // The order matters: disable colorized → set colorize → enable colorized
   if (allIds.length > 0) {
     try {
-      console.log(`[applyArchitectColors] Batch-resetting colorize for ${allIds.length} entities...`);
+      logger.log(`[applyArchitectColors] Batch-resetting colorize for ${allIds.length} entities...`);
       scene.setObjectsColorized(allIds, null);  // null resets colorize to material default (API takes RGB array or null, NOT boolean)
       scene.setObjectsVisible(allIds, true);
       scene.setObjectsOpacity(allIds, 1);
-      console.log(`[applyArchitectColors] ✓ Batch baseline complete`);
+      logger.log(`[applyArchitectColors] ✓ Batch baseline complete`);
     } catch (e) {
-      console.warn('[applyArchitectColors] Error in batch operations:', e);
+      logger.warn('[applyArchitectColors] Error in batch operations:', e);
     }
   }
 
@@ -118,7 +120,7 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
     }
   }
 
-  console.log(`[applyArchitectColors] Phase 1: colorized ${colorized} objects from metaScene`);
+  logger.log(`[applyArchitectColors] Phase 1: colorized ${colorized} objects from metaScene`);
 
   // Phase 2: Apply DEFAULT_COLOR to any remaining scene objects without metaObject entries
   // This prevents raw red/uncolored objects from showing
@@ -136,7 +138,7 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
     colorized++;
   }
   const phase2Count = colorized - phase2Start;
-  console.log(`[applyArchitectColors] Phase 2: colorized ${phase2Count} remaining objects (total now: ${colorized})`);
+  logger.log(`[applyArchitectColors] Phase 2: colorized ${phase2Count} remaining objects (total now: ${colorized})`);
 
   // NOTE: scene.setObjectsColorized(ids, colorize) takes an RGB ARRAY, not a boolean.
   // Each entity.colorize assignment above already applies the color — no batch flag needed.
@@ -154,7 +156,7 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
   // CRITICAL: Force scene re-render after all color assignments
   // This ensures xeokit actually applies the color changes to the GPU
   try {
-    console.log('[applyArchitectColors] Forcing scene update...');
+    logger.log('[applyArchitectColors] Forcing scene update...');
     // Force scene render by triggering a camera update (minimal change)
     if (scene.camera) {
       const cam = scene.camera;
@@ -165,14 +167,14 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
       scene.renderer.reset?.();
     }
   } catch (e) {
-    console.warn('[applyArchitectColors] Error forcing scene update:', e);
+    logger.warn('[applyArchitectColors] Error forcing scene update:', e);
   }
 
   // Safety fallback: if ALL visible entities were hidden (e.g. model only has IfcSpace),
   // make spaces visible so the user sees something instead of an empty viewport
   const totalEntities = allIds.length;
   if (hiddenSpaces > 0 && colorized === 0 && hiddenSpaces >= totalEntities) {
-    console.warn('[ArchitectColors] All entities are IfcSpace — making spaces visible as fallback');
+    logger.warn('[ArchitectColors] All entities are IfcSpace — making spaces visible as fallback');
     if (metaScene?.metaObjects) {
       for (const [id, metaObj] of Object.entries(metaScene.metaObjects as Record<string, any>)) {
         const ifcType = ((metaObj as any).type || '').toLowerCase();

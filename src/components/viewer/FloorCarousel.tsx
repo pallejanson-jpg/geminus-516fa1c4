@@ -11,6 +11,7 @@ import {
   CarouselNext,
 } from '@/components/ui/carousel';
 import { emit, on, type FloorSelectionEventDetail } from '@/lib/event-bus';
+import { logger } from '@/lib/logger';
 
 export interface FloorInfo {
   id: string;
@@ -227,7 +228,7 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
 
       return thumbnailCanvas.toDataURL('image/png');
     } catch (e) {
-      console.debug('Could not generate thumbnail for floor:', floor.name, e);
+      logger.debug('Could not generate thumbnail for floor:', floor.name, e);
       return undefined;
     }
   }, [getXeokitViewer, getAssetView]);

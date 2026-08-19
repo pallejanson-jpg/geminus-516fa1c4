@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { generateMockSensorData } from '@/lib/visualization-utils';
+import { logger } from '@/lib/logger';
 
 export interface GeminusPremiumTimePoint {
   date: string; // ISO date string e.g. "2026-02-11"
@@ -206,7 +207,7 @@ export function useGeminusPremiumData(fmGuid: string | null | undefined) {
         if (abortController.signal.aborted) return;
 
         if (fnError || !result?.success) {
-          console.warn('[useGeminusPremiumData] No machine found for', fmGuid, fnError || result?.error);
+          logger.warn('[useGeminusPremiumData] No machine found for', fmGuid, fnError || result?.error);
           // Fallback: try to get a site/line dashboard URL
           let siteDashboardUrl = '';
           try {
@@ -217,7 +218,7 @@ export function useGeminusPremiumData(fmGuid: string | null | undefined) {
               siteDashboardUrl = urlData.data.dashboardUrl;
             }
           } catch (e) {
-            console.debug('[useGeminusPremiumData] Dashboard URL fallback failed:', e);
+            logger.debug('[useGeminusPremiumData] Dashboard URL fallback failed:', e);
           }
           if (abortController.signal.aborted) return;
           const mockTs = generateMockTimeSeries(fmGuid);
@@ -238,7 +239,7 @@ export function useGeminusPremiumData(fmGuid: string | null | undefined) {
           let timeSeries = parseTimeSeries(esData);
           if (timeSeries.length === 0 && Array.isArray(machineData) && machineData.length > 0) {
             timeSeries = parseMachineData(machineData);
-            console.log('[useGeminusPremiumData] Parsed machineData rows:', timeSeries.length);
+            logger.log('[useGeminusPremiumData] Parsed machineData rows:', timeSeries.length);
           }
 
           const availableFields = detectAvailableFields(timeSeries, properties);

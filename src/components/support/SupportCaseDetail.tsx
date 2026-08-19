@@ -14,6 +14,7 @@ import { toast } from '@/hooks/use-toast';
 import { formatDistanceToNow, format } from 'date-fns';
 import type { SupportCase } from './SupportCaseList';
 
+import { logger } from '@/lib/logger';
 interface CaseComment {
   id: string;
   user_id: string;
@@ -58,7 +59,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
         body: { action: 'get-request', requestId },
       });
       if (error) throw error;
-      console.log('SWG get-request response:', data);
+      logger.log('SWG get-request response:', data);
       
       const detail = data?.data;
       if (detail && typeof detail === 'object') {

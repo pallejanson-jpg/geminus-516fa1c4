@@ -56,6 +56,7 @@ import { toast } from 'sonner';
 import MobileViewerPage from '@/components/viewer/mobile/MobileViewerPage';
 
 import { emit, on } from '@/lib/event-bus';
+import { logger } from '@/lib/logger';
 export type ViewMode = '2d' | '3d' | 'split' | 'split2d3d' | 'vt' | '360';
 
 interface UnifiedViewerProps {
@@ -343,12 +344,12 @@ const UnifiedViewerContent: React.FC<{
       const api = ivApiRef.current as any;
       if (api?.camera?.setHeading) {
         api.camera.setHeading(heading);
-        console.log('[UnifiedViewer] Applied Street View heading to Ivion:', heading);
+        logger.log('[UnifiedViewer] Applied Street View heading to Ivion:', heading);
       } else if (api?.resolveMoveTo) {
         api.resolveMoveTo({ heading });
       }
     } catch (e) {
-      console.warn('[UnifiedViewer] Could not apply Street View heading:', e);
+      logger.warn('[UnifiedViewer] Could not apply Street View heading:', e);
     }
   }, [sdkStatus, viewMode]);
 

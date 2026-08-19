@@ -28,6 +28,7 @@ import {
 import { useXktPreload } from '@/hooks/useXktPreload';
 import { useAllBuildingSettings } from '@/hooks/useAllBuildingSettings';
 
+import { logger } from '@/lib/logger';
 interface ComplexGroup {
   complexName: string;
   facilities: Facility[];
@@ -187,7 +188,7 @@ const PortfolioView: React.FC = () => {
       setActiveApp(returnApp);
     }
   };
-  const handleEdit = (facility: Facility) => console.log('Edit:', facility);
+  const handleEdit = (facility: Facility) => logger.log('Edit:', facility);
   const handleOpenMap = () => setActiveApp('map');
   const handleOpenNavigator = (facility: Facility) => setActiveApp('navigation');
   const handleOpen360 = (siteId?: string) => {
@@ -205,7 +206,7 @@ const PortfolioView: React.FC = () => {
       // FIX: Use /?site= query parameter format instead of /site/
       const fullUrl = `${baseUrl}/?site=${siteId}`;
       
-      console.log('[360+] Opening Ivion:', { siteId, openMode: ivionConfig.openMode, baseUrl, fullUrl });
+      logger.log('[360+] Opening Ivion:', { siteId, openMode: ivionConfig.openMode, baseUrl, fullUrl });
       
       if (ivionConfig.openMode === 'internal') {
         // Use context-aware 360 viewer with building information
@@ -245,7 +246,7 @@ const PortfolioView: React.FC = () => {
     // If no URL in attributes, try to fetch from Geminus Premium API using FM GUID
     if (!dashboardUrl && facility.fmGuid) {
       try {
-        console.log('[IoT] Fetching dashboard URL from Geminus Premium for:', facility.fmGuid);
+        logger.log('[IoT] Fetching dashboard URL from Geminus Premium for:', facility.fmGuid);
         const { supabase } = await import('@/integrations/supabase/client');
         const { data, error } = await supabase.functions.invoke('geminus-premium-query', {
           body: { action: 'get-dashboard-url', fmGuid: facility.fmGuid }
@@ -253,14 +254,14 @@ const PortfolioView: React.FC = () => {
 
         if (!error && data?.success && data?.data?.dashboardUrl) {
           dashboardUrl = data.data.dashboardUrl;
-          console.log('[IoT] Found dashboard URL via API:', dashboardUrl);
+          logger.log('[IoT] Found dashboard URL via API:', dashboardUrl);
         } else if (error) {
           fetchFailed = true;
-          console.log('[IoT] Failed to fetch dashboard URL from Geminus Premium:', error);
+          logger.log('[IoT] Failed to fetch dashboard URL from Geminus Premium:', error);
         }
       } catch (err) {
         fetchFailed = true;
-        console.log('[IoT] Failed to fetch dashboard URL from Geminus Premium:', err);
+        logger.log('[IoT] Failed to fetch dashboard URL from Geminus Premium:', err);
       }
     }
 
@@ -286,7 +287,7 @@ const PortfolioView: React.FC = () => {
       });
     } else {
       // No dashboard URL found - show info
-      console.log('No IoT dashboard URL found for:', facility.commonName || facility.name);
+      logger.log('No IoT dashboard URL found for:', facility.commonName || facility.name);
       const { toast } = await import('sonner');
       toast.info('No IoT dashboard', {
         description: 'This object has no linked sensor dashboard in Geminus Plus or Geminus Premium.'

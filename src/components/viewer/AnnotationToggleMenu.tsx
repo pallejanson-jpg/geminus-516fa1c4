@@ -14,6 +14,7 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { AppContext } from '@/context/AppContext';
+import { logger } from '@/lib/logger';
 
 interface AnnotationCategory {
   category: string;
@@ -114,7 +115,7 @@ const AnnotationToggleMenu: React.FC<AnnotationToggleMenuProps> = ({
             });
           }
         } catch (e) {
-          console.debug('Could not toggle annotations:', e);
+          logger.debug('Could not toggle annotations:', e);
         }
         
         return { ...c, visible: newVisible };
@@ -141,7 +142,7 @@ const AnnotationToggleMenu: React.FC<AnnotationToggleMenuProps> = ({
         });
       }
     } catch (e) {
-      console.debug('Could not toggle all annotations:', e);
+      logger.debug('Could not toggle all annotations:', e);
     }
   }, [allVisible, viewerRef]);
 

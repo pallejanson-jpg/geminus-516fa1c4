@@ -1,4 +1,5 @@
 import { useRef, useCallback, useEffect } from 'react';
+import { logger } from '@/lib/logger';
 
 // Cached SectionPlane constructor extracted from the bundled xeokit UMD
 let cachedSectionPlaneClass: any = null;
@@ -58,7 +59,7 @@ export interface ClipHeight3DEventDetail {
  */
 export function diagnoseXeokitScene(viewer: any) {
   if (!viewer?.scene) {
-    console.warn('[SectionPlane Diag] No scene available');
+    logger.warn('[SectionPlane Diag] No scene available');
     return;
   }
   const scene = viewer.scene;
@@ -70,20 +71,20 @@ export function diagnoseXeokitScene(viewer: any) {
     if (c?.constructor?.name) typeSet.add(c.constructor.name);
     if (c?.type) typeSet.add(`type:${c.type}`);
   });
-  console.log('[SectionPlane Diag] Scene component types:', [...typeSet]);
-  console.log('[SectionPlane Diag] scene.sectionPlanes:', Object.keys(scene.sectionPlanes || {}));
-  console.log('[SectionPlane Diag] scene._sectionPlanesState:', !!scene._sectionPlanesState);
+  logger.log('[SectionPlane Diag] Scene component types:', [...typeSet]);
+  logger.log('[SectionPlane Diag] scene.sectionPlanes:', Object.keys(scene.sectionPlanes || {}));
+  logger.log('[SectionPlane Diag] scene._sectionPlanesState:', !!scene._sectionPlanesState);
   
   // Check for SectionPlane class on scene prototype chain
-  console.log('[SectionPlane Diag] scene.SectionPlane:', !!scene.SectionPlane);
+  logger.log('[SectionPlane Diag] scene.SectionPlane:', !!scene.SectionPlane);
   
   // Check viewer plugins
   const plugins = viewer.plugins || {};
-  console.log('[SectionPlane Diag] Viewer plugins:', Object.keys(plugins));
+  logger.log('[SectionPlane Diag] Viewer plugins:', Object.keys(plugins));
   
   // Try to find SectionPlane constructor from existing components
   const spClass = extractSectionPlaneClass(viewer);
-  console.log('[SectionPlane Diag] Extracted SectionPlane class:', !!spClass, spClass?.name || 'unknown');
+  logger.log('[SectionPlane Diag] Extracted SectionPlane class:', !!spClass, spClass?.name || 'unknown');
 }
 
 /**
@@ -101,7 +102,7 @@ function extractSectionPlaneClass(viewer: any): any {
   const globalClass = (window as any).__xeokitSectionPlaneClass || (window as any).xeokit?.SectionPlane || (window as any).SectionPlane;
   if (globalClass) {
     cachedSectionPlaneClass = globalClass;
-    console.log('[SectionPlane] Found class globally');
+    logger.log('[SectionPlane] Found class globally');
     return globalClass;
   }
 
@@ -110,7 +111,7 @@ function extractSectionPlaneClass(viewer: any): any {
   for (const plane of Object.values(existingPlanes)) {
     if ((plane as any)?.constructor) {
       cachedSectionPlaneClass = (plane as any).constructor;
-      console.log('[SectionPlane] Extracted class from existing plane');
+      logger.log('[SectionPlane] Extracted class from existing plane');
       return cachedSectionPlaneClass;
     }
   }
@@ -120,7 +121,7 @@ function extractSectionPlaneClass(viewer: any): any {
   for (const comp of Object.values(components)) {
     if ((comp as any)?.type === 'SectionPlane' && (comp as any)?.constructor) {
       cachedSectionPlaneClass = (comp as any).constructor;
-      console.log('[SectionPlane] Extracted class from component registry');
+      logger.log('[SectionPlane] Extracted class from component registry');
       return cachedSectionPlaneClass;
     }
   }
@@ -132,7 +133,7 @@ function extractSectionPlaneClass(viewer: any): any {
       for (const sp of Object.values((plugin as any).sectionPlanes)) {
         if ((sp as any)?.constructor) {
           cachedSectionPlaneClass = (sp as any).constructor;
-          console.log('[SectionPlane] Extracted class from plugin');
+          logger.log('[SectionPlane] Extracted class from plugin');
           return cachedSectionPlaneClass;
         }
       }
@@ -195,7 +196,7 @@ export function useSectionPlaneClipping(
     });
     
     if (count > 0) {
-      console.log(`[SectionPlane] Enabled clippable on ${count} entities`);
+      logger.log(`[SectionPlane] Enabled clippable on ${count} entities`);
     }
   }, [getXeokitViewer]);
 
@@ -214,7 +215,7 @@ export function useSectionPlaneClipping(
   ): any => {
     const viewer = getXeokitViewer();
     if (!viewer?.scene) {
-      console.warn('[SectionPlane] No viewer/scene available');
+      logger.warn('[SectionPlane] No viewer/scene available');
       return null;
     }
     const scene = viewer.scene;
@@ -235,10 +236,10 @@ export function useSectionPlaneClipping(
     if (typeof scene.createSectionPlane === 'function') {
       try {
         const plane = scene.createSectionPlane({ id, pos, dir, active: true });
-        console.log(`✅ SectionPlane via scene.createSectionPlane: ${id} at Y=${pos[1].toFixed(2)}, dir=[${dir}]`);
+        logger.log(`✅ SectionPlane via scene.createSectionPlane: ${id} at Y=${pos[1].toFixed(2)}, dir=[${dir}]`);
         return plane;
       } catch (e) {
-        console.warn('[SectionPlane] scene.createSectionPlane failed:', e);
+        logger.warn('[SectionPlane] scene.createSectionPlane failed:', e);
       }
     }
 
@@ -247,10 +248,10 @@ export function useSectionPlaneClipping(
     if (SectionPlaneClass) {
       try {
         const plane = new SectionPlaneClass(scene, { id, pos, dir, active: true });
-        console.log(`✅ SectionPlane created via constructor: ${id} at Y=${pos[1].toFixed(2)}, dir=[${dir}]`);
+        logger.log(`✅ SectionPlane created via constructor: ${id} at Y=${pos[1].toFixed(2)}, dir=[${dir}]`);
         return plane;
       } catch (e) {
-        console.warn('[SectionPlane] Constructor creation failed:', e);
+        logger.warn('[SectionPlane] Constructor creation failed:', e);
       }
     }
 
@@ -260,10 +261,10 @@ export function useSectionPlaneClipping(
       if (typeof (plugin as any)?.createSectionPlane === 'function') {
         try {
           const plane = (plugin as any).createSectionPlane({ id, pos, dir, active: true });
-          console.log(`✅ SectionPlane created via plugin: ${id} at Y=${pos[1].toFixed(2)}, dir=[${dir}]`);
+          logger.log(`✅ SectionPlane created via plugin: ${id} at Y=${pos[1].toFixed(2)}, dir=[${dir}]`);
           return plane;
         } catch (e) {
-          console.warn('[SectionPlane] Plugin creation failed:', e);
+          logger.warn('[SectionPlane] Plugin creation failed:', e);
         }
       }
     }
@@ -274,10 +275,10 @@ export function useSectionPlaneClipping(
       try {
         const tempPlugin = new SPPlugin(viewer, { id: 'lovable-sp-plugin' });
         const plane = tempPlugin.createSectionPlane({ id, pos, dir, active: true });
-        console.log(`✅ SectionPlane created via new SectionPlanesPlugin: ${id} at Y=${pos[1].toFixed(2)}`);
+        logger.log(`✅ SectionPlane created via new SectionPlanesPlugin: ${id} at Y=${pos[1].toFixed(2)}`);
         return plane;
       } catch (e) {
-        console.warn('[SectionPlane] Global SectionPlanesPlugin failed:', e);
+        logger.warn('[SectionPlane] Global SectionPlanesPlugin failed:', e);
       }
     }
 
@@ -321,10 +322,10 @@ export function useSectionPlaneClipping(
         // Fire event to trigger xeokit's internal GPU clipping pipeline
         try { scene.fire?.("sectionPlaneCreated", plane); } catch { /* ignore */ }
         scene.glRedraw?.();
-        console.log(`✅ SectionPlane via _sectionPlanesState: ${id} at Y=${pos[1].toFixed(2)}`);
+        logger.log(`✅ SectionPlane via _sectionPlanesState: ${id} at Y=${pos[1].toFixed(2)}`);
         return plane;
       } catch (e) {
-        console.warn('[SectionPlane] _sectionPlanesState failed:', e);
+        logger.warn('[SectionPlane] _sectionPlanesState failed:', e);
       }
     }
 
@@ -491,7 +492,7 @@ export function useSectionPlaneClipping(
       if (storeyIndex >= 0) {
         const floorMinY = minY + (storeyIndex * avgFloorHeight);
         const floorMaxY = floorMinY + avgFloorHeight;
-        console.log(`[calculateFloorBounds] No peaks found - using linear distribution: storey ${storeyIndex}/${uniqueStoreys.length}, Y=[${floorMinY.toFixed(2)}, ${floorMaxY.toFixed(2)}]`);
+        logger.log(`[calculateFloorBounds] No peaks found - using linear distribution: storey ${storeyIndex}/${uniqueStoreys.length}, Y=[${floorMinY.toFixed(2)}, ${floorMaxY.toFixed(2)}]`);
         return { id: floorId, name: floorMeta.name || 'Floor', minY: floorMinY, maxY: floorMaxY, metaObjectIds: [] };
       }
       return null;
@@ -509,7 +510,7 @@ export function useSectionPlaneClipping(
         name: s.name || '(no name)',
         model: s.metaModel?.id?.slice(0, 12) || '?',
       })));
-      console.log('[2D] Histogram peaks (floor Y levels):', peaks.map((p: number) => p.toFixed(2)));
+      logger.log('[2D] Histogram peaks (floor Y levels):', peaks.map((p: number) => p.toFixed(2)));
     }
 
 
@@ -541,7 +542,7 @@ export function useSectionPlaneClipping(
       });
 
       if (storeyMinY === Infinity) {
-        console.warn(`[calculateFloorBounds] No entities found for storey ${floorId}. Using fallback.`);
+        logger.warn(`[calculateFloorBounds] No entities found for storey ${floorId}. Using fallback.`);
         // Fallback: use first peak if we have any
         if (peaks.length === 0) return null;
         const floorMinY = peaks[0];
@@ -563,10 +564,10 @@ export function useSectionPlaneClipping(
       const floorMinY = peaks[nearestPeakIdx];
       const floorMaxY = nearestPeakIdx < peaks.length - 1 ? peaks[nearestPeakIdx + 1] : floorMinY + 4.0;
 
-      console.log(`[calculateFloorBounds] Found ${entityCount} entities, Y=${storeyMinY.toFixed(2)} → peak ${nearestPeakIdx} [${floorMinY.toFixed(2)}, ${floorMaxY.toFixed(2)}]`);
+      logger.log(`[calculateFloorBounds] Found ${entityCount} entities, Y=${storeyMinY.toFixed(2)} → peak ${nearestPeakIdx} [${floorMinY.toFixed(2)}, ${floorMaxY.toFixed(2)}]`);
       return { id: floorId, name: floorMeta.name || 'Floor', minY: floorMinY, maxY: floorMaxY, metaObjectIds: [] };
     } catch (e) {
-      console.warn(`[calculateFloorBounds] Error: ${e}`);
+      logger.warn(`[calculateFloorBounds] Error: ${e}`);
       return null;
     }
   }, [getXeokitViewer]);
@@ -654,13 +655,13 @@ export function useSectionPlaneClipping(
       const slabBottomY = findSlabBottomY(nextFloor.id);
       if (slabBottomY !== null) {
         const clipHeight = slabBottomY - 0.02;
-        console.log(`[SectionPlane] Clip at next-floor slab bottom: ${slabBottomY.toFixed(3)} → clipHeight=${clipHeight.toFixed(3)} (floor: ${nextFloor.name})`);
+        logger.log(`[SectionPlane] Clip at next-floor slab bottom: ${slabBottomY.toFixed(3)} → clipHeight=${clipHeight.toFixed(3)} (floor: ${nextFloor.name})`);
         return { clipHeight, nextFloorMinY: slabBottomY };
       }
 
       // Fallback: use next floor overall minY
       const clipHeight = nextFloor.minY + 0.05;
-      console.log(`[SectionPlane] No slabs found on next floor "${nextFloor.name}", falling back to minY=${nextFloor.minY.toFixed(3)}`);
+      logger.log(`[SectionPlane] No slabs found on next floor "${nextFloor.name}", falling back to minY=${nextFloor.minY.toFixed(3)}`);
       return { clipHeight, nextFloorMinY: nextFloor.minY };
     } else {
       return { clipHeight: currentFloor.maxY + 0.1, nextFloorMinY: null };
@@ -699,7 +700,7 @@ export function useSectionPlaneClipping(
     );
 
     if (ceilingPlaneRef.current) {
-      console.log(`✅ 3D Ceiling clipping at Y=${adjustedClipHeight.toFixed(2)} for ${bounds?.name || floorId}`);
+      logger.log(`✅ 3D Ceiling clipping at Y=${adjustedClipHeight.toFixed(2)} for ${bounds?.name || floorId}`);
       currentFloorIdRef.current = floorId;
       currentClipModeRef.current = 'ceiling';
     }
@@ -741,11 +742,11 @@ export function useSectionPlaneClipping(
     );
 
     if (topPlaneRef.current) {
-      console.log(`✅ 2D Top-only clip at Y=${topClipY.toFixed(2)} (floor=${bounds.minY.toFixed(2)} + ${floorCutHeight}m) for ${bounds.name}`);
+      logger.log(`✅ 2D Top-only clip at Y=${topClipY.toFixed(2)} (floor=${bounds.minY.toFixed(2)} + ${floorCutHeight}m) for ${bounds.name}`);
       currentFloorIdRef.current = floorId;
       currentClipModeRef.current = 'floor';
     } else {
-      console.warn(`❌ 2D clipping failed for ${bounds.name} — no section plane created`);
+      logger.warn(`❌ 2D clipping failed for ${bounds.name} — no section plane created`);
     }
   }, [enabled, getXeokitViewer, calculateFloorBounds, createSectionPlane, destroyPlane, ensureAllEntitiesClippable]);
 
@@ -766,7 +767,7 @@ export function useSectionPlaneClipping(
     topPlaneRef.current = createSectionPlane('2d-global-top', [0, topClipY, 0], [0, 1, 0]);
 
     if (topPlaneRef.current) {
-      console.log(`✅ Global 2D clipping: top=${topClipY.toFixed(2)} (no bottom plane)`);
+      logger.log(`✅ Global 2D clipping: top=${topClipY.toFixed(2)} (no bottom plane)`);
       currentFloorIdRef.current = null;
       currentClipModeRef.current = 'floor';
     }
@@ -783,7 +784,7 @@ export function useSectionPlaneClipping(
     if (ceilingPlaneRef.current) {
       try {
         ceilingPlaneRef.current.pos = [0, newClipY, 0];
-        console.log(`✅ 3D ceiling offset updated to Y=${newClipY.toFixed(2)}`);
+        logger.log(`✅ 3D ceiling offset updated to Y=${newClipY.toFixed(2)}`);
         return;
       } catch (e) { /* recreate below */ }
     }
@@ -802,7 +803,7 @@ export function useSectionPlaneClipping(
     if (topPlaneRef.current) {
       try {
         topPlaneRef.current.pos = [0, topClipY, 0];
-        console.log(`✅ 2D top plane updated to Y=${topClipY.toFixed(2)}`);
+        logger.log(`✅ 2D top plane updated to Y=${topClipY.toFixed(2)}`);
         return;
       } catch (e) { /* recreate below */ }
     }

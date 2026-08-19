@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from '@/hooks/use-toast';
+import { logger } from '@/lib/logger';
 
 export interface RoomLabelConfig {
   id: string;
@@ -66,7 +67,7 @@ export function useRoomLabelConfigs() {
         setActiveConfigId(defaultConfig.id);
       }
     } catch (error: any) {
-      console.debug('Failed to fetch room label configs:', error?.message);
+      logger.debug('Failed to fetch room label configs:', error?.message);
       // Silently fail — don't show toast for this non-critical feature
     } finally {
       setLoading(false);

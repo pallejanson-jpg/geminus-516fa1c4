@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { xktCacheService } from '@/services/xkt-cache-service';
 import { xktIdbCache } from '@/services/xkt-idb-cache';
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 // Global cache to persist preloaded buildings across component unmounts
 const globalPreloadedBuildings = new Set<string>();
@@ -43,7 +44,7 @@ export function storeModelInMemory(modelId: string, buildingFmGuid: string, data
 
   // Skip very large models to avoid cache thrashing
   if (data.byteLength > MAX_SINGLE_MODEL_BYTES) {
-    console.log(`XKT Memory: Skipping ${modelId} — too large (${(data.byteLength / 1024 / 1024).toFixed(1)} MB > ${MAX_SINGLE_MODEL_BYTES / 1024 / 1024} MB limit)`);
+    logger.log(`XKT Memory: Skipping ${modelId} — too large (${(data.byteLength / 1024 / 1024).toFixed(1)} MB > ${MAX_SINGLE_MODEL_BYTES / 1024 / 1024} MB limit)`);
     return;
   }
   
@@ -55,13 +56,13 @@ export function storeModelInMemory(modelId: string, buildingFmGuid: string, data
       const [oldKey, oldData] = entries.shift()!;
       xktMemoryCache.delete(oldKey);
       totalMemoryBytes -= oldData.byteLength;
-      console.log(`XKT Memory: Evicted ${oldKey} to make room`);
+      logger.log(`XKT Memory: Evicted ${oldKey} to make room`);
     }
   }
   
   xktMemoryCache.set(key, data);
   totalMemoryBytes += data.byteLength;
-  console.log(`XKT Memory: Stored ${modelId} (${(data.byteLength / 1024 / 1024).toFixed(2)} MB, total: ${(totalMemoryBytes / 1024 / 1024).toFixed(2)} MB)`);
+  logger.log(`XKT Memory: Stored ${modelId} (${(data.byteLength / 1024 / 1024).toFixed(2)} MB, total: ${(totalMemoryBytes / 1024 / 1024).toFixed(2)} MB)`);
 }
 
 /**
@@ -80,7 +81,7 @@ export function clearBuildingMemoryDataOnly(buildingFmGuid: string): void {
   keysToDelete.forEach(key => xktMemoryCache.delete(key));
   // Intentionally keep globalPreloadedBuildings intact to prevent re-preload from Supabase Storage
   if (keysToDelete.length > 0) {
-    console.log(`XKT Memory: Cleared ${keysToDelete.length} data entries for building ${buildingFmGuid.substring(0, 8)}… (preload guard kept — bimobjectid will scope fresh API fetch)`);
+    logger.log(`XKT Memory: Cleared ${keysToDelete.length} data entries for building ${buildingFmGuid.substring(0, 8)}… (preload guard kept — bimobjectid will scope fresh API fetch)`);
   }
 }
 
@@ -99,7 +100,7 @@ export function clearBuildingFromMemory(buildingFmGuid: string): void {
   globalPreloadedBuildings.delete(buildingFmGuid);
   // Also evict IDB entries so forced re-sync gets fresh data from Asset+
   xktIdbCache.clearBuilding(buildingFmGuid).catch(() => {});
-  console.log(`XKT Memory: Cleared ${keysToDelete.length} models for building ${buildingFmGuid.substring(0, 8)}... (preload guard + IDB reset)`);
+  logger.log(`XKT Memory: Cleared ${keysToDelete.length} models for building ${buildingFmGuid.substring(0, 8)}... (preload guard + IDB reset)`);
 }
 
 /**
@@ -119,7 +120,7 @@ export function getMemoryStats(): { usedBytes: number; maxBytes: number; modelCo
 export function clearAllMemory(): void {
   xktMemoryCache.clear();
   totalMemoryBytes = 0;
-  console.log('XKT Memory: Cleared all cached models');
+  logger.log('XKT Memory: Cleared all cached models');
 }
 
 /**
@@ -139,7 +140,7 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
     
     // Prevent duplicate preloads - check global cache
     if (globalPreloadedBuildings.has(buildingFmGuid)) {
-      console.log(`XKT Preload: ${buildingFmGuid.substring(0, 8)}... already preloaded`);
+      logger.log(`XKT Preload: ${buildingFmGuid.substring(0, 8)}... already preloaded`);
       return;
     }
 
@@ -148,19 +149,19 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
     preloadStartedRef.current = true;
     
     const preloadModels = async () => {
-      console.log(`XKT Preload: Starting background preload for building ${buildingFmGuid.substring(0, 8)}...`);
+      logger.log(`XKT Preload: Starting background preload for building ${buildingFmGuid.substring(0, 8)}...`);
       
       try {
         // Check what's already cached in database
         const result = await xktCacheService.ensureBuildingModels(buildingFmGuid);
         
         if (!result.cached || result.count === 0) {
-          console.log('XKT Preload: No cached models - will cache on first 3D view');
+          logger.log('XKT Preload: No cached models - will cache on first 3D view');
           globalPreloadedBuildings.add(buildingFmGuid);
           return;
         }
 
-        console.log(`XKT Preload: ${result.count} models found in database, fetching binary data...`);
+        logger.log(`XKT Preload: ${result.count} models found in database, fetching binary data...`);
 
         // Fetch model metadata including names for A-model prioritization
         const { data: models } = await (supabase
@@ -191,7 +192,7 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
               });
 
               if (geminusPlusNames.size > 0) {
-                console.log(`XKT Preload: Resolved ${geminusPlusNames.size / 2} model names from Geminus Plus storeys`);
+                logger.log(`XKT Preload: Resolved ${geminusPlusNames.size / 2} model names from Geminus Plus storeys`);
                 models.forEach((m: any) => {
                   const resolved = geminusPlusNames.get(m.model_id) || geminusPlusNames.get(m.model_id.toLowerCase());
                   if (resolved && resolved !== m.model_name) {
@@ -201,7 +202,7 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
               }
             }
           } catch (e) {
-            console.debug('XKT Preload: Geminus Plus name resolution failed:', e);
+            logger.debug('XKT Preload: Geminus Plus name resolution failed:', e);
           }
 
           // Split into A-models (priority) and secondary models
@@ -233,7 +234,7 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
               if (nonExcluded.length > 0) {
                 const sorted = [...nonExcluded].sort((a: any, b: any) => (b.file_size || 0) - (a.file_size || 0));
                 aModels = [sorted[0]];
-                console.warn(`XKT Preload: No A-prefixed models — fallback to largest non-excluded: "${sorted[0].model_name}"`);
+                logger.warn(`XKT Preload: No A-prefixed models — fallback to largest non-excluded: "${sorted[0].model_name}"`);
               }
             }
             secondaryModels = []; // Strict mode: never preload secondary/non-A models
@@ -249,7 +250,7 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
           aModels.sort(sortBySize);
           secondaryModels.sort(sortBySize);
 
-          console.log(`XKT Preload: ${aModels.length} A-models (priority), ${secondaryModels.length} secondary`);
+          logger.log(`XKT Preload: ${aModels.length} A-models (priority), ${secondaryModels.length} secondary`);
 
           // Batch-generate all signed URLs in parallel, then fetch binary data
           const fetchModel = async (model: typeof models[0], signedUrl?: string) => {
@@ -267,7 +268,7 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
                 const idbData = await xktIdbCache.get(buildingFmGuid, model.model_id);
                 if (idbData) {
                   storeModelInMemory(model.model_id, buildingFmGuid, idbData);
-                  console.log(`XKT Preload: ⚡ IDB hit ${model.model_id}`);
+                  logger.log(`XKT Preload: ⚡ IDB hit ${model.model_id}`);
                   return;
                 }
               }
@@ -285,7 +286,7 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
                 xktIdbCache.put(buildingFmGuid, model.model_id, data, (model as any).updated_at ?? null).catch(() => {});
               }
             } catch (e) {
-              console.warn(`XKT Preload: Failed to fetch ${model.model_id}:`, e);
+              logger.warn(`XKT Preload: Failed to fetch ${model.model_id}:`, e);
             }
           };
 
@@ -304,7 +305,7 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
               if (urlData?.signedUrl) signedUrlMap.set(m.model_id, urlData.signedUrl);
             });
             await Promise.allSettled(urlPromises);
-            console.log(`XKT Preload: Batch-generated ${signedUrlMap.size} signed URLs`);
+            logger.log(`XKT Preload: Batch-generated ${signedUrlMap.size} signed URLs`);
           }
 
           const fetchBatch = async (batch: typeof models, concurrency: number) => {
@@ -323,19 +324,19 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
 
           // Phase 1: Fetch A-models (lower concurrency on mobile)
           await fetchBatch(aModels, isMobile ? 1 : 3);
-          console.log(`XKT Preload: ✅ A-models preloaded`);
+          logger.log(`XKT Preload: ✅ A-models preloaded`);
 
           // Phase 2 disabled: do NOT preload secondary/non-A models in strict A-mode
           if (secondaryModels.length > 0) {
-            console.log(`XKT Preload: Secondary preload disabled (${secondaryModels.length} models skipped)`);
+            logger.log(`XKT Preload: Secondary preload disabled (${secondaryModels.length} models skipped)`);
           }
         }
 
         // Mark building as preloaded in global cache
         globalPreloadedBuildings.add(buildingFmGuid);
-        console.log(`XKT Preload: Background preload complete for ${buildingFmGuid.substring(0, 8)}...`);
+        logger.log(`XKT Preload: Background preload complete for ${buildingFmGuid.substring(0, 8)}...`);
       } catch (error) {
-        console.warn('XKT Preload: Error during preload:', error);
+        logger.warn('XKT Preload: Error during preload:', error);
         // Still mark as attempted to avoid repeated failures
         globalPreloadedBuildings.add(buildingFmGuid);
       }

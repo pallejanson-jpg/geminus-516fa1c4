@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { ivionToBim, type IvionBimTransform, type Vec3 } from '@/lib/ivion-bim-transform';
 import { resolveMainView } from '@/lib/ivion-sdk';
 import { useLanguage } from '@/context/LanguageContext';
+import { logger } from '@/lib/logger';
 
 type PickStep = 'idle' | 'picking360' | 'picking3D' | 'done';
 
@@ -79,7 +80,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
 
     const container = findContainer();
     if (!container) {
-      console.warn('[AlignmentPicker] Could not find 360° container element');
+      logger.warn('[AlignmentPicker] Could not find 360° container element');
       return;
     }
 
@@ -99,7 +100,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           setStep('picking3D');
           setCaptureError(null);
           toast.success(`360° point captured: (${surfacePt.x.toFixed(1)}, ${surfacePt.y.toFixed(1)}, ${surfacePt.z.toFixed(1)})`);
-          console.log('[AlignmentPicker] 360° surface estimate:', surfacePt, 'tripod:', tp, 'dir:', vd, 'dist:', rayDistance);
+          logger.log('[AlignmentPicker] 360° surface estimate:', surfacePt, 'tripod:', tp, 'dir:', vd, 'dist:', rayDistance);
         } else {
           setCaptureError('No panorama position available. Navigate to an image first.');
         }
@@ -109,7 +110,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
     };
 
     container.addEventListener('click', handleClick);
-    console.log('[AlignmentPicker] Listening for clicks in 360° view');
+    logger.log('[AlignmentPicker] Listening for clicks in 360° view');
 
     return () => {
       container.removeEventListener('click', handleClick);
@@ -132,7 +133,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
       (window as any).__geminusPlusViewerInstance?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
 
     if (!xv?.scene) {
-      console.warn('[AlignmentPicker] No xeokit viewer found for 3D picking');
+      logger.warn('[AlignmentPicker] No xeokit viewer found for 3D picking');
       return;
     }
 
@@ -176,7 +177,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
           setBimPoint(picked);
           setStep('done');
           toast.success(`3D point selected: (${picked.x.toFixed(1)}, ${picked.y.toFixed(1)}, ${picked.z.toFixed(1)})`);
-          console.log('[AlignmentPicker] 3D point picked:', picked);
+          logger.log('[AlignmentPicker] 3D point picked:', picked);
         } else {
           toast.warning('No surface hit. Click directly on a wall, floor or column.');
         }
@@ -203,7 +204,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
       offsetY: parseFloat((bimPoint.y - rotated.y).toFixed(2)),
       offsetZ: parseFloat((bimPoint.z - rotated.z).toFixed(2)),
     };
-    console.log('[AlignmentPicker] Calculated offsets:', offsets);
+    logger.log('[AlignmentPicker] Calculated offsets:', offsets);
     toast.success(t('Offset beräknad och tillämpad', 'Offset calculated and applied'));
     onOffsetsCalculated(offsets);
   }, [ivionPoint, bimPoint, transform, onOffsetsCalculated]);

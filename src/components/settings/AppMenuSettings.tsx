@@ -36,6 +36,7 @@ import {
   SIDEBAR_SETTINGS_CHANGED_EVENT,
 } from '@/lib/constants';
 
+import { logger } from '@/lib/logger';
 // Map sidebar item IDs to their display config
 const SIDEBAR_ITEM_META: Record<string, { label: string; icon: React.ElementType; color: string }> = {
   inventory: { label: 'Inventory', icon: ClipboardList, color: 'text-orange-500' },
@@ -66,7 +67,7 @@ export const getSidebarOrder = (): SidebarItem[] => {
       return parsed.filter(i => validIds.has(i.id));
     }
   } catch (e) {
-    console.warn('Failed to load sidebar order:', e);
+    logger.warn('Failed to load sidebar order:', e);
   }
   return DEFAULT_SIDEBAR_ORDER;
 };
@@ -77,7 +78,7 @@ export const saveSidebarOrder = (items: SidebarItem[]): boolean => {
     window.dispatchEvent(new CustomEvent(SIDEBAR_SETTINGS_CHANGED_EVENT, { detail: items }));
     return true;
   } catch (e) {
-    console.warn('Failed to save sidebar order:', e);
+    logger.warn('Failed to save sidebar order:', e);
     return false;
   }
 };

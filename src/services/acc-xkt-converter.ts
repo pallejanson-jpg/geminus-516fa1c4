@@ -14,6 +14,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 import { xktCacheService } from './xkt-cache-service';
+import { logger } from '@/lib/logger';
 
 export interface TranslationStatus {
   status: 'idle' | 'pending' | 'inprogress' | 'success' | 'failed' | 'downloading' | 'converting' | 'complete' | 'server-converting';
@@ -442,7 +443,7 @@ export class AccXktConverter {
     fileName?: string,
     onLog?: (msg: string) => void
   ): Promise<{ success: boolean; error?: string }> {
-    const log = onLog || ((msg: string) => console.log('[acc-xkt]', msg));
+    const log = onLog || ((msg: string) => logger.log('[acc-xkt]', msg));
 
     try {
       // 1. Fetch the derivative binary from the signed storage URL
@@ -568,7 +569,7 @@ export class AccXktConverter {
     storeys: Array<{ id: string; name: string }>,
     onLog?: (msg: string) => void
   ): Promise<{ success: boolean; chunkCount: number }> {
-    const log = onLog || ((msg: string) => console.log('[xkt-split]', msg));
+    const log = onLog || ((msg: string) => logger.log('[xkt-split]', msg));
 
     if (storeys.length === 0) {
       log('No storeys found — skipping split');

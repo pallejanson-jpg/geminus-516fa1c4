@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import SupportCaseDetail from './SupportCaseDetail';
 
+import { logger } from '@/lib/logger';
 // SWG request mapped to our interface
 export interface SupportCase {
   id: string;
@@ -138,7 +139,7 @@ const SupportCaseList: React.FC = () => {
 
       if (fnError) throw fnError;
 
-      console.log('SWG list-requests response:', data);
+      logger.log('SWG list-requests response:', data);
 
       // The proxy wraps the response as { status, data }
       const responseData = data?.data;
@@ -154,7 +155,7 @@ const SupportCaseList: React.FC = () => {
         if (Array.isArray(items)) {
           setCases(items.map(mapSwgRequest));
         } else {
-          console.warn('Unexpected SWG response shape:', responseData);
+          logger.warn('Unexpected SWG response shape:', responseData);
           setCases([]);
         }
       } else {
