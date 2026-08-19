@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   ArrowLeft, Pencil, Save, ChevronDown, ChevronUp, Loader2, 
   Building2, Layers, DoorOpen, Box, Database, Search, AlertCircle, Cloud,
@@ -112,21 +112,12 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [position, setPosition] = useState({ x: 20, y: 100 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-  const [isCollapsed, setIsCollapsed] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   // On mobile, only open 'local' by default to save space
   const [openSections, setOpenSections] = useState<Set<string>>(
     new Set(isMobile ? ['geminus'] : ['system', 'geminus', 'area', 'user-defined'])
   );
-  
-  // Resize state (desktop only)
-  const [size, setSize] = useState({ width: 400, height: 500 });
-  const [isResizing, setIsResizing] = useState(false);
-  const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 });
-  
+
   // Delete/Push state
   const [isDeleting, setIsDeleting] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
@@ -441,66 +432,32 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     fetchData();
   }, [isOpen, fmGuids, category, entityId]);
 
-  // Drag handlers (desktop only)
-  const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (isMobile) return;
-    if ((e.target as HTMLElement).closest('button, input, select')) return;
-    setIsDragging(true);
-    setDragOffset({ x: e.clientX - position.x, y: e.clientY - position.y });
-  }, [position, isMobile]);
+  // The `inline` desktop variant renders as a normal flex sibling next to the viewer
+  // (not a portal/overlay), so it can't use Sheet/Dialog — those always portal their
+  // content to the body, which would break the flex layout. It still needs the same
+  // baseline accessibility a real dialog gets for free: an accessible role, focus
+  // moved into the panel on open, focus restored to whatever triggered it on close,
+  // and Escape to close. The non-inline desktop panel below uses a real Sheet instead,
+  // which provides all of this natively.
+  const inlinePanelRef = useRef<HTMLDivElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (!isDragging || isMobile) return;
+    if (!inline || isMobile || !isOpen) return;
 
-    const handleMouseMove = (e: MouseEvent) => {
-      setPosition({
-        x: Math.max(0, Math.min(window.innerWidth - 420, e.clientX - dragOffset.x)),
-        y: Math.max(0, Math.min(window.innerHeight - 100, e.clientY - dragOffset.y)),
-      });
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    inlinePanelRef.current?.focus();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
     };
+    document.addEventListener('keydown', handleKeyDown);
 
-    const handleMouseUp = () => setIsDragging(false);
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('keydown', handleKeyDown);
+      previouslyFocusedRef.current?.focus?.();
     };
-  }, [isDragging, dragOffset, isMobile]);
-
-  // Resize handlers (desktop only)
-  const handleResizeStart = useCallback((e: React.MouseEvent) => {
-    if (isMobile) return;
-    e.preventDefault();
-    e.stopPropagation();
-    setIsResizing(true);
-    setResizeStart({
-      x: e.clientX,
-      y: e.clientY,
-      width: size.width,
-      height: size.height,
-    });
-  }, [size, isMobile]);
-
-  useEffect(() => {
-    if (!isResizing || isMobile) return;
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const newWidth = Math.max(320, Math.min(800, resizeStart.width + (e.clientX - resizeStart.x)));
-      const newHeight = Math.max(300, Math.min(window.innerHeight - 100, resizeStart.height + (e.clientY - resizeStart.y)));
-      setSize({ width: newWidth, height: newHeight });
-    };
-
-    const handleMouseUp = () => setIsResizing(false);
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, [isResizing, resizeStart, isMobile]);
+  }, [inline, isMobile, isOpen, onClose]);
 
   // Helper to get property value from asset
   const getPropertyValue = useCallback((asset: any, key: string): any => {
@@ -1567,14 +1524,52 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     </>
   );
 
+  // Header shared by both desktop variants. `asSheetTitle` wraps the title text in
+  // Radix's Title primitive (via asChild, so the visual output is identical) so the
+  // real Sheet variant gets a proper aria-labelledby for free; the inline variant
+  // instead gets a plain id that the container's own aria-labelledby points to.
+  const renderHeader = (titleId: string, asSheetTitle: boolean) => {
+    const titleSpan = (
+      <span id={titleId} className="font-medium text-sm truncate">
+        {headerTitle}
+      </span>
+    );
+    return (
+      <div className="flex items-center justify-between p-3 border-b bg-muted/30 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          {CATEGORY_ICONS[displayCategory] || <Database className="h-4 w-4 shrink-0" />}
+          {asSheetTitle ? <SheetTitle asChild>{titleSpan}</SheetTitle> : titleSpan}
+          <Badge variant="outline" className="text-xs shrink-0">{displayCategory}</Badge>
+        </div>
+        <div className="flex items-center gap-1">
+          {onPinToggle && (
+            <Button
+              variant={isPinned ? 'default' : 'outline'}
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              onClick={(e) => { e.stopPropagation(); onPinToggle(); }}
+              title={isPinned ? 'Unpin (auto-updates on selection)' : 'Pin (auto-update on selection)'}
+              aria-label={isPinned ? 'Unpin' : 'Pin'}
+            >
+              {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
+            </Button>
+          )}
+          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 border-border bg-background hover:bg-destructive/10 text-foreground" onClick={(e) => { e.stopPropagation(); onClose(); }} aria-label="Close">
+            <X className="h-4 w-4 text-foreground" />
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
   if (!isOpen) return null;
 
   // Mobile: Use Sheet (bottom drawer)
   if (isMobile) {
     return (
       <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
-        <SheetContent 
-          side="bottom" 
+        <SheetContent
+          side="bottom"
           className="h-[90vh] flex flex-col p-0"
           style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
         >
@@ -1596,44 +1591,44 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     );
   }
 
-  // Desktop: Fixed right-side panel or inline flex sibling
-  return (
-    <div
-      className={inline
-        ? "w-96 shrink-0 bg-card border-l shadow-xl flex flex-col h-full"
-        : "fixed inset-y-0 right-0 z-[70] w-96 bg-card border-l shadow-xl flex flex-col animate-in slide-in-from-right duration-300"
-      }
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b bg-muted/30 shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          {CATEGORY_ICONS[displayCategory] || <Database className="h-4 w-4 shrink-0" />}
-          <span className="font-medium text-sm truncate">
-            {headerTitle}
-          </span>
-          <Badge variant="outline" className="text-xs shrink-0">{displayCategory}</Badge>
-        </div>
-        <div className="flex items-center gap-1">
-          {onPinToggle && (
-            <Button
-              variant={isPinned ? 'default' : 'outline'}
-              size="icon"
-              className="h-8 w-8 shrink-0"
-              onClick={(e) => { e.stopPropagation(); onPinToggle(); }}
-              title={isPinned ? 'Unpin (auto-updates on selection)' : 'Pin (auto-update on selection)'}
-              aria-label={isPinned ? 'Unpin' : 'Pin'}
-            >
-              {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
-            </Button>
-          )}
-          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 border-border bg-background hover:bg-destructive/10 text-foreground" onClick={(e) => { e.stopPropagation(); onClose(); }} aria-label="Close">
-            <X className="h-4 w-4 text-foreground" />
-          </Button>
-        </div>
+  // Desktop, docked inline next to the viewer (not an overlay): a real flex sibling in
+  // document flow, so it can't be a Sheet/Dialog (those always portal to <body> and
+  // would break this layout). Given manual dialog semantics + focus/Escape handling
+  // (see the effect near the top of this component) instead of Radix's.
+  if (inline) {
+    const titleId = 'universal-properties-dialog-title';
+    return (
+      <div
+        ref={inlinePanelRef}
+        role="dialog"
+        aria-modal="false"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="w-96 shrink-0 bg-card border-l shadow-xl flex flex-col h-full outline-none"
+      >
+        {renderHeader(titleId, false)}
+        {renderContent()}
       </div>
+    );
+  }
 
-      {renderContent()}
-    </div>
+  // Desktop, floating overlay panel: a real (non-modal) Sheet, so the 3D viewer behind
+  // it stays fully interactive — clicking/orbiting the model must not dismiss the
+  // panel, which is why outside interaction is deliberately suppressed below.
+  return (
+    <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()} modal={false}>
+      <SheetContent
+        side="right"
+        hideOverlay
+        hideClose
+        onPointerDownOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
+        className="w-96 sm:max-w-none z-[70] p-0 gap-0 bg-card border-l shadow-xl flex flex-col"
+      >
+        {renderHeader('universal-properties-dialog-title', true)}
+        {renderContent()}
+      </SheetContent>
+    </Sheet>
   );
 };
 
