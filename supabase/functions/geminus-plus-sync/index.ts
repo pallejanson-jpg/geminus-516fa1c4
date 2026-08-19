@@ -431,22 +431,30 @@ async function upsertGeometryMappings(supabase: any, items: any[]): Promise<void
     };
   });
 
-  // Batch upsert in chunks of 500
+  // Batch upsert in chunks of 500.
+  // onConflict targets the generated `model_id_norm` column (see migration
+  // 20260819120000_fix_geometry_entity_map_conflict_target.sql) — PostgREST's
+  // on_conflict parameter cannot reference the original expression-based unique
+  // index (COALESCE(model_id, '')) directly, only plain column names.
   for (let i = 0; i < rows.length; i += 500) {
     const chunk = rows.slice(i, i + 500);
     const { error } = await supabase
       .from('geometry_entity_map')
-      .upsert(chunk, { onConflict: 'source_system,building_fm_guid,asset_fm_guid,COALESCE(model_id, \'\')' })
-      .then((res: any) => res, (err: any) => {
-        // Fallback: try individual inserts if batch upsert fails on unique index
-        console.debug('Batch geometry mapping upsert failed, using individual inserts');
-        return { error: err };
-      });
-    
+      .upsert(chunk, { onConflict: 'source_system,building_fm_guid,asset_fm_guid,model_id_norm' })
+      .then((res: any) => res, (err: any) => ({ error: err }));
+
     if (error) {
-      // Try one-by-one as fallback for unique index with COALESCE
+      console.warn('Batch geometry mapping upsert failed, falling back to individual inserts:', error);
+      let rowErrors = 0;
       for (const row of chunk) {
-        await supabase.from('geometry_entity_map').upsert(row).then(() => {}, () => {});
+        const { error: rowError } = await supabase
+          .from('geometry_entity_map')
+          .upsert(row, { onConflict: 'source_system,building_fm_guid,asset_fm_guid,model_id_norm' })
+          .then((res: any) => res, (err: any) => ({ error: err }));
+        if (rowError) rowErrors++;
+      }
+      if (rowErrors > 0) {
+        console.warn(`geometry_entity_map: ${rowErrors} of ${chunk.length} row(s) in this chunk failed to upsert`);
       }
     }
   }
