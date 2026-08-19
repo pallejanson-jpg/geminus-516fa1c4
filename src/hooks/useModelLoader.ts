@@ -11,7 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { normalizeGuid } from '@/lib/utils';
 import { xktCacheService } from '@/services/xkt-cache-service';
 import { xktIdbCache } from '@/services/xkt-idb-cache';
-import { clearBuildingFromMemory, getModelFromMemory, storeModelInMemory, getMemoryStats } from '@/hooks/useXktPreload';
+import { clearBuildingFromMemory, getModelFromMemory, storeModelInMemory } from '@/hooks/useXktPreload';
 import { applyArchitectColors } from '@/lib/architect-colors';
 import { isRealTiling, getTilesToLoad } from '@/hooks/useFloorPriorityLoading';
 import { INSIGHTS_COLOR_UPDATE_EVENT, type InsightsColorUpdateDetail } from '@/lib/viewer-events';
@@ -177,14 +177,18 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
     // Step 1: Server-side sync with timeout (fail-fast on slow networks)
     try {
       console.log('[ModelLoader] Trying server-side sync with force=true...');
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
 
       const { data: syncResult, error: syncError } = await supabase.functions.invoke('geminus-plus-sync', {
         body: { action: 'sync-xkt-building', buildingFmGuid, force: true },
-        headers: { 'Abort-Signal': 'timeout' }
+        // Fail-fast timeout, via the SDK's own option — a custom header here
+        // (the previous 'Abort-Signal' header) does nothing functionally and
+        // breaks the CORS preflight, silently forcing every load onto the
+        // weaker client-side fallback below. sync-xkt-building discovers AND
+        // downloads/converts real BIM geometry server-side, which routinely
+        // takes well past 8s — 8s aborted almost every real call, not just slow
+        // networks. The edge function's own internal guard is 45s.
+        timeout: 30000,
       });
-      clearTimeout(timeoutId);
 
       if (syncError) {
         console.warn('[ModelLoader] Server sync error:', syncError);

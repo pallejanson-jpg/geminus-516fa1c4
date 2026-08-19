@@ -13,14 +13,6 @@ interface DataContextType {
   refreshInitialData: () => Promise<void>;
 }
 
-interface DataContextType {
-  allData: Facility[];
-  setAllData: (data: Facility[]) => void;
-  isLoadingData: boolean;
-  navigatorTreeData: NavigatorNode[];
-  refreshInitialData: () => Promise<void>;
-}
-
 export const DataContext = createContext<DataContextType>({
   allData: [],
   setAllData: () => {},

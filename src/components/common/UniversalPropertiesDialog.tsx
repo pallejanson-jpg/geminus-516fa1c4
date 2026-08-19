@@ -1584,7 +1584,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                 {headerTitle}
               </span>
               <Badge variant="outline" className="text-xs shrink-0">{displayCategory}</Badge>
-              <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 border-border bg-background hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); onClose(); }}>
+              <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 border-border bg-background hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); onClose(); }} aria-label="Close">
                 <X className="h-4 w-4" />
               </Button>
             </SheetTitle>
@@ -1620,11 +1620,12 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               className="h-8 w-8 shrink-0"
               onClick={(e) => { e.stopPropagation(); onPinToggle(); }}
               title={isPinned ? 'Unpin (auto-updates on selection)' : 'Pin (auto-update on selection)'}
+              aria-label={isPinned ? 'Unpin' : 'Pin'}
             >
               {isPinned ? <PinOff className="h-4 w-4" /> : <Pin className="h-4 w-4" />}
             </Button>
           )}
-          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 border-border bg-background hover:bg-destructive/10 text-foreground" onClick={(e) => { e.stopPropagation(); onClose(); }}>
+          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 border-border bg-background hover:bg-destructive/10 text-foreground" onClick={(e) => { e.stopPropagation(); onClose(); }} aria-label="Close">
             <X className="h-4 w-4 text-foreground" />
           </Button>
         </div>

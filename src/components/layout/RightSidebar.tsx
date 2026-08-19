@@ -236,7 +236,7 @@ const RightSidebar: React.FC = () => {
           <HelpCircle size={18} className="text-primary" />
           Help Center
         </h2>
-        <AppButton variant="ghost" className="h-8 w-8 p-0" onClick={toggleRightSidebar}>
+        <AppButton variant="ghost" className="h-8 w-8 p-0" onClick={toggleRightSidebar} aria-label="Close help center">
           <ArrowLeft size={18}/>
         </AppButton>
       </div>

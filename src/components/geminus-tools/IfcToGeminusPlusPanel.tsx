@@ -31,6 +31,13 @@ interface SyncLog {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+// Above this size, skip the client-side regex scan of the full file text —
+// reading a multi-hundred-MB / multi-GB IFC file into a JS string can freeze
+// or crash the tab. The scan is only a quick pre-check (real FMGuid stats are
+// computed server-side in `ifc-fmguid-prep` during queueJob), so it is safe
+// to skip and proceed straight to the configure step.
+const CLIENT_SCAN_MAX_BYTES = 100 * 1024 * 1024; // 100 MB
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -192,28 +199,48 @@ export default function IfcToGeminusPlusPanel() {
       setStoragePath(path);
       addLog(`${t('Uppladdad:', 'Uploaded:')} ${formatBytes(ifcFile.size)}`, 'ok');
 
-      // Quick client-side scan: detect FMGuid property presence + element count
-      addLog(t('Analyserar IFC-modellen…', 'Analysing IFC model…'));
-      const text = await ifcFile.text();
-      const hasFmguidInFile = /FMGuid/i.test(text);
-      const productMatches = text.match(
-        /^#\d+=IFC(WALL|DOOR|WINDOW|SLAB|COLUMN|BEAM|PIPE|DUCT|SPACE|BUILDINGSTOREY|BUILDING|FURNISHING|FURNITURE|FLOWTERMINAL|FLOWSEGMENT|BUILDINGELEMENTPROXY)/gim
-      );
-      const approxCount = productMatches?.length ?? 0;
+      // Quick client-side scan: detect FMGuid property presence + element count.
+      // Skipped for large files — reading the whole file into a JS string is
+      // only safe for reasonably small IFCs; the real analysis happens
+      // server-side in ifc-fmguid-prep during queueJob regardless.
+      if (ifcFile.size > CLIENT_SCAN_MAX_BYTES) {
+        addLog(
+          t(
+            `Filen är stor (${formatBytes(ifcFile.size)}) – hoppar över snabbanalys i webbläsaren, fortsätter till uppladdning.`,
+            `File is large (${formatBytes(ifcFile.size)}) – skipping quick in-browser validation, proceeding with upload.`
+          ),
+          'info'
+        );
+        toast({
+          title: t('Snabbanalys hoppas över', 'Quick validation skipped'),
+          description: t(
+            `Filen är för stor (${formatBytes(ifcFile.size)}) för analys i webbläsaren. Full FMGUID-analys körs på servern i nästa steg.`,
+            `The file is too large (${formatBytes(ifcFile.size)}) for the in-browser check. Full FMGUID analysis will run server-side in the next step.`
+          ),
+        });
+      } else {
+        addLog(t('Analyserar IFC-modellen…', 'Analysing IFC model…'));
+        const text = await ifcFile.text();
+        const hasFmguidInFile = /FMGuid/i.test(text);
+        const productMatches = text.match(
+          /^#\d+=IFC(WALL|DOOR|WINDOW|SLAB|COLUMN|BEAM|PIPE|DUCT|SPACE|BUILDINGSTOREY|BUILDING|FURNISHING|FURNITURE|FLOWTERMINAL|FLOWSEGMENT|BUILDINGELEMENTPROXY)/gim
+        );
+        const approxCount = productMatches?.length ?? 0;
 
-      setStats({
-        total_elements: approxCount,
-        had_fmguid: hasFmguidInFile ? approxCount : 0,
-        reused_from_map: 0,
-        newly_generated: hasFmguidInFile ? 0 : approxCount,
-      });
+        setStats({
+          total_elements: approxCount,
+          had_fmguid: hasFmguidInFile ? approxCount : 0,
+          reused_from_map: 0,
+          newly_generated: hasFmguidInFile ? 0 : approxCount,
+        });
 
-      addLog(
-        hasFmguidInFile
-          ? t(`IFC innehåller redan FMGuid-egenskaper (ca ${approxCount} element).`, `IFC already contains FMGuid properties (~${approxCount} elements).`)
-          : t(`Inga FMGuid hittades – ca ${approxCount} element tilldelas FMGuid vid bearbetning.`, `No FMGuid found – ~${approxCount} elements will be assigned FMGuid during processing.`),
-        hasFmguidInFile ? 'ok' : 'info'
-      );
+        addLog(
+          hasFmguidInFile
+            ? t(`IFC innehåller redan FMGuid-egenskaper (ca ${approxCount} element).`, `IFC already contains FMGuid properties (~${approxCount} elements).`)
+            : t(`Inga FMGuid hittades – ca ${approxCount} element tilldelas FMGuid vid bearbetning.`, `No FMGuid found – ~${approxCount} elements will be assigned FMGuid during processing.`),
+          hasFmguidInFile ? 'ok' : 'info'
+        );
+      }
 
       // Pre-fill model name from filename, default expand first building
       const defaultName = ifcFile.name.replace(/\.ifc$/i, '');

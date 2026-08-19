@@ -2472,21 +2472,24 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
             if (error) throw error;
 
-            if (data?.secretsToUpdate && data.secretsToUpdate.length > 0) {
-                toast({
-                    title: "Update Secrets",
-                    description: `The following secrets need to be updated in Lovable: ${data.secretsToUpdate.join(", ")}`,
-                    duration: 10000,
-                });
-            }
-
             setIsEditMode(false);
             setOriginalConfig(config);
-            
-            toast({
-                title: "Configuration Saved",
-                description: "Values have been registered. Update secrets in Lovable to apply changes.",
-            });
+
+            // This edge function does not persist anything itself — it only reports which
+            // secret names need to be entered manually in Lovable Cloud. Reflect that
+            // accurately instead of claiming the configuration was saved.
+            if (data?.secretsToUpdate && data.secretsToUpdate.length > 0) {
+                toast({
+                    title: "Not saved — manual step required",
+                    description: `These values must be set manually in Lovable Cloud: ${data.secretsToUpdate.join(", ")}`,
+                    duration: 10000,
+                });
+            } else {
+                toast({
+                    title: "No changes to apply",
+                    description: "No fields were changed, so there is nothing to update in Lovable Cloud.",
+                });
+            }
         } catch (error: any) {
             toast({
                 variant: "destructive",

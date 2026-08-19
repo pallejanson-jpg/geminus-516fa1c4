@@ -7,6 +7,7 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 import StreetViewMiniMap from './StreetViewMiniMap';
 import { useLanguage } from '@/context/LanguageContext';
+import { formatRoomLabel } from '@/lib/utils';
 
 // Import Cesium — base URL already set by CesiumGlobeView
 import * as Cesium from 'cesium';
@@ -29,6 +30,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
   const providerRef = useRef<any>(null);
   const currentPosRef = useRef<{ lng: number; lat: number }>({ lng, lat });
   const currentPanoRef = useRef<any>(null); // current panorama primitive
+  const handlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null); // custom wheel/dblclick handler — not owned by the viewer, must be destroyed explicitly
   const [loading, setLoading] = useState(true);
   const [moving, setMoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,11 +50,14 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
   useEffect(() => {
     supabase
       .from('assets')
-      .select('fm_guid, name')
+      .select('fm_guid, name, common_name')
       .eq('building_fm_guid', fmGuid)
       .in('category', ['Space', 'IfcSpace'])
       .order('name')
-      .then(({ data }) => setRooms((data || []).map(r => ({ fm_guid: r.fm_guid, name: r.name || r.fm_guid }))));
+      .then(({ data }) => setRooms((data || []).map(r => ({
+        fm_guid: r.fm_guid,
+        name: formatRoomLabel(r.name, r.common_name) || r.fm_guid,
+      }))));
   }, [fmGuid]);
 
   const filteredRooms = useMemo(() => {
@@ -261,6 +266,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
 
         // Scroll-wheel FOV zoom
         const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+        handlerRef.current = handler;
         const minFov = Cesium.Math.toRadians(20.0);
         const maxFov = Cesium.Math.toRadians(100.0);
         const zoomSpeed = 0.05;
@@ -333,6 +339,10 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
     return () => {
       cancelled = true;
       if (pollId !== null) { clearInterval(pollId); pollId = null; }
+      if (handlerRef.current) {
+        handlerRef.current.destroy();
+        handlerRef.current = null;
+      }
       if (viewerRef.current && !viewerRef.current.isDestroyed()) {
         viewerRef.current.destroy();
       }

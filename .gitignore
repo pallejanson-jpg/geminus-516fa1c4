@@ -31,6 +31,18 @@ dist-ssr
 # Supabase CLI local state
 supabase/.temp/
 
+# Microsoft Office lock/temp files (created while a doc is open)
+~$*.doc
+~$*.docx
+~$*.xls
+~$*.xlsx
+~$*.ppt
+~$*.pptx
+
+# Manual/ad-hoc backup files (e.g. vendored-lib-file.bak-v1.2.3)
+*.bak
+*.bak-*
+
 
 # Faciliate connector local secrets
 faciliate-connector/.env

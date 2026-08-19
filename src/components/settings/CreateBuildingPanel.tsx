@@ -611,6 +611,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
 
           const levels = convResult.levels || [];
           const spaces = convResult.spaces || [];
+          let hierarchySyncSkipped = false;
           if ((levels.length > 0 || spaces.length > 0) && targetModelFmGuid) {
             addLog(`Creating ${levels.length} levels and ${spaces.length} spaces in Geminus Plus...`);
             const levelFmGuids = new Map<string, string>();
@@ -634,12 +635,20 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
             if (hierarchyError) addLog(`⚠️ Hierarchy creation failed: ${hierarchyError.message}`);
             else if (hierarchyData?.success) addLog(`✅ ${hierarchyData.message}`);
             else addLog(`⚠️ ${hierarchyData?.error || 'Hierarchy creation failed'}`);
+          } else if (levels.length > 0 || spaces.length > 0) {
+            hierarchySyncSkipped = true;
+            addLog('⚠️ Geminus Plus sync skipped: no model FM GUID available for this building — levels/spaces were saved locally only.');
           }
 
           setConversionProgress(100);
           setConversionDone(true);
-          addLog('✅ Done! Model is ready in the 3D viewer.');
-          toast({ title: 'IFC uploaded!', description: `${ifcFile.name} converted and saved.` });
+          if (hierarchySyncSkipped) {
+            addLog('⚠️ Done, but Geminus Plus hierarchy sync was skipped (see warning above). Model is ready in the 3D viewer.');
+            toast({ title: 'IFC uploaded (partial sync)', description: `${ifcFile.name} converted and saved, but the levels/spaces sync to Geminus Plus was skipped.` });
+          } else {
+            addLog('✅ Done! Model is ready in the 3D viewer.');
+            toast({ title: 'IFC uploaded!', description: `${ifcFile.name} converted and saved.` });
+          }
           setIsConverting(false);
           // Trigger data refresh so Navigator shows new levels/rooms
           window.dispatchEvent(new Event('building-data-changed'));
@@ -850,6 +859,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           }
         }
 
+        let hierarchySyncSkipped = false;
         if ((result.levels?.length > 0 || result.spaces?.length > 0) && targetModelFmGuid) {
           log('Creating hierarchy in Geminus Plus...');
           const hierarchyLevels = result.levels.map((level: any) => ({
@@ -866,6 +876,9 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           );
           if (hError) log(`⚠️ Geminus Plus hierarchy failed: ${hError.message}`);
           else if (hData?.success) log(`✅ ${hData.message}`);
+        } else if (result.levels?.length > 0 || result.spaces?.length > 0) {
+          hierarchySyncSkipped = true;
+          log('⚠️ Geminus Plus sync skipped: no model FM GUID available for this building — levels/spaces were saved locally only.');
         }
 
         // Persist logs to DB before marking done
@@ -874,11 +887,15 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
         await supabase.from('conversion_jobs').update({ status: 'done', progress: 100, result_model_id: modelId, updated_at: new Date().toISOString() }).eq('id', jobId);
         setProgress(100);
         setConversionDone(true);
-        log('✅ Done! Browser-based conversion succeeded.');
-        toast({ title: 'IFC converted!', description: `${file.name} converted in browser and saved.` });
+        if (hierarchySyncSkipped) {
+          log('⚠️ Done, but Geminus Plus hierarchy sync was skipped (see warning above). Browser-based conversion succeeded.');
+          toast({ title: 'IFC converted (partial sync)', description: `${file.name} converted in browser and saved, but the levels/spaces sync to Geminus Plus was skipped.` });
+        } else {
+          log('✅ Done! Browser-based conversion succeeded.');
+          toast({ title: 'IFC converted!', description: `${file.name} converted in browser and saved.` });
+        }
         // Trigger data refresh so Navigator shows new levels/rooms
         window.dispatchEvent(new Event('building-data-changed'));
-        toast({ title: 'IFC converted!', description: `${file.name} converted in browser and saved.` });
       } catch (clientErr: any) {
         log(`❌ Browser conversion failed: ${clientErr.message}`);
         // Mark job as failed so it doesn't stay stuck

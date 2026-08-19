@@ -14,11 +14,21 @@ import {
 import { 
     Building2, Zap, TrendingDown, TrendingUp, Leaf, 
     ThermometerSun, Droplets, Gauge, ArrowLeft, Layers, DoorOpen, Package, Eye, Maximize2, Expand, Shrink,
-    Loader2, Thermometer, Wind, Users, Wifi, WifiOff, Bell, Trash2, MapPin, Boxes, Search, X, BarChart2
+    Loader2, Thermometer, Wind, Users, Wifi, WifiOff, Bell, Trash2, MapPin, Boxes, Search, X, BarChart2, AlertTriangle
 } from 'lucide-react';
 import { Carousel, CarouselContent, CarouselItem } from '@/components/ui/carousel';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import AlarmManagementTab from '@/components/insights/tabs/AlarmManagementTab';
 import PredictiveMaintenanceTab from '@/components/insights/tabs/PredictiveMaintenanceTab';
 import RoomOptimizationTab from '@/components/insights/tabs/RoomOptimizationTab';
@@ -181,6 +191,10 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const [alarmList, setAlarmList] = useState<any[]>([]);
     const [alarmRefreshKey, setAlarmRefreshKey] = useState(0);
     const [showAlarmManagement, setShowAlarmManagement] = useState(false);
+    const [alarmDataError, setAlarmDataError] = useState(false);
+    const [assetDataError, setAssetDataError] = useState(false);
+    const [alarmToDelete, setAlarmToDelete] = useState<any | null>(null);
+    const [isDeletingAlarm, setIsDeletingAlarm] = useState(false);
 
     // Space tab floor filter + room type filter
     const [spaceFloorFilter, setSpaceFloorFilter] = useState<string>('');
@@ -227,6 +241,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
     const fetchAlarmData = useCallback(async () => {
         try {
+            setAlarmDataError(false);
             // Count
             const { count } = await supabase
                 .from('assets')
@@ -284,10 +299,30 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             setAlarmList(recent || []);
         } catch (e) {
             console.error('Error fetching alarm data:', e);
+            setAlarmDataError(true);
+            toast.error('Failed to load alarm data');
         }
     }, [facility.fmGuid, alarmRefreshKey]);
 
     useEffect(() => { fetchAlarmData(); }, [fetchAlarmData]);
+
+    const handleConfirmDeleteAlarm = useCallback(async () => {
+        if (!alarmToDelete) return;
+        setIsDeletingAlarm(true);
+        try {
+            const { error } = await supabase.from('assets').delete().eq('fm_guid', alarmToDelete.fm_guid);
+            if (error) throw error;
+            toast.success('Alarm deleted');
+            setAlarmList(prev => prev.filter((a: any) => a.fm_guid !== alarmToDelete.fm_guid));
+            setAlarmToDelete(null);
+            setAlarmRefreshKey(k => k + 1);
+        } catch (e: any) {
+            console.error('Error deleting alarm:', e);
+            toast.error(`Failed to delete alarm${e?.message ? `: ${e.message}` : ''}`);
+        } finally {
+            setIsDeletingAlarm(false);
+        }
+    }, [alarmToDelete]);
 
     // Query database for real asset count for this building
     const [dbAssetCount, setDbAssetCount] = useState<number>(0);
@@ -296,6 +331,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     useEffect(() => {
         const fetchBuildingAssets = async () => {
             try {
+                setAssetDataError(false);
                 const { count } = await supabase
                     .from('assets')
                     .select('*', { count: 'exact', head: true })
@@ -319,6 +355,8 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                 }
             } catch (e) {
                 console.error('Failed to fetch building asset counts:', e);
+                setAssetDataError(true);
+                toast.error('Failed to load building asset data');
             }
         };
         fetchBuildingAssets();
@@ -766,7 +804,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                 {[
                     { title: 'Floors', value: stats.floorCount, icon: Layers, color: 'text-[hsl(var(--chart-2))]', onView: () => setActiveTab('space') },
                     { title: 'Rooms', value: stats.roomCount, icon: DoorOpen, color: 'text-[hsl(var(--chart-3))]', onView: () => navigateTo3D({ visualization: 'area' }) },
-                    { title: 'Assets', value: stats.assetCount, icon: Package, color: 'text-[hsl(var(--chart-7))]', onView: () => navigateTo3D() },
+                    { title: 'Assets', value: stats.assetCount, icon: Package, color: 'text-[hsl(var(--chart-7))]', onView: () => navigateTo3D(), error: assetDataError },
                     { title: 'Area (m²)', value: stats.totalArea.toLocaleString(), icon: Building2, color: 'text-primary', onView: () => navigateTo3D({ visualization: 'area' }) },
                     { title: 'Avg. Energy', value: `${80 + (hashString(facility.fmGuid || '') % 40)} kWh/m²`, icon: Zap, color: 'text-[hsl(var(--chart-4))]' },
                     { title: 'Energy Rating', value: ['A', 'B', 'C'][hashString(facility.fmGuid || '') % 3], icon: Gauge, color: 'text-primary' },
@@ -783,6 +821,9 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                 {kpi.value}
                             </p>
                             <p className="text-[10px] sm:text-xs text-muted-foreground">{kpi.title}</p>
+                            {(kpi as any).error && (
+                                <p className="text-[9px] text-destructive mt-0.5">Failed to load</p>
+                            )}
                         </CardContent>
                     </Card>
                 ))}
@@ -1415,6 +1456,9 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                 </div>
                                                 <p className="text-2xl font-bold">{alarmCount.toLocaleString()}</p>
                                                 <p className="text-xs text-muted-foreground">Total alarms</p>
+                                                {alarmDataError && (
+                                                    <p className="text-[10px] text-destructive mt-0.5">Failed to load</p>
+                                                )}
                                             </CardContent>
                                         </Card>
                                         <Card>
@@ -1581,10 +1625,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                                                                             size="icon"
                                                                             className="h-7 w-7 text-destructive hover:bg-destructive/10"
                                                                             title="Delete alarm"
-                                                                            onClick={async () => {
-                                                                                await supabase.from('assets').delete().eq('fm_guid', alarm.fm_guid);
-                                                                                setAlarmRefreshKey(k => k + 1);
-                                                                            }}
+                                                                            onClick={() => setAlarmToDelete(alarm)}
                                                                         >
                                                                             <Trash2 className="h-3.5 w-3.5" />
                                                                         </Button>
@@ -1633,6 +1674,32 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                     />
                 )}
             </div>
+
+            {/* Delete alarm confirmation */}
+            <AlertDialog open={!!alarmToDelete} onOpenChange={(open) => { if (!open) setAlarmToDelete(null); }}>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                            <AlertTriangle className="h-5 w-5 text-destructive" />
+                            Delete alarm
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            Are you sure you want to delete this alarm{alarmToDelete ? ` (${alarmToDelete.name || alarmToDelete.common_name || alarmToDelete.fm_guid})` : ''}? This action cannot be undone.
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                            onClick={handleConfirmDeleteAlarm}
+                            disabled={isDeletingAlarm}
+                        >
+                            {isDeletingAlarm ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                            Delete
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
         </div>
     );
 }

@@ -76,29 +76,45 @@ export default function CreatePropertyDialog({
   }, [open, editFmGuid, selectedTenantId]);
 
   async function fetchProfiles() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('api_profiles' as any)
       .select('id, name, is_default')
       .order('is_default', { ascending: false })
       .order('name');
+    if (error) {
+      console.error('Failed to fetch API profiles:', error);
+      toast({ title: 'Failed to load API profiles', description: error.message, variant: 'destructive' });
+      return;
+    }
     if (data) setProfiles(data as any[]);
   }
 
   async function loadExisting(fmGuid: string) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('building_settings')
       .select('fm_guid, latitude, longitude, api_profile_id, tenant_id')
       .eq('fm_guid', fmGuid)
       .maybeSingle();
 
+    if (error) {
+      console.error('Failed to load property settings:', error);
+      toast({ title: 'Failed to load property', description: error.message, variant: 'destructive' });
+      return;
+    }
+
     if (!data) return;
 
-    const { data: asset } = await supabase
+    const { data: asset, error: assetError } = await supabase
       .from('assets')
       .select('name')
       .eq('fm_guid', fmGuid)
       .eq('category', 'Building')
       .maybeSingle();
+
+    if (assetError) {
+      console.error('Failed to load property name:', assetError);
+      toast({ title: 'Failed to load property name', description: assetError.message, variant: 'destructive' });
+    }
 
     setForm({
       fm_guid: data.fm_guid,
@@ -150,7 +166,7 @@ export default function CreatePropertyDialog({
       }
 
       if (form.name.trim()) {
-        await supabase.from('assets').upsert(
+        const { error: assetError } = await supabase.from('assets').upsert(
           {
             fm_guid: form.fm_guid.trim(),
             category: 'Building',
@@ -160,6 +176,7 @@ export default function CreatePropertyDialog({
           },
           { onConflict: 'fm_guid' }
         );
+        if (assetError) throw assetError;
       }
 
       toast({ title: 'Property saved' });

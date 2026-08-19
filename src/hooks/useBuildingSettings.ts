@@ -11,10 +11,9 @@ interface BuildingSettings {
     heroImageUrl: string | null;
     startViewId: string | null;
     rotation: number | null;
-    // Token fields (managed by edge functions, read-only in frontend)
-    ivionAccessToken: string | null;
-    ivionRefreshToken: string | null;
-    ivionTokenExpiresAt: string | null;
+    // Note: ivion_access_token / ivion_refresh_token / ivion_token_expires_at
+    // are intentionally NOT fetched here — they're managed by edge functions
+    // and should never be loaded into client-side state.
 }
 
 export function useBuildingSettings(fmGuid: string | null) {
@@ -31,7 +30,7 @@ export function useBuildingSettings(fmGuid: string | null) {
         try {
             const { data, error } = await supabase
                 .from('building_settings')
-                .select('*')
+                .select('fm_guid, is_favorite, ivion_site_id, latitude, longitude, hero_image_url, start_view_id, rotation')
                 .eq('fm_guid', fmGuid)
                 .maybeSingle();
 
@@ -47,9 +46,6 @@ export function useBuildingSettings(fmGuid: string | null) {
                     heroImageUrl: data.hero_image_url ?? null,
                     startViewId: data.start_view_id ?? null,
                     rotation: (data as any).rotation ?? null,
-                    ivionAccessToken: (data as any).ivion_access_token ?? null,
-                    ivionRefreshToken: (data as any).ivion_refresh_token ?? null,
-                    ivionTokenExpiresAt: (data as any).ivion_token_expires_at ?? null,
                 });
             } else {
                 // No settings yet, use defaults
@@ -62,9 +58,6 @@ export function useBuildingSettings(fmGuid: string | null) {
                     heroImageUrl: null,
                     startViewId: null,
                     rotation: null,
-                    ivionAccessToken: null,
-                    ivionRefreshToken: null,
-                    ivionTokenExpiresAt: null,
                 });
             }
         } catch (error) {

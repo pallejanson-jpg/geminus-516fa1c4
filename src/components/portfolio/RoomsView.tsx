@@ -16,6 +16,7 @@ import {
   Wind,
   Droplets,
   Users,
+  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -742,6 +743,8 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                           );
                         })}
                       </SortableContext>
+                      {/* Open action column header */}
+                      {onSelectRoom && <TableHead className="bg-muted/50 w-10" />}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -753,9 +756,9 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                         : null;
                       const rowSensorHex = rowSensorRgb ? rgbToHex(rowSensorRgb) : null;
                       return (
-                      <TableRow 
-                        key={room.fmGuid} 
-                        className={`hover:bg-muted/50 cursor-pointer ${selectedRows.has(room.fmGuid) ? 'bg-primary/10' : ''}`}
+                      <TableRow
+                        key={room.fmGuid}
+                        className={`group hover:bg-muted/50 cursor-pointer ${selectedRows.has(room.fmGuid) ? 'bg-primary/10' : ''}`}
                         style={{
                           borderLeft: rowSensorHex ? `3px solid ${rowSensorHex}` : rowNameColor ? `3px solid ${rowNameColor}` : undefined,
                         }}
@@ -774,6 +777,20 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                             {formatCellValue(colKey, room[colKey])}
                           </TableCell>
                         ))}
+                        {/* Open room landing page */}
+                        {onSelectRoom && (
+                          <TableCell className="py-2 w-10" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={() => onSelectRoom(room.fmGuid)}
+                              title={t('Öppna rum', 'Open room')}
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </Button>
+                          </TableCell>
+                        )}
                       </TableRow>
                       );
                     })}
@@ -781,7 +798,7 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                     {filteredRooms.length === 0 && (
                       <TableRow>
                         <TableCell
-                          colSpan={orderedVisibleColumns.length + 1}
+                          colSpan={orderedVisibleColumns.length + (onSelectRoom ? 2 : 1)}
                           className="text-center py-8 text-muted-foreground"
                         >
                          {t('Inga rum hittades', 'No rooms found')}
@@ -846,6 +863,17 @@ const RoomsView: React.FC<RoomsViewProps> = ({
                         <Badge variant="secondary" className="text-[10px]">
                           {room.levelCommonName}
                         </Badge>
+                        {onSelectRoom && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => { e.stopPropagation(); onSelectRoom(room.fmGuid); }}
+                            title={t('Öppna rum', 'Open room')}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
                         <Checkbox
                           checked={selectedRows.has(room.fmGuid)}
                           onClick={(e) => e.stopPropagation()}

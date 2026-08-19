@@ -111,8 +111,18 @@ const GeminusBaseV2ViewerPanel = forwardRef<GeminusBaseV2ViewerHandle, GeminusBa
   }, [buildingFmGuid, geminusBaseBuildingGuid, buildingName, retryCount]);
 
   // ── postMessage helper ────────────────────────────────────────────────────────
+  // Target the trusted viewer origin (same derivation as the origin guard in
+  // handleMessage below) instead of '*', so auth tokens can't leak to an
+  // unintended origin if the iframe ever navigates away.
   const post = useCallback((message: object) => {
-    iframeRef.current?.contentWindow?.postMessage(message, '*');
+    const cfg = embedConfigRef.current;
+    if (!cfg) return;
+    try {
+      const targetOrigin = new URL(cfg.apiUrl).origin;
+      iframeRef.current?.contentWindow?.postMessage(message, targetOrigin);
+    } catch {
+      // invalid apiUrl — do not send
+    }
   }, []);
 
   // ── Message handler (auth flow + selection events) ────────────────────────────

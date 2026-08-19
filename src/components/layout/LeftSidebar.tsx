@@ -88,10 +88,11 @@ const LeftSidebar: React.FC = () => {
             `}
         >
             <div className="p-1.5 sm:p-2 flex h-14 sm:h-16 border-b border-border items-center justify-center">
-                <AppButton 
-                    onClick={() => setIsSidebarExpanded(!isSidebarExpanded)} 
-                    variant="ghost" 
+                <AppButton
+                    onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
+                    variant="ghost"
                     className="h-8 w-8 sm:h-10 sm:w-10"
+                    aria-label={isSidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
                 >
                     <MenuIcon size={18} className="sm:hidden" />
                     <MenuIcon size={20} className="hidden sm:block" />

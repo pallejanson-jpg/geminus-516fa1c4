@@ -87,6 +87,36 @@ const GeminusBaseDashboard: React.FC = () => {
     fetchDocuments();
   }, [buildingFmGuid]);
 
+  const handleOpenDrawing = async (drawing: DrawingItem) => {
+    const drawingId = drawing.drawingId ?? drawing.objectId ?? drawing.id;
+    try {
+      const { data, error } = await supabase.functions.invoke('geminus-base-query', {
+        body: { action: 'get-drawing-pdf', drawingId },
+      });
+      if (error) throw error;
+      if (!data?.success || !data?.url) throw new Error(data?.error || 'Could not open drawing');
+      window.open(data.url, '_blank');
+    } catch (err: any) {
+      setErrorDrawings(err.message);
+    }
+  };
+
+  const handleOpenDocument = async (doc: DocumentItem) => {
+    const documentId = doc.documentId ?? doc.objectId ?? doc.id;
+    try {
+      const { data, error } = await supabase.functions.invoke('geminus-base-query', {
+        body: { action: 'get-document', documentId },
+      });
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || 'Could not open document');
+      const url = data?.data?.url || data?.data?.downloadUrl || data?.data?.fileUrl || data?.data?.link || doc.url;
+      if (!url) throw new Error('No download link available for this document');
+      window.open(url, '_blank');
+    } catch (err: any) {
+      setErrorDocs(err.message);
+    }
+  };
+
   if (!buildingFmGuid) {
     return (
       <div className="flex items-center justify-center h-full p-8">
@@ -157,6 +187,7 @@ const GeminusBaseDashboard: React.FC = () => {
               {drawings.map((d) => (
                 <div
                   key={d.id}
+                  onClick={() => handleOpenDrawing(d)}
                   className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50 cursor-pointer transition-colors"
                 >
                   <div className="flex items-center gap-2 min-w-0">
@@ -201,6 +232,7 @@ const GeminusBaseDashboard: React.FC = () => {
               {documents.map((d) => (
                 <div
                   key={d.id}
+                  onClick={() => handleOpenDocument(d)}
                   className="flex items-center justify-between p-2 rounded-md hover:bg-muted/50 cursor-pointer transition-colors"
                 >
                   <div className="flex items-center gap-2 min-w-0">

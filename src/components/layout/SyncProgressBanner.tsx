@@ -367,6 +367,7 @@ export const SyncProgressBanner: React.FC = () => {
               size="icon"
               className="h-6 w-6 flex-shrink-0"
               onClick={() => setDismissed(true)}
+              aria-label="Dismiss"
             >
               <X className="h-3.5 w-3.5" />
             </Button>

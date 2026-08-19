@@ -19,6 +19,7 @@ import {
   Check,
   Settings2,
   Info,
+  ExternalLink,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -681,10 +682,10 @@ const AssetsView: React.FC<AssetsViewProps> = ({
   }, [selectedRows]);
 
   const handleBatchPlaceAnnotation = useCallback(() => {
-    const selectedAssets = filteredAssets.filter(a => 
+    const selectedAssets = filteredAssets.filter(a =>
       selectedRows.has(a.fmGuid) && !a.createdInModel && !a.annotationPlaced
     );
-    
+
     if (selectedAssets.length === 0) {
       toast({
         title: 'Nothing to place',
@@ -692,7 +693,19 @@ const AssetsView: React.FC<AssetsViewProps> = ({
       });
       return;
     }
-    
+
+    // Placing an annotation is an interactive flow: it switches the app into the
+    // 3D viewer in pick mode for a single asset and waits for the user to click a
+    // location. It cannot be batched without user input per asset, so only the
+    // first eligible asset is opened here — warn the user about the rest instead
+    // of silently dropping them.
+    if (selectedAssets.length > 1) {
+      toast({
+        title: `Placing 1 of ${selectedAssets.length}`,
+        description: 'Annotation placement requires picking a spot in the 3D viewer, so only one asset can be placed at a time. Repeat this action for the remaining assets after finishing this one.',
+      });
+    }
+
     handlePlaceAnnotation(selectedAssets[0]);
   }, [selectedRows, filteredAssets, toast, handlePlaceAnnotation]);
 
@@ -1018,13 +1031,15 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                         ) : null;
                       })}
                     </SortableContext>
+                    {/* Open action column header */}
+                    {onSelectAsset && <TableHead className="bg-muted/50 w-10" />}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {displayedAssets.map((asset) => (
-                    <TableRow 
-                      key={asset.fmGuid} 
-                      className={`hover:bg-muted/30 cursor-pointer ${selectedRows.has(asset.fmGuid) ? 'bg-primary/10' : ''}`}
+                    <TableRow
+                      key={asset.fmGuid}
+                      className={`group hover:bg-muted/30 cursor-pointer ${selectedRows.has(asset.fmGuid) ? 'bg-primary/10' : ''}`}
                       onClick={() => handleToggleRow(asset.fmGuid)}
                       onDoubleClick={() => setShowPropertiesFor([asset.fmGuid])}
                     >
@@ -1040,12 +1055,26 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                           {formatCellValue(colKey, asset[colKey])}
                         </TableCell>
                       ))}
+                      {/* Open asset landing page */}
+                      {onSelectAsset && (
+                        <TableCell className="py-2 w-10" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => onSelectAsset(asset.fmGuid)}
+                            title={t('Öppna tillgång', 'Open asset')}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </Button>
+                        </TableCell>
+                      )}
                     </TableRow>
                   ))}
                   {filteredAssets.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={orderedVisibleColumns.length + 1}
+                        colSpan={orderedVisibleColumns.length + (onSelectAsset ? 2 : 1)}
                         className="text-center py-12 text-muted-foreground"
                       >
                         <Box className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -1090,6 +1119,17 @@ const AssetsView: React.FC<AssetsViewProps> = ({
                           <span title="Ej i modell">
                             <AlertCircle className="h-4 w-4 text-amber-500" />
                           </span>
+                        )}
+                        {onSelectAsset && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={(e) => { e.stopPropagation(); onSelectAsset(asset.fmGuid); }}
+                            title={t('Öppna tillgång', 'Open asset')}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </Button>
                         )}
                         <Checkbox
                           checked={selectedRows.has(asset.fmGuid)}

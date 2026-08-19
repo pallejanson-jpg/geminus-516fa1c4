@@ -246,6 +246,7 @@ const OnboardingComplete: React.FC<OnboardingCompleteProps> = ({
                 variant="ghost"
                 size="sm"
                 onClick={handleStop}
+                aria-label="Stop"
               >
                 <VolumeX className="w-4 h-4" />
               </Button>

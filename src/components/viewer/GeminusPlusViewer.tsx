@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useContext, useMemo } from 'react';
+import DOMPurify from 'dompurify';
 import { AlertCircle, X, Maximize2, Minimize2, TreeDeciduous, Menu, Filter } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import { Spinner } from '@/components/ui/spinner';
@@ -2039,8 +2040,13 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         `;
 
         // Use marker_html if available, otherwise icon
+        // SECURITY: marker_html comes from the annotation_symbols table (editable via
+        // Symbol Settings) and is rendered into every viewer session that loads this
+        // symbol. Sanitize with DOMPurify before injecting to prevent stored XSS
+        // (e.g. <script>, onerror=, javascript: URLs). DOMPurify's default allowlist
+        // already covers the simple formatting/SVG markup this field is meant for.
         if (symbolMarkerHtml) {
-          marker.innerHTML = symbolMarkerHtml;
+          marker.innerHTML = DOMPurify.sanitize(symbolMarkerHtml);
         } else if (ann.iconUrl) {
           const img = document.createElement('img');
           img.src = ann.iconUrl;

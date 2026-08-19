@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Navigation, X, LocateFixed, Car, Footprints, Bus, Building2, ArrowRight, Clock, MapPinned, Search, Accessibility } from 'lucide-react';
+import { Navigation, X, LocateFixed, Car, Footprints, Bus, Building2, ArrowRight, Clock, MapPinned, Search, Accessibility, Check, ChevronsUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle } from '@/components/ui/drawer';
@@ -11,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/context/LanguageContext';
 import { MapFacility } from '@/hooks/useMapFacilities';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { formatRoomLabel } from '@/lib/utils';
 import StreetViewThumbnail from '@/components/map/StreetViewThumbnail';
 
 interface RouteStep {
@@ -226,6 +229,7 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
   const [selectedBuildingGuid, setSelectedBuildingGuid] = useState<string>('');
   const [selectedRoomGuid, setSelectedRoomGuid] = useState<string>('');
   const [roomSearch, setRoomSearch] = useState('');
+  const [roomPopoverOpen, setRoomPopoverOpen] = useState(false);
   const [rooms, setRooms] = useState<RoomOption[]>([]);
   const [isLocating, setIsLocating] = useState(false);
   const [drawerExpanded, setDrawerExpanded] = useState(true);
@@ -325,12 +329,15 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
     setIsLoadingRooms(true);
     supabase
       .from('assets')
-      .select('fm_guid, name')
+      .select('fm_guid, name, common_name')
       .eq('building_fm_guid', selectedBuildingGuid)
       .in('category', ['Space', 'IfcSpace'])
       .order('name')
       .then(({ data }) => {
-        setRooms((data || []).map(r => ({ fm_guid: r.fm_guid, name: r.name || r.fm_guid })));
+        setRooms((data || []).map(r => ({
+          fm_guid: r.fm_guid,
+          name: formatRoomLabel(r.name, r.common_name) || r.fm_guid,
+        })));
         setIsLoadingRooms(false);
       });
   }, [selectedBuildingGuid]);
@@ -345,6 +352,11 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
     const q = roomSearch.toLowerCase();
     return rooms.filter(r => r.name.toLowerCase().includes(q));
   }, [rooms, roomSearch]);
+
+  const selectedRoom = useMemo(
+    () => rooms.find(r => r.fm_guid === selectedRoomGuid) || null,
+    [rooms, selectedRoomGuid]
+  );
 
   const handleNavigate = useCallback(() => {
     if (!userLocation || !selectedBuilding) return;
@@ -466,32 +478,50 @@ const NavigationMapPanel: React.FC<NavigationMapPanelProps> = ({
               {t('Inga rum hittades för denna byggnad', 'No rooms found for this building')}
             </div>
           ) : (
-            <>
-              <div className="relative">
-                <Search size={11} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  value={roomSearch}
-                  onChange={e => setRoomSearch(e.target.value)}
-                  placeholder={t('Sök rum…', 'Search rooms…')}
-                  className="w-full h-9 pl-6 pr-2 text-xs rounded-md border border-input bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-                />
-              </div>
-              <Select value={selectedRoomGuid} onValueChange={setSelectedRoomGuid}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue placeholder={t('Välj rum', 'Select room')} />
-                </SelectTrigger>
-                <SelectContent className="max-h-48">
-                  {filteredRooms.map(r => (
-                    <SelectItem key={r.fm_guid} value={r.fm_guid} className="text-xs">
-                      {r.name}
-                    </SelectItem>
-                  ))}
-                  {filteredRooms.length === 0 && roomSearch && (
-                    <div className="px-2 py-2 text-xs text-muted-foreground">{t(`Inget rum matchar "${roomSearch}"`, `No room matches "${roomSearch}"`)}</div>
-                  )}
-                </SelectContent>
-              </Select>
-            </>
+            <Popover open={roomPopoverOpen} onOpenChange={setRoomPopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={roomPopoverOpen}
+                  className="w-full h-9 justify-between text-xs font-normal"
+                >
+                  <span className="truncate">{selectedRoom ? selectedRoom.name : t('Välj rum', 'Select room')}</span>
+                  <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                <Command shouldFilter={false}>
+                  <CommandInput
+                    value={roomSearch}
+                    onValueChange={setRoomSearch}
+                    placeholder={t('Sök rum…', 'Search rooms…')}
+                    className="text-xs"
+                  />
+                  <CommandList className="max-h-48">
+                    <CommandEmpty className="py-3 text-xs">
+                      {t(`Inget rum matchar "${roomSearch}"`, `No room matches "${roomSearch}"`)}
+                    </CommandEmpty>
+                    <CommandGroup>
+                      {filteredRooms.map(r => (
+                        <CommandItem
+                          key={r.fm_guid}
+                          value={r.fm_guid}
+                          onSelect={() => {
+                            setSelectedRoomGuid(r.fm_guid === selectedRoomGuid ? '' : r.fm_guid);
+                            setRoomPopoverOpen(false);
+                          }}
+                          className="text-xs"
+                        >
+                          <Check className={`mr-2 h-3.5 w-3.5 ${r.fm_guid === selectedRoomGuid ? 'opacity-100' : 'opacity-0'}`} />
+                          {r.name}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           )}
         </div>
       )}

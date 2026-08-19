@@ -100,6 +100,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ isMobileMenuOpen, setIsMobileMenu
               <button
                 onClick={() => setIsMobileMenuOpen(false)}
                 className="h-8 w-8 flex items-center justify-center rounded-full hover:bg-muted transition-colors"
+                aria-label="Close menu"
               >
                 <X className="h-4 w-4 text-muted-foreground" />
               </button>

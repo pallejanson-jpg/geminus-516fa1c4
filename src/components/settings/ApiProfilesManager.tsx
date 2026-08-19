@@ -111,7 +111,13 @@ export default function ApiProfilesManager() {
       .select('*')
       .order('is_default', { ascending: false })
       .order('name');
-    if (!error && data) setProfiles(data as any[]);
+    if (error) {
+      toast({ title: 'Failed to load API profiles', description: error.message, variant: 'destructive' });
+      // Keep whatever profiles were already loaded rather than clearing them —
+      // an empty list here would be indistinguishable from "no profiles exist".
+    } else if (data) {
+      setProfiles(data as any[]);
+    }
     setLoading(false);
   }
 
@@ -217,28 +223,33 @@ export default function ApiProfilesManager() {
   }
 
   async function testGeminusPlus() {
+    // NOTE: this only checks that the required fields are filled in — it does not
+    // call the Geminus Plus API, so it cannot confirm the credentials actually work.
+    // A real connection test requires the profile to be saved and assigned to a
+    // building first (see geminus-plus-query's getToken/test3DApi actions).
     setTestingAp(true);
     try {
-      // We test by invoking geminus-plus-query with profile credentials
-      // For now, just verify credentials are filled
       if (!form.geminus_plus_api_url || !form.geminus_plus_keycloak_url) {
         toast({ title: 'Fill in Geminus Plus URL and Keycloak URL first', variant: 'destructive' });
         return;
       }
-      toast({ title: 'Geminus Plus credentials configured ✓', description: 'Save the profile and assign it to a building to test the full connection.' });
+      toast({ title: 'Geminus Plus fields filled in ✓', description: 'This only checks the fields are non-empty, not that the credentials are valid. Save the profile and assign it to a building to actually test the connection.' });
     } finally {
       setTestingAp(false);
     }
   }
 
   async function testGeminusPremium() {
+    // NOTE: this only checks that the required fields are filled in — it does not
+    // call the Geminus Premium API. A real test requires the profile to be saved and
+    // assigned to a building first (see geminus-premium-query's test-connection action).
     setTestingSl(true);
     try {
       if (!form.geminus_premium_api_url) {
         toast({ title: 'Fill in Geminus Premium API URL first', variant: 'destructive' });
         return;
       }
-      toast({ title: 'Geminus Premium credentials configured ✓', description: 'Save the profile and assign it to a building to test the full connection.' });
+      toast({ title: 'Geminus Premium fields filled in ✓', description: 'This only checks the fields are non-empty, not that the credentials are valid. Save the profile and assign it to a building to actually test the connection.' });
     } finally {
       setTestingSl(false);
     }
@@ -298,7 +309,7 @@ export default function ApiProfilesManager() {
                {renderSecretField('Audience', 'geminus_plus_audience', 'asset-api')}
               <Button variant="outline" size="sm" onClick={testGeminusPlus} disabled={testingAp}>
                 {testingAp ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
-                Validate
+                Check Fields
               </Button>
             </AccordionContent>
           </AccordionItem>
@@ -311,7 +322,7 @@ export default function ApiProfilesManager() {
                {renderSecretField('Password', 'geminus_premium_password')}
               <Button variant="outline" size="sm" onClick={testGeminusPremium} disabled={testingSl}>
                 {testingSl ? <Loader2 className="mr-2 h-3 w-3 animate-spin" /> : <TestTube className="mr-2 h-3 w-3" />}
-                Validate
+                Check Fields
               </Button>
             </AccordionContent>
           </AccordionItem>

@@ -6,6 +6,16 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Plus, Trash2, RefreshCw, Globe } from 'lucide-react';
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface HelpDocSource {
   id: string;
@@ -25,6 +35,7 @@ export default function KnowledgeBaseSettings() {
   const [isAdding, setIsAdding] = useState(false);
   const [indexingId, setIndexingId] = useState<string | null>(null);
   const [isIndexingAll, setIsIndexingAll] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const fetchSources = async () => {
     const { data, error } = await supabase
@@ -56,8 +67,17 @@ export default function KnowledgeBaseSettings() {
   };
 
   const handleDelete = async (id: string) => {
-    await supabase.from('help_doc_sources').delete().eq('id', id);
-    await supabase.from('document_chunks').delete().eq('source_type', 'help_doc').eq('source_id', id);
+    const { error: sourceError } = await supabase.from('help_doc_sources').delete().eq('id', id);
+    const { error: chunksError } = await supabase.from('document_chunks').delete().eq('source_type', 'help_doc').eq('source_id', id);
+    if (sourceError || chunksError) {
+      toast({
+        variant: 'destructive',
+        title: 'Delete failed',
+        description: (sourceError || chunksError)?.message || 'Could not delete source.',
+      });
+      return;
+    }
+    setDeleteConfirmId(null);
     await fetchSources();
     toast({ title: 'Deleted', description: 'Source and indexed content removed.' });
   };
@@ -161,7 +181,7 @@ export default function KnowledgeBaseSettings() {
                   size="sm"
                   variant="ghost"
                   className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                  onClick={() => handleDelete(source.id)}
+                  onClick={() => setDeleteConfirmId(source.id)}
                 >
                   <Trash2 className="h-3 w-3" />
                 </Button>
@@ -178,6 +198,27 @@ export default function KnowledgeBaseSettings() {
           Index All Sources
         </Button>
       )}
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this knowledge source?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the source and its indexed content. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => deleteConfirmId && handleDelete(deleteConfirmId)}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

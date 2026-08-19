@@ -176,9 +176,16 @@ const MobileInventoryWizard: React.FC<MobileInventoryWizardProps> = ({ onItemSav
   const goBack = useCallback(() => {
     const prevIndex = currentStepIndex - 1;
     if (prevIndex >= 0) {
+      // Editing an existing item jumps straight to the registration step. If the user
+      // navigates back from there, treat it as abandoning the edit shortcut rather than
+      // continuing to edit — otherwise picking a different building/category/name further
+      // back in the wizard would silently overwrite the original item on save.
+      if (currentStep === 'registration' && editingItem) {
+        setEditingItem(null);
+      }
       setCurrentStep(STEP_ORDER[prevIndex]);
     }
-  }, [currentStepIndex]);
+  }, [currentStepIndex, currentStep, editingItem]);
 
   const updateFormData = useCallback((updates: Partial<WizardFormData>) => {
     setFormData((prev) => ({ ...prev, ...updates }));

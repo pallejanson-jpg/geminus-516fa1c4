@@ -277,6 +277,7 @@ export const DataConsistencyBanner: React.FC = () => {
           size="icon"
           className="h-6 w-6 flex-shrink-0"
           onClick={dismiss}
+          aria-label="Dismiss"
         >
           <X className="h-4 w-4" />
         </Button>

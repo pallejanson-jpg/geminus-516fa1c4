@@ -145,10 +145,11 @@ const AppHeader: React.FC<AppHeaderProps> = ({
         >
             {/* Left section */}
             <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-                <AppButton 
-                    onClick={onToggleMobileMenu} 
-                    variant="ghost" 
+                <AppButton
+                    onClick={onToggleMobileMenu}
+                    variant="ghost"
                     className="md:hidden h-9 w-9 sm:h-10 sm:w-10"
+                    aria-label={t('Öppna meny', 'Open menu')}
                 >
                     <MenuIcon size={20} />
                 </AppButton>
@@ -251,7 +252,10 @@ const AppHeader: React.FC<AppHeaderProps> = ({
 
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <button className="flex items-center gap-2 p-1 rounded-full hover:bg-muted transition-colors">
+                        <button
+                            className="flex items-center gap-2 p-1 rounded-full hover:bg-muted transition-colors"
+                            aria-label={t('Användarmeny', 'User menu')}
+                        >
                             <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
                                 <AvatarImage src={avatarUrl || ''} />
                                 <AvatarFallback className="bg-primary text-primary-foreground text-xs">

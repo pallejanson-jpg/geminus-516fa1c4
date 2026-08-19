@@ -25,22 +25,24 @@ const ExampleImagesUpload: React.FC<ExampleImagesUploadProps> = ({
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const uploadImage = async (file: File) => {
-    if (!file) return;
+  // Uploads a single file and resolves to its public URL, or null if the
+  // file was invalid or the upload failed. Does NOT call onChange itself —
+  // callers combine the results so concurrent uploads don't stale-overwrite
+  // each other via the closed-over `value` prop.
+  const uploadImage = async (file: File): Promise<string | null> => {
+    if (!file) return null;
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
       toast.error(t('Endast bilder tillåtna', 'Only images are allowed'));
-      return;
+      return null;
     }
 
     // Validate file size (max 5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast.error(t('Bilden får max vara 5 MB', 'Image must be at most 5 MB'));
-      return;
+      return null;
     }
-
-    setIsUploading(true);
 
     try {
       // Generate unique filename
@@ -60,26 +62,39 @@ const ExampleImagesUpload: React.FC<ExampleImagesUploadProps> = ({
         .from('template-examples')
         .getPublicUrl(fileName);
 
-      onChange([...value, urlData.publicUrl]);
       toast.success(t('Exempelbild uppladdad!', 'Example image uploaded!'));
+      return urlData.publicUrl;
     } catch (error: any) {
       console.error('Upload error:', error);
       toast.error('Could not upload image', {
         description: error.message,
       });
-    } finally {
-      setIsUploading(false);
+      return null;
     }
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (files) {
-      // Upload all selected files
-      Array.from(files).slice(0, maxImages - value.length).forEach(uploadImage);
-    }
     // Reset input so same file can be selected again
     e.target.value = '';
+    if (!files || files.length === 0) return;
+
+    const filesToUpload = Array.from(files).slice(0, maxImages - value.length);
+    if (filesToUpload.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      // Run uploads concurrently, then commit the combined result in a
+      // single onChange call so simultaneous completions can't overwrite
+      // each other's contribution to the stale `value` prop.
+      const results = await Promise.all(filesToUpload.map(uploadImage));
+      const newUrls = results.filter((url): url is string => !!url);
+      if (newUrls.length > 0) {
+        onChange([...value, ...newUrls]);
+      }
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleRemove = (urlToRemove: string) => {

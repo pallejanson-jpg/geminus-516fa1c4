@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Check, RotateCcw, Crosshair } from 'lucide-react';
@@ -22,13 +22,35 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
 }) => {
   const [pendingCoords, setPendingCoords] = useState<{ x: number; y: number; z: number } | null>(null);
   const viewerRef = useRef<any>(null);
+  // Tracks the canvas + listener functions currently attached, so they can be
+  // removed if the viewer re-initializes (e.g. building change) while this
+  // dialog stays mounted — otherwise listeners accumulate across re-inits.
+  const attachedListenersRef = useRef<{
+    canvas: HTMLCanvasElement;
+    pointerdown: (e: PointerEvent) => void;
+    pointermove: (e: PointerEvent) => void;
+    pointerup: (e: PointerEvent) => void;
+  } | null>(null);
+
+  const detachListeners = useCallback(() => {
+    const attached = attachedListenersRef.current;
+    if (!attached) return;
+    attached.canvas.removeEventListener('pointerdown', attached.pointerdown);
+    attached.canvas.removeEventListener('pointermove', attached.pointermove);
+    attached.canvas.removeEventListener('pointerup', attached.pointerup);
+    attachedListenersRef.current = null;
+  }, []);
 
   const handleViewerReady = useCallback((viewer: any) => {
+    // Remove listeners from any previously attached canvas before attaching
+    // new ones (viewer can be re-initialized while this component stays mounted).
+    detachListeners();
+
     viewerRef.current = viewer;
     const canvas = viewer.scene.canvas.canvas;
 
     // Single-click pick
-    canvas.addEventListener('pointerup', (e: PointerEvent) => {
+    const onPointerUp = (e: PointerEvent) => {
       // Ignore if it was a drag (orbit/pan)
       if ((e as any).__dragged) return;
       const rect = canvas.getBoundingClientRect();
@@ -46,15 +68,15 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
           });
         }
       }
-    });
+    };
 
     // Track drag to avoid picking on orbit
     let startX = 0, startY = 0;
-    canvas.addEventListener('pointerdown', (e: PointerEvent) => {
+    const onPointerDown = (e: PointerEvent) => {
       startX = e.clientX; startY = e.clientY;
       (e as any).__dragged = false;
-    });
-    canvas.addEventListener('pointermove', (e: PointerEvent) => {
+    };
+    const onPointerMove = (e: PointerEvent) => {
       if (e.buttons > 0) {
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
@@ -62,7 +84,12 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
           (e as any).__dragged = true;
         }
       }
-    });
+    };
+
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerup', onPointerUp);
+    attachedListenersRef.current = { canvas, pointerdown: onPointerDown, pointermove: onPointerMove, pointerup: onPointerUp };
 
     // Fly to room if provided
     if (roomFmGuid) {
@@ -110,7 +137,12 @@ const PositionPickerDialog: React.FC<PositionPickerDialogProps> = ({
         setTimeout(() => clearInterval(interval), 10000);
       }
     }
-  }, [roomFmGuid]);
+  }, [roomFmGuid, detachListeners]);
+
+  // Clean up listeners when the dialog itself unmounts.
+  useEffect(() => {
+    return () => detachListeners();
+  }, [detachListeners]);
 
   const handleConfirm = () => {
     if (pendingCoords) {

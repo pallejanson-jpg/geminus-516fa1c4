@@ -47,7 +47,17 @@ export function useMapFacilities() {
       }
     });
 
-    return navigatorTreeData.map((building, index) => {
+    // navigatorTreeData's top-level nodes are Property (Complex) wrappers around one or
+    // more real Building nodes — or bare Building nodes when a building has no complex.
+    // A MapFacility must always resolve to a real Building: rooms are scoped by
+    // assets.building_fm_guid, which is the Building's own fm_guid, never the Complex's.
+    // Using the Property node's fmGuid here (as before) meant every room lookup for any
+    // navigation target queried a Complex guid that no Space asset ever matches.
+    const buildingNodes = navigatorTreeData.flatMap(node =>
+      node.category === 'Property' ? (node.children || []) : [node]
+    );
+
+    return buildingNodes.map((building, index) => {
       const storeys = building.children || [];
       const totalSpaces = storeys.reduce((sum: number, storey: any) => sum + (storey.children?.length || 0), 0);
 

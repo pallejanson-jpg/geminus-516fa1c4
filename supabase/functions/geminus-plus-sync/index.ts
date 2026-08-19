@@ -2165,7 +2165,84 @@ serve(async (req) => {
           }
         }
       }
-      return new Response(JSON.stringify({ discoveryUrl: discovery.url, modelCount: models.length, models: models.slice(0, 3), revisions: revisions.slice(0, 5), xktTests }, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      // Search the FULL (unsliced) revisions list for entries matching any of this
+      // building's model bimObjectIds — GetAllModelRevisions takes no scoping param
+      // per the OpenAPI spec, so it returns a tenant-wide list; a matching revision
+      // may exist far past the first few entries.
+      const modelBimIds = models.map((m: any) => String(m.bimObjectId || m.BimObjectId || ''));
+      const matchedByBimId = revisions.filter((r: any) => modelBimIds.includes(String(r.modelId || '')));
+
+      // Extra probe: try modelid=revisionId (not modelId) in case the API's "modelid"
+      // param actually addresses a specific revision rather than the parent model.
+      const revisionIdTests: any[] = [];
+      if (discovery.url) {
+        for (const rev of matchedByBimId) {
+          const revId = rev.revisionId;
+          const bimId = rev.modelId; // == bimObjectId for these
+          for (const ctx of ['Building', 'Default']) {
+            const url = `${discovery.url}/GetXktData?modelid=${revId}&context=${ctx}&apiKey=${apiKey}`;
+            try {
+              const r = await fetch(url, { headers: { "Authorization": `Bearer ${accessToken}` }, signal: AbortSignal.timeout(10000) });
+              const body = r.ok ? (await r.arrayBuffer()).byteLength : await r.text().then(t => t.substring(0, 150));
+              revisionIdTests.push({ label: `${rev.modelName} modelid=revisionId ctx=${ctx}`, url: url.replace(/apiKey=[^&]+/, 'apiKey=***'), status: r.status, body });
+            } catch (e) { revisionIdTests.push({ label: `${rev.modelName} modelid=revisionId ctx=${ctx}`, error: String(e) }); }
+
+            const url2 = `${discovery.url}/GetXktData?modelid=${revId}&bimobjectid=${bimId}&context=${ctx}&apiKey=${apiKey}`;
+            try {
+              const r = await fetch(url2, { headers: { "Authorization": `Bearer ${accessToken}` }, signal: AbortSignal.timeout(10000) });
+              const body = r.ok ? (await r.arrayBuffer()).byteLength : await r.text().then(t => t.substring(0, 150));
+              revisionIdTests.push({ label: `${rev.modelName} modelid=revisionId+bimobjectid ctx=${ctx}`, url: url2.replace(/apiKey=[^&]+/, 'apiKey=***'), status: r.status, body });
+            } catch (e) { revisionIdTests.push({ label: `${rev.modelName} modelid=revisionId+bimobjectid ctx=${ctx}`, error: String(e) }); }
+          }
+        }
+      }
+
+      return new Response(JSON.stringify({ discoveryUrl: discovery.url, modelCount: models.length, models: models.slice(0, 3), totalRevisionsInTenant: revisions.length, matchedByBimId, revisionIdTests, xktTests }, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+    }
+
+    // ============ RESTORE ORPHANED/LOST XKT DATA — calls Geminus Plus's own
+    // RestoreRevisionAndXktData recovery endpoint for a specific set of modelIds.
+    // Diagnostic/ops action for the case where a revision is finalised/published
+    // in Geminus Plus but GetXktData 404s for every valid modelid+bimobjectid combo
+    // (geometry blob lost server-side). As of this writing the endpoint 200s with
+    // an empty body (no content-type, content-length: 0) for both backupRestoreStep
+    // values against the stage environment — inconclusive; may need Geminus Plus's
+    // own support to confirm server-side whether the call actually restored anything.
+    if (action === 'restore-xkt') {
+      const modelIds: string[] = Array.isArray(body?.modelIds) ? body.modelIds : [];
+      if (modelIds.length === 0) return new Response(JSON.stringify({ error: 'modelIds array required' }), { status: 400, headers: corsHeaders });
+      const accessToken = await getAccessToken();
+      const apiUrl = _creds.apiUrl || Deno.env.get("GEMINUS_PLUS_API_URL") || "";
+      const apiKey = _creds.apiKey || Deno.env.get("GEMINUS_PLUS_API_KEY") || "";
+      const discovery = await discover3dModelsEndpoint(supabase, accessToken, apiUrl, apiKey, buildingFmGuid || modelIds[0]);
+      if (!discovery.url) return new Response(JSON.stringify({ error: 'could not discover 3D API base URL' }), { status: 500, headers: corsHeaders });
+      const steps: number[] = typeof body?.backupRestoreStep === 'number' ? [body.backupRestoreStep] : [0, 1];
+      const attempts: any[] = [];
+      for (const backupRestoreStep of steps) {
+        const restoreUrl = `${discovery.url}/RestoreRevisionAndXktData?apiKey=${apiKey}`;
+        try {
+          const r = await fetch(restoreUrl, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ modelIds, backupRestoreStep }),
+          });
+          const text = await r.text();
+          let parsed: any = text;
+          try { parsed = JSON.parse(text); } catch { /* keep as text */ }
+          attempts.push({
+            backupRestoreStep,
+            status: r.status,
+            statusText: r.statusText,
+            contentLength: r.headers.get('content-length'),
+            contentType: r.headers.get('content-type'),
+            bodyLength: text.length,
+            body: parsed,
+          });
+        } catch (e) {
+          attempts.push({ backupRestoreStep, error: String(e) });
+        }
+      }
+      return new Response(JSON.stringify({ discoveryUrl: discovery.url, modelIds, attempts }, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
     // ============ SYNC XKT FOR SINGLE BUILDING (on-demand) ============

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import DOMPurify from 'dompurify';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -148,12 +149,20 @@ const SymbolSettings: React.FC = () => {
 
     setIsSaving(true);
     try {
+      // SECURITY: marker_html is later injected via innerHTML in the 3D viewer for
+      // every user who views this symbol's markers. Sanitize before persisting as
+      // defense in depth (the viewer also sanitizes on render, which is the fix that
+      // actually prevents stored XSS execution).
+      const sanitizedMarkerHtml = formData.marker_html
+        ? DOMPurify.sanitize(formData.marker_html)
+        : '';
+
       const symbolData = {
         name: formData.name,
         category: formData.category,
         color: formData.color,
         icon_url: formData.icon_url || null,
-        marker_html: formData.marker_html || null,
+        marker_html: sanitizedMarkerHtml || null,
         is_default: formData.is_default,
       };
 

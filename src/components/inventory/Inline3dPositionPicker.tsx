@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Crosshair, X, Check, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
@@ -20,25 +20,47 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
 }) => {
   const { t } = useLanguage();
   const [pendingCoords, setPendingCoords] = useState<{ x: number; y: number; z: number } | null>(null);
+  // Tracks the canvas + listener functions currently attached, so they can be
+  // removed if the viewer re-initializes (e.g. building change) while this
+  // panel stays mounted — otherwise listeners accumulate across re-inits.
+  const attachedListenersRef = useRef<{
+    canvas: HTMLCanvasElement;
+    pointerdown: (e: PointerEvent) => void;
+    pointermove: (e: PointerEvent) => void;
+    pointerup: (e: PointerEvent) => void;
+  } | null>(null);
+
+  const detachListeners = useCallback(() => {
+    const attached = attachedListenersRef.current;
+    if (!attached) return;
+    attached.canvas.removeEventListener('pointerdown', attached.pointerdown);
+    attached.canvas.removeEventListener('pointermove', attached.pointermove);
+    attached.canvas.removeEventListener('pointerup', attached.pointerup);
+    attachedListenersRef.current = null;
+  }, []);
 
   const handleViewerReady = useCallback((viewer: any) => {
+    // Remove listeners from any previously attached canvas before attaching
+    // new ones (viewer can be re-initialized while this component stays mounted).
+    detachListeners();
+
     const canvas = viewer.scene.canvas.canvas;
 
     // Track drag to distinguish click from orbit
     let startX = 0, startY = 0, dragged = false;
-    canvas.addEventListener('pointerdown', (e: PointerEvent) => {
+    const onPointerDown = (e: PointerEvent) => {
       startX = e.clientX; startY = e.clientY; dragged = false;
-    });
-    canvas.addEventListener('pointermove', (e: PointerEvent) => {
+    };
+    const onPointerMove = (e: PointerEvent) => {
       if (e.buttons > 0 && !dragged) {
         const dx = e.clientX - startX;
         const dy = e.clientY - startY;
         if (Math.sqrt(dx * dx + dy * dy) > 6) dragged = true;
       }
-    });
+    };
 
     // Single-click pick
-    canvas.addEventListener('pointerup', (e: PointerEvent) => {
+    const onPointerUp = (e: PointerEvent) => {
       if (dragged) return;
       const rect = canvas.getBoundingClientRect();
       const hit = viewer.scene.pick({ canvasPos: [e.clientX - rect.left, e.clientY - rect.top], pickSurface: true });
@@ -50,7 +72,12 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
           });
         }
       }
-    });
+    };
+
+    canvas.addEventListener('pointerdown', onPointerDown);
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('pointerup', onPointerUp);
+    attachedListenersRef.current = { canvas, pointerdown: onPointerDown, pointermove: onPointerMove, pointerup: onPointerUp };
 
     // Fly to room if provided
     if (roomFmGuid) {
@@ -97,7 +124,12 @@ const Inline3dPositionPicker: React.FC<Inline3dPositionPickerProps> = ({
         setTimeout(() => clearInterval(interval), 10000);
       }
     }
-  }, [roomFmGuid]);
+  }, [roomFmGuid, detachListeners]);
+
+  // Clean up listeners when this panel itself unmounts.
+  useEffect(() => {
+    return () => detachListeners();
+  }, [detachListeners]);
 
   const handleConfirm = () => {
     if (pendingCoords) {

@@ -32,6 +32,7 @@ export function useIndoorGeoJSON(
 
   useEffect(() => {
     if (!buildingFmGuid) return;
+    let cancelled = false;
     setIsLoading(true);
 
     supabase
@@ -40,9 +41,12 @@ export function useIndoorGeoJSON(
       .eq('building_fm_guid', buildingFmGuid)
       .eq('category', 'Space')
       .then(({ data, error }) => {
+        if (cancelled) return;
         if (!error && data) setRooms(data);
         setIsLoading(false);
       });
+
+    return () => { cancelled = true; };
   }, [buildingFmGuid]);
 
   const floorIds = useMemo(() => {

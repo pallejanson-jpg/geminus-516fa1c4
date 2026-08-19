@@ -10,8 +10,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
-import { Navigation, Pencil, Route, X, ArrowRight, Accessibility } from 'lucide-react';
+import { Navigation, Pencil, Route, X, ArrowRight, Accessibility, Wand2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 import {
   Select,
   SelectContent,
@@ -28,6 +29,14 @@ import {
   type NavGraph,
   type RouteResult,
 } from '@/lib/pathfinding';
+import { useFloorData, type FloorInfo } from '@/hooks/useFloorData';
+import { getXeokitViewerFromRef } from '@/hooks/useFloorVisibility';
+import { generateFloorNavGraph, collectVerticalNodes, mergeGeneratedFloor } from '@/lib/nav-graph-autogen';
+import { formatRoomLabel } from '@/lib/utils';
+
+function normalizeGuid(v?: string | null): string {
+  return (v || '').toLowerCase().replace(/-/g, '');
+}
 
 interface NavigationPanelProps {
   buildingFmGuid: string;
@@ -38,6 +47,8 @@ interface NavigationPanelProps {
   currentFloorFmGuid?: string | null;
   graph: NavGraph;
   onClose: () => void;
+  /** xeokit viewer ref — needed to read live BIM geometry for "Generate suggestion". */
+  viewerRef?: React.MutableRefObject<any>;
 }
 
 const NavigationPanel: React.FC<NavigationPanelProps> = ({
@@ -49,6 +60,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
   currentFloorFmGuid,
   graph,
   onClose,
+  viewerRef,
 }) => {
   const { t } = useLanguage();
   const [fromRoom, setFromRoom] = useState<string>('');
@@ -56,8 +68,10 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
   const [route, setRoute] = useState<RouteResult | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [preferElevator, setPreferElevator] = useState(false);
   const [roomSearch, setRoomSearch] = useState('');
+  const { floors } = useFloorData(viewerRef ?? { current: null }, buildingFmGuid);
 
   // Fetch rooms (Space category) from database
   const [rooms, setRooms] = useState<any[]>([]);
@@ -78,7 +92,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
     if (!roomSearch.trim()) return rooms;
     const q = roomSearch.toLowerCase();
     return rooms.filter(r =>
-      (r.common_name || r.name || '').toLowerCase().includes(q)
+      formatRoomLabel(r.name, r.common_name).toLowerCase().includes(q)
     );
   }, [rooms, roomSearch]);
 
@@ -128,15 +142,6 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
     onRouteCalculated(null);
   }, [onRouteCalculated]);
 
-  const handleEditToggle = useCallback((checked: boolean) => {
-    setIsEditMode(checked);
-    onEditModeChange(checked);
-    if (!checked) {
-      // Leaving edit mode — auto-save
-      handleSave();
-    }
-  }, [onEditModeChange]);
-
   const handleSave = useCallback(async () => {
     if (graph.nodes.size === 0) return;
     setIsSaving(true);
@@ -171,6 +176,71 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
     onGraphSave(graph);
     setIsSaving(false);
   }, [graph, buildingFmGuid, currentFloorFmGuid, onGraphSave]);
+
+  const handleEditToggle = useCallback((checked: boolean) => {
+    setIsEditMode(checked);
+    onEditModeChange(checked);
+    if (!checked) {
+      // Leaving edit mode — auto-save
+      handleSave();
+    }
+  }, [onEditModeChange, handleSave]);
+
+  // Auto-generate a starting graph for the current floor from the live BIM model
+  // (room centroids + door connections + stair/elevator nodes) instead of requiring
+  // every node to be placed by hand. The result is just loaded into the editor for
+  // review — nothing is saved until the user hits "Save graph" as usual.
+  const runGenerateSuggestion = useCallback((viewer: any, floor: FloorInfo) => {
+    setIsGenerating(true);
+    try {
+      const roomFmGuidByOriginalId = new Map<string, string>(
+        rooms.filter((r: any) => r.fm_guid).map((r: any) => [normalizeGuid(r.fm_guid), r.fm_guid])
+      );
+      const existingVerticalNodes = collectVerticalNodes(viewer, floors, graph);
+      const generated = generateFloorNavGraph(viewer, floor, { roomFmGuidByOriginalId, existingVerticalNodes });
+
+      if (generated.nodes.size === 0) {
+        toast.warning(t('Hittade inga rum/dörrar att generera från på den här våningen', 'Found no rooms/doors to generate from on this floor'));
+        return;
+      }
+
+      const merged = mergeGeneratedFloor(graph, currentFloorFmGuid ?? null, generated);
+      onGraphLoaded(merged);
+      toast.success(t(`Genererade ${generated.nodes.size} noder`, `Generated ${generated.nodes.size} nodes`));
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [floors, currentFloorFmGuid, graph, rooms, onGraphLoaded, t]);
+
+  const handleGenerateSuggestion = useCallback(() => {
+    const viewer = getXeokitViewerFromRef(viewerRef ?? { current: null });
+    if (!viewer?.scene) {
+      toast.error(t('3D-modellen är inte redo än', '3D model isn\'t ready yet'));
+      return;
+    }
+
+    const floor = floors.find(f => f.databaseLevelFmGuids.some(g => normalizeGuid(g) === normalizeGuid(currentFloorFmGuid)));
+    if (!floor) {
+      toast.error(t('Välj en våning i planvyn först', 'Select a floor in the plan view first'));
+      return;
+    }
+
+    const hasExistingFloorNodes = Array.from(graph.nodes.values())
+      .some(n => normalizeGuid(n.floor_fm_guid) === normalizeGuid(currentFloorFmGuid));
+
+    if (hasExistingFloorNodes) {
+      toast(t('Den här våningen har redan noder', 'This floor already has nodes'), {
+        description: t('Ersätta dem med ett auto-genererat förslag?', 'Replace them with an auto-generated suggestion?'),
+        action: {
+          label: t('Ersätt', 'Replace'),
+          onClick: () => runGenerateSuggestion(viewer, floor),
+        },
+      });
+      return;
+    }
+
+    runGenerateSuggestion(viewer, floor);
+  }, [viewerRef, floors, currentFloorFmGuid, graph, t, runGenerateSuggestion]);
 
   return (
     <div className="flex flex-col gap-3 p-3 h-full overflow-y-auto">
@@ -207,9 +277,22 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
       )}
 
       {isEditMode && (
-        <Button size="sm" variant="outline" onClick={handleSave} disabled={isSaving} className="text-xs">
-          {isSaving ? t('Sparar…', 'Saving…') : t('Spara graf', 'Save graph')}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={handleGenerateSuggestion}
+            disabled={isGenerating || floors.length === 0}
+            className="text-xs flex-1 gap-1"
+            title={t('Föreslå noder/kanter från BIM-modellen för aktuell våning', 'Suggest nodes/edges from the BIM model for the current floor')}
+          >
+            <Wand2 className="h-3.5 w-3.5" />
+            {isGenerating ? t('Genererar…', 'Generating…') : t('Föreslå graf', 'Generate suggestion')}
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleSave} disabled={isSaving} className="text-xs flex-1">
+            {isSaving ? t('Sparar…', 'Saving…') : t('Spara graf', 'Save graph')}
+          </Button>
+        </div>
       )}
 
       {!isEditMode && (
@@ -237,7 +320,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
               <SelectContent>
                 {filteredRooms.map((room: any) => (
                   <SelectItem key={room.fm_guid} value={room.fm_guid} className="text-xs">
-                    {room.common_name || room.name || room.fm_guid?.slice(0, 8)}
+                    {formatRoomLabel(room.name, room.common_name) || room.fm_guid?.slice(0, 8)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -259,7 +342,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
               <SelectContent>
                 {filteredRooms.map((room: any) => (
                   <SelectItem key={room.fm_guid} value={room.fm_guid} className="text-xs">
-                    {room.common_name || room.name || room.fm_guid?.slice(0, 8)}
+                    {formatRoomLabel(room.name, room.common_name) || room.fm_guid?.slice(0, 8)}
                   </SelectItem>
                 ))}
               </SelectContent>

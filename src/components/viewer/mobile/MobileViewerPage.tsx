@@ -873,6 +873,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
               currentFloorFmGuid={navFloorFmGuid}
               graph={navGraph}
               onClose={() => { setNavPanelOpen(false); setNavEditMode(false); setNavRoute(null); }}
+              viewerRef={viewerInstanceRef}
             />
           </div>
         </div>

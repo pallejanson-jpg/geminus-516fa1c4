@@ -105,16 +105,25 @@ export default function BlmFormaView() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const loadProjects = useCallback(async () => {
-    const { data } = await supabase.from('renovation_projects').select('*')
+    const { data, error } = await supabase.from('renovation_projects').select('*')
       .not('status', 'eq', 'archived').order('created_at', { ascending: false });
+    if (error) {
+      toast({ title: 'Failed to load renovation projects', description: error.message, variant: 'destructive' });
+      setLoading(false);
+      return;
+    }
     if (data) setProjects(data as RenovationProject[]);
     setLoading(false);
-  }, []);
+  }, [toast]);
 
   const loadBuildings = useCallback(async () => {
-    const { data } = await supabase.from('assets').select('fm_guid, name, common_name').eq('category', 'Building').order('name');
+    const { data, error } = await supabase.from('assets').select('fm_guid, name, common_name').eq('category', 'Building').order('name');
+    if (error) {
+      toast({ title: 'Failed to load buildings', description: error.message, variant: 'destructive' });
+      return;
+    }
     if (data) setBuildings(data as BuildingOption[]);
-  }, []);
+  }, [toast]);
 
   useEffect(() => { loadProjects(); loadBuildings(); }, [loadProjects, loadBuildings]);
 
@@ -219,7 +228,8 @@ export default function BlmFormaView() {
 
   // Status change
   const handleStatusChange = async (project: RenovationProject, newStatus: RenovationProject['status']) => {
-    await supabase.from('renovation_projects').update({ status: newStatus }).eq('id', project.id);
+    const { error } = await supabase.from('renovation_projects').update({ status: newStatus }).eq('id', project.id);
+    if (error) { toast({ title: 'Failed to update status', description: error.message, variant: 'destructive' }); return; }
     setProjects(prev => prev.map(p => p.id === project.id ? { ...p, status: newStatus } : p));
     toast({ title: `Project marked as ${newStatus}` });
   };

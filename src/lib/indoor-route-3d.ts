@@ -31,14 +31,38 @@ export function findFloorForGuid(floors: FloorInfo[], floorFmGuid: string | null
   return floors.find(f => f.databaseLevelFmGuids.some(g => normalizeGuid(g) === norm)) || null;
 }
 
+/**
+ * A floor's IfcBuildingStorey metaObject ids, per FloorInfo.metaObjectIds when
+ * available, plus a name-matched fallback. FloorInfo's ids come from matching the
+ * DB storey asset's fm_guid against each storey's originalSystemId in the live
+ * model (see useFloorData.ts) — that match can legitimately come up empty (a
+ * storey duplicated across sub-models, or a GUID that was never reconciled), in
+ * which case the storey's display name is the next best anchor, mirroring the
+ * name-fallback already used for canonical GUID resolution elsewhere (see
+ * NativeViewerShell.tsx's resolveCanonicalFmGuid).
+ */
+export function resolveFloorMetaObjectIds(viewer: any, floor: FloorInfo | null): string[] {
+  if (!viewer?.metaScene?.metaObjects || !floor) return [];
+  const ids = new Set(floor.metaObjectIds);
+  if (ids.size === 0 && floor.name) {
+    const metaObjects = viewer.metaScene.metaObjects;
+    for (const id in metaObjects) {
+      const mo = metaObjects[id];
+      if ((mo?.type || '').toLowerCase() === 'ifcbuildingstorey' && mo.name === floor.name) ids.add(id);
+    }
+  }
+  return Array.from(ids);
+}
+
 /** Combined AABB of everything under a floor, read live from the xeokit scene. Falls back to the whole model's AABB. */
 export function getFloorAabb(viewer: any, floor: FloorInfo | null): Aabb6 | null {
   if (!viewer?.scene) return null;
   const wholeScene = (): Aabb6 | null => (viewer.scene.aabb ? (Array.from(viewer.scene.aabb) as Aabb6) : null);
-  if (!floor || floor.metaObjectIds.length === 0) return wholeScene();
+  const storeyIds = resolveFloorMetaObjectIds(viewer, floor);
+  if (storeyIds.length === 0) return wholeScene();
 
   const ids = new Set<string>();
-  floor.metaObjectIds.forEach(id => getDescendantIds(viewer, id).forEach(cid => ids.add(cid)));
+  storeyIds.forEach(id => getDescendantIds(viewer, id).forEach(cid => ids.add(cid)));
   if (ids.size === 0) return wholeScene();
 
   const aabb = viewer.scene.getAABB(Array.from(ids));

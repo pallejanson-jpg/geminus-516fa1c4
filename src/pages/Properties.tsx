@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
 import CreatePropertyDialog from '@/components/properties/CreatePropertyDialog';
 import { useTenant } from '@/context/TenantContext';
+import { useToast } from '@/hooks/use-toast';
 
 interface PropertyRow {
   fmGuid: string;
@@ -33,10 +34,13 @@ export default function Properties() {
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editFmGuid, setEditFmGuid] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
   const { tenants, selectedTenantId } = useTenant();
+  const { toast } = useToast();
 
   const fetchProperties = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       let query = supabase
         .from('building_settings')
@@ -88,12 +92,18 @@ export default function Properties() {
       }));
 
       setProperties(rows);
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to fetch properties:', err);
+      setLoadError(true);
+      toast({
+        title: 'Failed to load properties',
+        description: err?.message || 'An unexpected error occurred while loading properties.',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
-  }, [selectedTenantId, tenants]);
+  }, [selectedTenantId, tenants, toast]);
 
   useEffect(() => {
     fetchProperties();
@@ -162,9 +172,11 @@ export default function Properties() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
-          {properties.length === 0
-            ? 'No properties configured. Click "Add Property" to get started.'
-            : 'No results match your search.'}
+          {loadError
+            ? 'Failed to load properties. Please try refreshing.'
+            : properties.length === 0
+              ? 'No properties configured. Click "Add Property" to get started.'
+              : 'No results match your search.'}
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">

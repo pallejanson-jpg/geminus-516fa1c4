@@ -70,6 +70,7 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
   const [showDeleteRandom, setShowDeleteRandom] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedAlarm, setSelectedAlarm] = useState<AlarmAsset | null>(null);
+  const [alarmToDelete, setAlarmToDelete] = useState<AlarmAsset | null>(null);
 
   const fetchLevelNames = useCallback(async () => {
     const { data } = await supabase
@@ -216,6 +217,26 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
       onAlarmsDeleted?.();
     } catch (e: any) {
       toast({ title: 'Error deleting', description: e.message, variant: 'destructive' });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteSingle = async () => {
+    if (!alarmToDelete) return;
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from('assets')
+        .delete()
+        .eq('fm_guid', alarmToDelete.fm_guid);
+      if (error) throw error;
+      toast({ title: 'Alarm deleted' });
+      setAlarmToDelete(null);
+      fetchAlarms();
+      onAlarmsDeleted?.();
+    } catch (e: any) {
+      toast({ title: 'Deletion error', description: e.message, variant: 'destructive' });
     } finally {
       setIsDeleting(false);
     }
@@ -435,17 +456,7 @@ ${attrs}
                       size="icon"
                       className="h-7 w-7 text-destructive hover:bg-destructive/10"
                       title="Delete"
-                      onClick={async () => {
-                        const { error } = await supabase
-                          .from('assets')
-                          .delete()
-                          .eq('fm_guid', alarm.fm_guid);
-                        if (!error) {
-                          toast({ title: 'Alarm deleted' });
-                          fetchAlarms();
-                          onAlarmsDeleted?.();
-                        }
-                      }}
+                      onClick={() => setAlarmToDelete(alarm)}
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
@@ -651,6 +662,31 @@ ${attrs}
             >
               {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Yes, delete 90%
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {/* Delete Single Alarm Dialog */}
+      <AlertDialog open={!!alarmToDelete} onOpenChange={(open) => { if (!open) setAlarmToDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Delete alarm
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this alarm ({alarmToDelete?.name || alarmToDelete?.common_name || alarmToDelete?.fm_guid})? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteSingle}
+              disabled={isDeleting}
+            >
+              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Delete
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

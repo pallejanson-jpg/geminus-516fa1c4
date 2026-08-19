@@ -1138,6 +1138,7 @@ const UnifiedViewerContent: React.FC<{
             currentFloorFmGuid={navFloorFmGuid}
             graph={navGraph}
             onClose={() => setNavPanelOpen(false)}
+            viewerRef={viewerInstanceRef}
           />
         </div>
       )}

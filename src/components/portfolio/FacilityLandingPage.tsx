@@ -353,8 +353,16 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
   };
 
   const handleSaveMapPosition = () => {
-    const lat = latitudeInput ? parseFloat(latitudeInput) : null;
-    const lng = longitudeInput ? parseFloat(longitudeInput) : null;
+    const lat = latitudeInput.trim() ? parseFloat(latitudeInput) : null;
+    const lng = longitudeInput.trim() ? parseFloat(longitudeInput) : null;
+    if (lat !== null && !Number.isFinite(lat)) {
+      toast.error('Latitude must be a valid number');
+      return;
+    }
+    if (lng !== null && !Number.isFinite(lng)) {
+      toast.error('Longitude must be a valid number');
+      return;
+    }
     updateMapPosition(lat, lng);
   };
 
