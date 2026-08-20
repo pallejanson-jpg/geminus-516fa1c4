@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
 import { AlertTriangle } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { applyArchitectColors } from '@/lib/architect-colors';
 import { useFloorData } from '@/hooks/useFloorData';
 import { emit, on } from '@/lib/event-bus';
 import { logger } from '@/lib/logger';
@@ -317,7 +318,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
   }, [getXeokitViewer, resolveFloorFromStoreyId]);
 
   // Generate fallback snapshot
-  const generateFallbackSnapshot = useCallback(() => {
+  const generateFallbackSnapshot = useCallback((onAfterCapture?: () => void, customAabb?: number[]) => {
     const viewer = getXeokitViewer();
     if (!viewer?.scene) return;
 
@@ -329,7 +330,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       const origUp = [...camera.up];
       const origProjection = camera.projection;
 
-      const aabb = scene.aabb;
+      const aabb = customAabb || scene.aabb;
       const cx = (aabb[0] + aabb[3]) / 2;
       const cy = (aabb[1] + aabb[4]) / 2;
       const cz = (aabb[2] + aabb[5]) / 2;
@@ -369,11 +370,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
           camera.eye = origEye;
           camera.look = origLook;
           camera.up = origUp;
+          // Restore entity colors AFTER capture so the snapshot isn't taken with restored (native red) colors
+          onAfterCapture?.();
           setIsLoading(false);
         }
       }, 100);
     } catch (e) {
       logger.warn('[SplitPlanView] Fallback snapshot failed:', e);
+      onAfterCapture?.();
       setIsLoading(false);
     }
   }, [getXeokitViewer]);
@@ -496,37 +500,50 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     const structuralIds = new Set([...wallIds, ...slabIds, ...spaceIds, ...doorIds]);
     const storeyScope = storeyDescendants.size > 0 ? storeyDescendants : null;
 
+    // xeokit colorize is a MULTIPLIER (fragColor = colorize × outgoingLight).
+    // colorize=[1,1,1] is neutral (no effect) — native-red MEP stays red.
+    // To hide MEP: use colorize=[0,0,0] (→ black) + opacity=0 (→ transparent).
+    // When storeyDescendants is empty (broken IFC hierarchy, e.g. floor 03), showStoreyObjects
+    // finds nothing and never re-enables visibility, so we can also use visible=false safely.
+    const emptySubtree = storeyDescendants.size === 0;
+
     if (monochrome) {
-      // Hide ALL entities — then selectively show storey-scoped structural ones
       for (const [id, entity] of Object.entries(scene.objects || {}) as [string, any][]) {
-        // If entity is outside storey scope, hide it
-        if (storeyScope && !storeyScope.has(id)) {
-          saveStyle(id);
-          entity.visible = false;
-          continue;
-        }
         if (structuralIds.has(id)) continue;
         saveStyle(id);
-        entity.visible = false;
+        if (emptySubtree) {
+          // Safe to use visible=false: showStoreyObjects subtree is empty, won't re-enable
+          entity.visible = false;
+        } else {
+          // colorize=[0,0,0] × anything = black; opacity=0 = fully transparent → invisible
+          entity.colorize = [0, 0, 0];
+          entity.opacity = 0;
+        }
+        entity.edges = false;
       }
 
-      // Spaces: bright fill for clear Dalux-style room outlines
+      // Spaces: light grey fill for room outlines
       for (const id of spaceIds) {
         const entity = scene.objects?.[id];
         if (!entity) continue;
         saveStyle(id);
-        entity.visible = true;
         entity.colorize = [0.95, 0.95, 0.95];
         entity.opacity = 0.9;
         entity.edges = true;
       }
 
-      // Slabs: hidden (would occlude plan from above)
+      // Slabs: fully transparent (colorize=[0,0,0] + opacity=0 to hide)
       for (const id of slabIds) {
         const entity = scene.objects?.[id];
         if (!entity) continue;
         saveStyle(id);
-        entity.visible = false;
+        if (emptySubtree) {
+          entity.visible = false;
+        } else {
+          entity.colorize = [0, 0, 0];
+          entity.opacity = 0;
+        }
+        entity.edges = false;
       }
 
       // Doors/windows: medium gray for context
@@ -534,7 +551,6 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         const entity = scene.objects?.[id];
         if (!entity) continue;
         saveStyle(id);
-        entity.visible = true;
         entity.colorize = [0.65, 0.65, 0.65];
         entity.opacity = 0.7;
         entity.edges = false;
@@ -581,27 +597,47 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       }
     };
 
-    try {
-      const map = plugin.createStoreyMap(preferredStoreyId, { width, format: 'png' });
+    // Restore entity colors and re-apply architect palette so the live 3D view isn't corrupted
+    const restoreAndReapply = () => {
       restoreColors();
+      try { applyArchitectColors(viewer); } catch {}
+    };
 
-      if (map?.imageData && map.imageData.length > 200) {
-        mapCacheRef.current.set(cacheKey, map);
-        setStoreyMap(map);
-        storeyMapRef.current = map;
-        setError(null);
-        setImgError(false);
-        usedFallbackRef.current = false;
-      } else {
-        generateFallbackSnapshot();
+    // When the IFC metaScene subtree is empty for this storey, createStoreyMap's hideOthers
+    // hides everything then finds nothing to show → blank capture. Use fallback directly.
+    const storeyAabb: number[] | undefined = emptySubtree
+      ? plugin.storeys[preferredStoreyId]?.storeyAABB ?? plugin.storeys[preferredStoreyId]?.modelAABB
+      : undefined;
+
+    let usedFallback = false;
+    if (emptySubtree) {
+      usedFallback = true;
+      generateFallbackSnapshot(restoreAndReapply, storeyAabb);
+    } else {
+      try {
+        const map = plugin.createStoreyMap(preferredStoreyId, { width, format: 'png' });
+
+        if (map?.imageData && map.imageData.length > 200) {
+          // Good map — restore immediately (createStoreyMap is synchronous)
+          restoreAndReapply();
+          mapCacheRef.current.set(cacheKey, map);
+          setStoreyMap(map);
+          storeyMapRef.current = map;
+          setError(null);
+          setImgError(false);
+          usedFallbackRef.current = false;
+        } else {
+          usedFallback = true;
+          generateFallbackSnapshot(restoreAndReapply);
+        }
+      } catch (e) {
+        logger.warn('[SplitPlanView] createStoreyMap failed:', e);
+        usedFallback = true;
+        generateFallbackSnapshot(restoreAndReapply);
       }
-    } catch (e) {
-      restoreColors();
-      logger.warn('[SplitPlanView] createStoreyMap failed:', e);
-      generateFallbackSnapshot();
-    } finally {
-      setIsLoading(false);
     }
+    // Only clear loading here for the sync path; async fallback handles its own setIsLoading
+    if (!usedFallback) setIsLoading(false);
   }, [getXeokitViewer, findCurrentStoreyId, generateFallbackSnapshot, isMobile, dispatchFloorSync, resolveFloorFromStoreyId, syncFloorSelection, monochrome]);
 
   // Generate map once plugin ready + listen for external floor changes
