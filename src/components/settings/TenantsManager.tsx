@@ -276,6 +276,7 @@ function TenantCredentialsEditor({ tenantId }: { tenantId: string }) {
   const [form, setForm] = useState<CredentialsForm>(EMPTY_CREDENTIALS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const { toast } = useToast();
 
@@ -283,12 +284,20 @@ function TenantCredentialsEditor({ tenantId }: { tenantId: string }) {
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('api_profiles')
         .select('*')
         .eq('tenant_id', tenantId)
         .maybeSingle();
       if (cancelled) return;
+      if (error) {
+        console.error('Failed to load tenant credentials:', error);
+        toast({ title: 'Could not load credentials', description: error.message, variant: 'destructive' });
+        setLoadError(true);
+        setLoading(false);
+        return;
+      }
+      setLoadError(false);
       if (data) {
         const row = data;
         setProfileId(row.id);
@@ -339,6 +348,14 @@ function TenantCredentialsEditor({ tenantId }: { tenantId: string }) {
   }
 
   async function handleSave() {
+    if (loadError) {
+      toast({
+        title: 'Cannot save yet',
+        description: 'Credentials failed to load, so it\'s unknown whether a profile already exists. Reload the page and try again.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setSaving(true);
     try {
       const payload: Record<string, any> = { ...form, tenant_id: tenantId };
@@ -397,10 +414,13 @@ function TenantCredentialsEditor({ tenantId }: { tenantId: string }) {
         </AccordionItem>
       </Accordion>
 
-      <Button size="sm" onClick={handleSave} disabled={saving}>
+      <Button size="sm" onClick={handleSave} disabled={saving || loadError}>
         {saving ? <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-2 h-3.5 w-3.5" />}
         Save credentials
       </Button>
+      {loadError && (
+        <p className="text-xs text-destructive">Could not load existing credentials — reload the page before saving.</p>
+      )}
     </div>
   );
 }

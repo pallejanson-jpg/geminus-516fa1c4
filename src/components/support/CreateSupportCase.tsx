@@ -130,8 +130,10 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
         logger.log('SWG create-request response:', proxyResult);
       }
 
-      // Also save local backup
-      await supabase.from('support_cases').insert({
+      // Always keep a local backup, even when SWG wasn't reachable, so the report
+      // itself is never lost — but only the SWG proxy result decides what we tell
+      // the user, since a local-only row does not mean the case was actually filed.
+      const { error: backupError } = await supabase.from('support_cases').insert({
         title: title.trim(),
         description: description.trim() || null,
         priority,
@@ -147,9 +149,19 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
         installation_number: installationNumber.trim() || null,
         desired_date: desiredDate ? desiredDate.toISOString() : null,
         external_reference: proxyResult?.data?.id ? String(proxyResult.data.id) : null,
-      }).then(({ error }) => {
-        if (error) logger.warn('Local backup save failed:', error);
       });
+      if (backupError) logger.warn('Local backup save failed:', backupError);
+
+      if (proxyError) {
+        toast({
+          title: 'Could not send to SWG',
+          description: backupError
+            ? 'Your report was not sent and could not be saved. Please try again.'
+            : 'Your report was saved but SWG was not notified yet. Please try again, or contact support directly if this keeps happening.',
+          variant: 'destructive',
+        });
+        return; // keep the dialog open so the user can retry instead of assuming it went through
+      }
 
       toast({ title: 'Case created' });
       onCreated();

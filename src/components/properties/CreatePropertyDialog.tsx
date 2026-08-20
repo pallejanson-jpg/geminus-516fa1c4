@@ -146,19 +146,35 @@ export default function CreatePropertyDialog({
         tenant_id: form.tenant_id || null,
       };
 
-      const { data: existing } = await supabase
-        .from('building_settings')
-        .select('id')
-        .eq('fm_guid', form.fm_guid.trim())
-        .maybeSingle();
-
-      if (existing) {
+      if (editFmGuid) {
+        // FM GUID is locked (read-only) while editing, so this always targets the
+        // same row loadExisting() populated the form from — safe to update directly.
         const { error } = await supabase
           .from('building_settings')
           .update(settingsPayload)
           .eq('fm_guid', form.fm_guid.trim());
         if (error) throw error;
       } else {
+        // Adding a new property: the FM GUID is free-typed here, so it can collide
+        // with a building that already exists. Never silently overwrite that
+        // building's settings — confirm no row exists first.
+        const { data: existing, error: existingError } = await supabase
+          .from('building_settings')
+          .select('id')
+          .eq('fm_guid', form.fm_guid.trim())
+          .maybeSingle();
+        if (existingError) throw existingError;
+
+        if (existing) {
+          toast({
+            title: 'This FM GUID is already in use',
+            description: 'A property with this FM GUID already exists. Enter a different FM GUID, or edit the existing property instead.',
+            variant: 'destructive',
+          });
+          setSaving(false);
+          return;
+        }
+
         const { error } = await supabase
           .from('building_settings')
           .insert(settingsPayload);
