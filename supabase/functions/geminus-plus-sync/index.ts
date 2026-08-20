@@ -700,11 +700,10 @@ serve(async (req) => {
   }
 
   // Verify authentication - sync operations require admin
-  // const auth = await verifyAuth(req);
-  // if (!auth.authenticated) {
-  //   return unauthorizedResponse(auth.error);
-  // }
-  const auth = { authenticated: true, userId: 'anonymous', isAdmin: true };
+  const auth = await verifyAuth(req);
+  if (!auth.authenticated) {
+    return unauthorizedResponse(auth.error);
+  }
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
