@@ -19,6 +19,8 @@ import {
   Bot,
   X,
   Triangle,
+  PanelRight,
+  GripVertical,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -152,11 +154,52 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
   const [isOnHoverActive, setIsOnHoverActive] = useState(false);
   const [isCrosshairActive, setIsCrosshairActive] = useState(false);
   const [isGunnarOpen, setIsGunnarOpen] = useState(false);
+  const [isGunnarDocked, setIsGunnarDocked] = useState(() =>
+    localStorage.getItem('viewer-ai-docked') === 'true'
+  );
+  // Floating drag state
+  const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
+  const dragStartRef = useRef<{ mx: number; my: number; px: number; py: number } | null>(null);
+
   const [enabledTools, setEnabledTools] = useState<string[]>(getEnabledTools);
   const [showConfig, setShowConfig] = useState(false);
   const [navSpeed, setNavSpeed] = useState(() => {
     try { return parseInt(localStorage.getItem('viewer-nav-speed') || '100'); } catch { return 100; }
   });
+
+  // Drag handlers for floating AI panel
+  const onDragStart = useCallback((e: React.MouseEvent) => {
+    if (isGunnarDocked) return;
+    e.preventDefault();
+    const pos = dragPos ?? { x: window.innerWidth - 400, y: window.innerHeight - 600 };
+    dragStartRef.current = { mx: e.clientX, my: e.clientY, px: pos.x, py: pos.y };
+
+    const onMove = (ev: MouseEvent) => {
+      if (!dragStartRef.current) return;
+      const dx = ev.clientX - dragStartRef.current.mx;
+      const dy = ev.clientY - dragStartRef.current.my;
+      setDragPos({
+        x: Math.max(0, Math.min(window.innerWidth - 380, dragStartRef.current.px + dx)),
+        y: Math.max(0, Math.min(window.innerHeight - 200, dragStartRef.current.py + dy)),
+      });
+    };
+    const onUp = () => {
+      dragStartRef.current = null;
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }, [isGunnarDocked, dragPos]);
+
+  const toggleDocked = useCallback(() => {
+    setIsGunnarDocked(prev => {
+      const next = !prev;
+      localStorage.setItem('viewer-ai-docked', String(next));
+      if (!next) setDragPos(null); // reset to default bottom-right when undocking
+      return next;
+    });
+  }, []);
 
   // Store initial camera for reset
   const initialCameraRef = useRef<{ eye: number[]; look: number[]; up: number[] } | null>(null);
@@ -1348,33 +1391,84 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
         </Popover>
       </div>
 
-      {/* Geminus AI floating chat panel */}
-      {isGunnarOpen && (
-        <div className="fixed z-50 bottom-24 right-6 w-[380px] max-h-[70vh] rounded-xl bg-card/95 backdrop-blur-md border border-border shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200">
-          <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/50 shrink-0">
-            <span className="text-sm font-medium flex items-center gap-2">
-              <Bot className="h-4 w-4 text-primary" />
-              Geminus AI
-            </span>
-            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => setIsGunnarOpen(false)}>
-              <X className="h-4 w-4" />
-            </Button>
+      {/* Geminus AI — floating (draggable) or docked to right edge */}
+      {isGunnarOpen && (() => {
+        const gunnarContext: GunnarContext = {
+          activeApp: 'viewer',
+          currentBuilding: buildingFmGuid
+            ? { fmGuid: buildingFmGuid, name: buildingName || buildingFmGuid }
+            : undefined,
+        };
+
+        if (isGunnarDocked) {
+          // Docked: fixed right sidebar, full viewer height
+          return (
+            <div className="fixed z-50 top-[44px] right-0 w-[360px] h-[calc(100vh-44px)] bg-card/98 backdrop-blur-md border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right-4 fade-in duration-200">
+              <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/40 shrink-0 select-none">
+                <span className="text-sm font-medium flex items-center gap-2">
+                  <Bot className="h-4 w-4 text-primary" />
+                  Geminus AI
+                </span>
+                <div className="flex items-center gap-1">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleDocked}>
+                        <PanelRight className="h-3.5 w-3.5 rotate-180" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">Lossa från panel</TooltipContent>
+                  </Tooltip>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsGunnarOpen(false)}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+              <div className="flex-1 overflow-hidden min-h-0">
+                <GunnarChat open={true} onClose={() => setIsGunnarOpen(false)} context={gunnarContext} embedded />
+              </div>
+            </div>
+          );
+        }
+
+        // Floating: draggable panel
+        const floatStyle: React.CSSProperties = dragPos
+          ? { left: dragPos.x, top: dragPos.y, bottom: 'auto', right: 'auto' }
+          : { bottom: '96px', right: '24px' };
+
+        return (
+          <div
+            className="fixed z-50 w-[380px] max-h-[70vh] rounded-xl bg-card/98 backdrop-blur-md border border-border shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-200"
+            style={floatStyle}
+          >
+            <div
+              className="flex items-center justify-between px-3 py-2 border-b bg-muted/40 shrink-0 select-none cursor-grab active:cursor-grabbing"
+              onMouseDown={onDragStart}
+            >
+              <span className="text-sm font-medium flex items-center gap-1.5">
+                <GripVertical className="h-3.5 w-3.5 text-muted-foreground" />
+                <Bot className="h-4 w-4 text-primary" />
+                Geminus AI
+              </span>
+              <div className="flex items-center gap-1">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={toggleDocked}>
+                      <PanelRight className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Docka till höger</TooltipContent>
+                </Tooltip>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsGunnarOpen(false)}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-hidden min-h-0">
+              <GunnarChat open={true} onClose={() => setIsGunnarOpen(false)} context={gunnarContext} embedded />
+            </div>
           </div>
-          <div className="flex-1 overflow-hidden min-h-0">
-            <GunnarChat
-              open={true}
-              onClose={() => setIsGunnarOpen(false)}
-              context={{
-                activeApp: 'viewer',
-                currentBuilding: buildingFmGuid
-                  ? { fmGuid: buildingFmGuid, name: buildingName || buildingFmGuid }
-                  : undefined,
-              } as GunnarContext}
-              embedded
-            />
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
     </TooltipProvider>
   );
