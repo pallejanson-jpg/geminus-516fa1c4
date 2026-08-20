@@ -1,6 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "../_shared/auth.ts";
+import { corsHeaders, verifyAuth, forbiddenResponse } from "../_shared/auth.ts";
 
 const APS_TOKEN_URL = "https://developer.api.autodesk.com/authentication/v2/token";
 
@@ -23,6 +23,40 @@ async function getClientCredentials() {
     throw new Error("Missing APS Client ID or Client Secret. Set them in Autodesk Forma settings.");
   }
   return { clientId, clientSecret };
+}
+
+// Whether an APS app is configured, and the (non-secret) client ID — never the secret itself.
+async function getApsConfigStatus() {
+  const serviceClient = getServiceClient();
+  const { data } = await serviceClient
+    .from("geminus_plus_endpoint_cache")
+    .select("key, value")
+    .in("key", ["aps_client_id", "aps_client_secret"]);
+
+  const clientId = data?.find((r: any) => r.key === "aps_client_id")?.value || null;
+  const hasSecret = !!data?.find((r: any) => r.key === "aps_client_secret")?.value;
+
+  return { configured: !!(clientId && hasSecret), clientId };
+}
+
+// Admin-only: write the APS app's Client ID/Secret. Either field may be omitted to
+// leave it unchanged (e.g. rotating just the secret without retyping the Client ID).
+async function setApsCredentials(clientId: string | undefined, clientSecret: string | undefined) {
+  const rows: Array<{ key: string; value: string }> = [];
+  if (clientId?.trim()) rows.push({ key: "aps_client_id", value: clientId.trim() });
+  if (clientSecret?.trim()) rows.push({ key: "aps_client_secret", value: clientSecret.trim() });
+
+  if (rows.length === 0) {
+    throw new Error("Provide a Client ID and/or Client Secret to save.");
+  }
+
+  const serviceClient = getServiceClient();
+  const { error } = await serviceClient
+    .from("geminus_plus_endpoint_cache")
+    .upsert(rows, { onConflict: "key" });
+  if (error) throw new Error(`Failed to save APS credentials: ${error.message}`);
+
+  return await getApsConfigStatus();
 }
 
 function getServiceClient() {
@@ -231,6 +265,24 @@ serve(async (req: Request) => {
       const { redirectUri } = body;
       if (!redirectUri) throw new Error("redirectUri is required");
       const result = await getAuthUrl(redirectUri);
+      return new Response(JSON.stringify({ success: true, ...result }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // get-aps-config-status / set-aps-credentials manage the shared APS app secret
+    // (used server-side to exchange OAuth codes for every user) — admin-only, and
+    // routed through here instead of a direct table write/read from the client so
+    // the secret itself never has to reach the browser.
+    if (action === "get-aps-config-status" || action === "set-aps-credentials") {
+      const auth = await verifyAuth(req);
+      if (!auth.authenticated) throw new Error(auth.error || "Unauthorized");
+      if (!auth.isAdmin) return forbiddenResponse("Admin access required");
+
+      const result = action === "get-aps-config-status"
+        ? await getApsConfigStatus()
+        : await setApsCredentials(body.clientId, body.clientSecret);
+
       return new Response(JSON.stringify({ success: true, ...result }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

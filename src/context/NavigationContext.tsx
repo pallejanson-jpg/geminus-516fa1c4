@@ -95,6 +95,12 @@ export const NavigationProvider: React.FC<{ children: ReactNode }> = ({ children
         for (const key of Object.keys(parsed)) {
           if (!merged[key]) merged[key] = parsed[key];
         }
+        // Defense in depth: strip any username/password saved by an older build —
+        // nothing that consumes these app configs reads those fields.
+        for (const key of Object.keys(merged)) {
+          delete (merged[key] as any).username;
+          delete (merged[key] as any).password;
+        }
         const migrationKey = 'appConfigs_migration_v2';
         if (typeof window !== 'undefined' && !window.localStorage.getItem(migrationKey)) {
           for (const key of Object.keys(DEFAULT_APP_CONFIGS)) {

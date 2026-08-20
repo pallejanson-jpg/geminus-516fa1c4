@@ -749,6 +749,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const [apsClientId, setApsClientId] = useState('');
     const [apsClientSecret, setApsClientSecret] = useState('');
     const [apsCredentialsSaved, setApsCredentialsSaved] = useState(false);
+    // Whether a secret is already stored server-side — unlike apsCredentialsSaved
+    // (a transient "just saved" checkmark that clears on any edit), this only changes
+    // on load / after a successful save, so editing the Client ID alone doesn't force
+    // the user to re-type a secret that's already configured.
+    const [apsSecretConfigured, setApsSecretConfigured] = useState(false);
     const [isSavingApsCredentials, setIsSavingApsCredentials] = useState(false);
     
     // ACC -> Geminus Plus sync state
@@ -851,18 +856,28 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     };
 
     const handleSaveApsCredentials = async () => {
-        if (!apsClientId.trim() || !apsClientSecret.trim()) {
+        if (!apsClientId.trim() || (!apsSecretConfigured && !apsClientSecret.trim())) {
             toast({ variant: 'destructive', title: 'Missing fields', description: 'Enter both Client ID and Client Secret.' });
             return;
         }
         setIsSavingApsCredentials(true);
         try {
-            const { error: upsertError } = await supabase.from('geminus_plus_endpoint_cache').upsert([
-                { key: 'aps_client_id', value: apsClientId.trim() },
-                { key: 'aps_client_secret', value: apsClientSecret.trim() },
-            ], { onConflict: 'key' });
-            if (upsertError) throw upsertError;
-            setApsCredentialsSaved(true);
+            // Client Secret is written server-side via acc-auth (admin-only) instead of
+            // an anon-client upsert — geminus_plus_endpoint_cache no longer accepts
+            // direct writes from the browser. Leaving the secret field blank keeps
+            // whatever secret is already stored (only the Client ID gets updated).
+            const { data, error } = await supabase.functions.invoke('acc-auth', {
+                body: {
+                    action: 'set-aps-credentials',
+                    clientId: apsClientId.trim(),
+                    clientSecret: apsClientSecret.trim() || undefined,
+                },
+            });
+            if (error) throw error;
+            if (!data?.success) throw new Error(data?.error || 'Could not save credentials');
+            setApsCredentialsSaved(!!data.configured);
+            setApsSecretConfigured(!!data.configured);
+            setApsClientSecret('');
             toast({ title: 'Credentials saved', description: 'Autodesk Forma app credentials stored. You can now log in.' });
         } catch (err: any) {
             toast({ variant: 'destructive', title: 'Error', description: err.message });
@@ -1064,19 +1079,17 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     useEffect(() => { sessionStorage.setItem('acc_top_level_items', JSON.stringify(accTopLevelItems)); }, [accTopLevelItems]);
     useEffect(() => { sessionStorage.setItem('acc_root_folder_name', accRootFolderName); }, [accRootFolderName]);
 
-    // Load APS credentials from DB when modal opens
+    // Load APS config status when modal opens. Routed through the acc-auth edge
+    // function (admin-only) instead of reading geminus_plus_endpoint_cache directly —
+    // the Client Secret is never sent back to the client, only whether one is set.
     useEffect(() => {
         if (!isOpen) return;
-        supabase.from('geminus_plus_endpoint_cache')
-            .select('key, value')
-            .in('key', ['aps_client_id', 'aps_client_secret'])
-            .then(({ data }) => {
-                if (!data) return;
-                const id = data.find(r => r.key === 'aps_client_id')?.value || '';
-                const secret = data.find(r => r.key === 'aps_client_secret')?.value || '';
-                setApsClientId(id);
-                setApsClientSecret(secret);
-                setApsCredentialsSaved(!!(id && secret));
+        supabase.functions.invoke('acc-auth', { body: { action: 'get-aps-config-status' } })
+            .then(({ data, error }) => {
+                if (error || !data?.success) return;
+                setApsClientId(data.clientId || '');
+                setApsCredentialsSaved(!!data.configured);
+                setApsSecretConfigured(!!data.configured);
             });
     }, [isOpen]);
 
@@ -1365,8 +1378,15 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const handleSaveAppConfigs = async () => {
         setIsSavingApps(true);
         try {
-            // Persist to localStorage for now
-            localStorage.setItem('appConfigs', JSON.stringify(appConfigs));
+            // username/password aren't read anywhere this app config is actually used
+            // (LeftSidebar/MobileNav only ever check openMode/url) — never persist them
+            // in plaintext to localStorage.
+            const sanitized: Record<string, any> = {};
+            for (const [key, cfg] of Object.entries(appConfigs)) {
+                const { username, password, ...rest } = cfg as any;
+                sanitized[key] = rest;
+            }
+            localStorage.setItem('appConfigs', JSON.stringify(sanitized));
             toast({
                 title: "Settings Saved",
                 description: "Application settings have been saved.",
@@ -3115,15 +3135,15 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             <Input
                                                                 type="password"
                                                                 value={apsClientSecret}
-                                                                onChange={e => { setApsClientSecret(e.target.value); setApsCredentialsSaved(false); }}
-                                                                placeholder="Enter APS Client Secret"
+                                                                onChange={e => setApsClientSecret(e.target.value)}
+                                                                placeholder={apsSecretConfigured ? 'Leave blank to keep the existing secret' : 'Enter APS Client Secret'}
                                                                 className="h-8 text-sm font-mono"
                                                             />
                                                         </div>
                                                         <Button
                                                             size="sm"
                                                             onClick={handleSaveApsCredentials}
-                                                            disabled={isSavingApsCredentials || (!apsClientId.trim() || !apsClientSecret.trim())}
+                                                            disabled={isSavingApsCredentials || !apsClientId.trim() || (!apsSecretConfigured && !apsClientSecret.trim())}
                                                             className="gap-1.5"
                                                         >
                                                             {isSavingApsCredentials
