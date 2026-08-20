@@ -32,7 +32,7 @@ export interface RoomLabelsConfigDetail {
 // Default config for backwards compatibility
 const DEFAULT_CONFIG: RoomLabelsConfigDetail = {
   fields: ['commonName', 'designation'],
-  heightOffset: 0.05,
+  heightOffset: 1.2,
   fontSize: 10,
   scaleWithDistance: true,
   clickAction: 'none',
@@ -229,6 +229,11 @@ export function useRoomLabels(
     const effectiveOcclusion = config.occlusionEnabled && labelCount <= occlusionThreshold;
     const occlusionInterval = labelCount > 40 ? 15 : labelCount > 20 ? 10 : 5;
 
+    // In full-building 3D view (many rooms across all floors), cap visible labels to the
+    // N closest to camera — avoids overwhelming density on exterior view
+    const MAX_VISIBLE_IN_DENSE_VIEW = 35;
+    const isDenseView = labelCount > MAX_VISIBLE_IN_DENSE_VIEW;
+
     occlusionFrameRef.current++;
     const runOcclusion = effectiveOcclusion && occlusionFrameRef.current % occlusionInterval === 0;
 
@@ -239,28 +244,30 @@ export function useRoomLabels(
     const canvasH = canvas?.clientHeight || 1080;
     const margin = 50; // px margin outside viewport
 
-    const updates: { el: HTMLDivElement; transform: string; visible: boolean }[] = [];
+    const updates: { el: HTMLDivElement; transform: string; visible: boolean; distance: number }[] = [];
 
     labelsRef.current.forEach(label => {
       const canvasPos = worldToCanvas(label.worldPos, viewer);
-      
+
       if (canvasPos) {
         // Early viewport culling — skip labels outside visible area
         if (canvasPos[0] < -margin || canvasPos[0] > canvasW + margin ||
             canvasPos[1] < -margin || canvasPos[1] > canvasH + margin) {
-          updates.push({ el: label.element, transform: '', visible: false });
+          updates.push({ el: label.element, transform: '', visible: false, distance: Infinity });
           return;
         }
+
+        const dx = label.worldPos[0] - cameraEye[0];
+        const dy = label.worldPos[1] - cameraEye[1];
+        const dz = label.worldPos[2] - cameraEye[2];
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
 
         // Occlusion test (throttled, adaptive)
         let occluded = false;
         if (effectiveOcclusion) {
           if (runOcclusion) {
             try {
-              const dx = label.worldPos[0] - cameraEye[0];
-              const dy = label.worldPos[1] - cameraEye[1];
-              const dz = label.worldPos[2] - cameraEye[2];
-              const len = Math.sqrt(dx * dx + dy * dy + dz * dz);
+              const len = distance;
               if (len > 0.1) {
                 const dir = [dx / len, dy / len, dz / len];
                 const pickResult = viewer.scene.pick({
@@ -292,17 +299,13 @@ export function useRoomLabels(
         }
 
         if (occluded) {
-          updates.push({ el: label.element, transform: '', visible: false });
+          updates.push({ el: label.element, transform: '', visible: false, distance });
           return;
         }
 
         let scale = 1;
         if (config.scaleWithDistance) {
-          const dx = cameraEye[0] - label.worldPos[0];
-          const dy = cameraEye[1] - label.worldPos[1];
-          const dz = cameraEye[2] - label.worldPos[2];
-          const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
-          scale = Math.max(0.4, Math.min(1.3, 18 / Math.max(distance, 5)));
+          scale = Math.max(0.5, Math.min(1.3, 18 / Math.max(distance, 5)));
         }
 
         // Flat on floor transform
@@ -320,11 +323,22 @@ export function useRoomLabels(
           el: label.element,
           transform: `translate3d(${canvasPos[0]}px, ${canvasPos[1]}px, 0) translate(-50%, -50%) scale(${scale})${flatTransform}`,
           visible: true,
+          distance,
         });
       } else {
-        updates.push({ el: label.element, transform: '', visible: false });
+        updates.push({ el: label.element, transform: '', visible: false, distance: Infinity });
       }
     });
+
+    // In dense view (many floors visible), only show the N closest labels to avoid clutter
+    if (isDenseView) {
+      const visibleUpdates = updates.filter(u => u.visible);
+      visibleUpdates.sort((a, b) => a.distance - b.distance);
+      const cutoffDist = visibleUpdates[MAX_VISIBLE_IN_DENSE_VIEW - 1]?.distance ?? Infinity;
+      for (const u of updates) {
+        if (u.visible && u.distance > cutoffDist) u.visible = false;
+      }
+    }
 
     // Phase 2: Batch all DOM writes
     for (const u of updates) {
@@ -509,10 +523,10 @@ export function useRoomLabels(
         position: absolute;
         left: 0;
         top: 0;
-        background: transparent;
-        color: #000;
-        padding: 1px 3px;
-        border-radius: 2px;
+        background: rgba(255, 255, 255, 0.82);
+        color: #111;
+        padding: 2px 6px;
+        border-radius: 4px;
         font-size: ${config.fontSize}px;
         line-height: 1.3;
         text-align: center;
@@ -521,12 +535,13 @@ export function useRoomLabels(
         pointer-events: ${hasClickAction ? 'auto' : 'none'};
         cursor: ${hasClickAction ? 'pointer' : 'default'};
         border: none;
-        box-shadow: none;
-        text-shadow: 0 0 3px white, 0 0 3px white;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+        text-shadow: none;
         display: none;
         z-index: 5;
         will-change: transform;
         transform-style: preserve-3d;
+        backdrop-filter: blur(2px);
       `;
       
       container.appendChild(labelEl);

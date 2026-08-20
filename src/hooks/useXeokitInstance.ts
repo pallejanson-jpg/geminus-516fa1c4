@@ -158,7 +158,8 @@ export function useXeokitInstance({ canvasRef, buildingFmGuid, onContextLost }: 
       }
       const CustomNavCube = (window as any).NavCubePlugin;
       if (CustomNavCube) {
-        new CustomNavCube(viewer, { canvasElement: navCubeCanvas });
+        // NavCubePlugin.js uses document.getElementById(cfg.canvasId), needs ID string
+        new CustomNavCube(viewer, { canvasId: navCubeCanvas.id });
       } else if (sdk.NavCubePlugin) {
         new sdk.NavCubePlugin(viewer, { canvasElement: navCubeCanvas });
       }
