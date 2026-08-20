@@ -528,7 +528,7 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
 
     const iotMachineMap = useMemo(() => {
         const m = new Map<string, any>();
-        buildingIoT?.machines.forEach(machine => {
+        buildingIoT?.machines?.forEach(machine => {
             if (machine.code) m.set(machine.code, machine.latest_values);
         });
         return m;
@@ -741,21 +741,6 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
         return () => clearTimeout(timer);
     }, [activeTab, spaceTypePie, floorFilteredSpaces, selectedRoomType, drawerMode, isMobile]);
 
-    // Auto-colorize Asset tab: all assets colored by category when tab becomes active
-    useEffect(() => {
-        if (activeTab !== 'asset') return;
-        if (assetCategoryPie.length === 0) return;
-        if (!drawerMode && isMobile) return;
-        const timer = setTimeout(() => {
-            const colorMap: Record<string, [number, number, number]> = {};
-            assetCategoryPie.forEach(c => { colorMap[c.name] = hslStringToRgbFloat(c.color); });
-            emit('INSIGHTS_COLOR_UPDATE', { mode: 'asset_categories', colorMap });
-            setInlineInsightsMode('asset_categories');
-            setInlineColorMap(colorMap);
-        }, 300);
-        return () => clearTimeout(timer);
-    }, [activeTab, assetCategoryPie, drawerMode, isMobile]);
-
     // Clear selection when metric changes
     useEffect(() => {
         setSelectedSensorRooms(new Set());
@@ -836,7 +821,20 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
             .map(([name, value], i) => ({ name, value, color: colors[i % colors.length] }));
     }, [stats.assetCategories]);
 
-    // (spaceTypePie is now defined earlier, respecting floor filter)
+    // Auto-colorize Asset tab: all assets colored by category when tab becomes active
+    useEffect(() => {
+        if (activeTab !== 'asset') return;
+        if (assetCategoryPie.length === 0) return;
+        if (!drawerMode && isMobile) return;
+        const timer = setTimeout(() => {
+            const colorMap: Record<string, [number, number, number]> = {};
+            assetCategoryPie.forEach(c => { colorMap[c.name] = hslStringToRgbFloat(c.color); });
+            emit('INSIGHTS_COLOR_UPDATE', { mode: 'asset_categories', colorMap });
+            setInlineInsightsMode('asset_categories');
+            setInlineColorMap(colorMap);
+        }, 300);
+        return () => clearTimeout(timer);
+    }, [activeTab, assetCategoryPie, drawerMode, isMobile]);
 
     return (
         <div className="h-full p-2 sm:p-3 md:p-4 lg:p-6 overflow-y-auto">

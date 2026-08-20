@@ -46,6 +46,7 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   const [phase, setPhase] = useState<LoadPhase>('init');
   const [loadProgress, setLoadProgress] = useState({ loaded: 0, total: 0, currentModel: '' });
   const [errorMsg, setErrorMsg] = useState('');
+  const [isSyncingXkt, setIsSyncingXkt] = useState(false);
   const mountedRef = useRef(true);
   // Read via ref inside the (memoized) initialize() callback so a suppressAutoFit
   // change is always picked up, even though it isn't in initialize's own deps array.
@@ -452,6 +453,22 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
     }
   }, [buildingFmGuid, forceBootstrap, createInstance, fetchModelMetadata, bootstrapFromGeminusPlus, loadAllModels, loadSingleModel, onViewerReady, pendingInsightsColorRef, viewerRef]);
 
+  const handleSyncXkt = useCallback(async () => {
+    if (!buildingFmGuid) return;
+    setIsSyncingXkt(true);
+    try {
+      await supabase.functions.invoke('geminus-plus-sync', {
+        body: { action: 'sync-xkt-building', buildingFmGuid },
+      });
+      setPhase('init');
+      initialize();
+    } catch (e) {
+      logger.warn('XKT sync failed', e);
+    } finally {
+      setIsSyncingXkt(false);
+    }
+  }, [buildingFmGuid, initialize]);
+
   // ── Stabilized effect: only re-run when buildingFmGuid changes ──
   // Uses a ref to always call the latest initialize without it being a dependency,
   // preventing the destroy→recreate flicker loop caused by unstable callback identities.
@@ -478,12 +495,24 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           <AlertCircle className="h-8 w-8 text-destructive mb-3" />
           <p className="text-sm text-destructive font-medium mb-2">Failed to load 3D model</p>
           <p className="text-xs text-muted-foreground max-w-md mb-4">{errorMsg}</p>
-          <button
-            className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm hover:opacity-90"
-            onClick={() => { setPhase('init'); initialize(); }}
-          >
-            Try Again
-          </button>
+          <div className="flex flex-col items-center gap-2">
+            {errorMsg.includes('No 3D models found') ? (
+              <button
+                className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm hover:opacity-90 disabled:opacity-60"
+                onClick={handleSyncXkt}
+                disabled={isSyncingXkt}
+              >
+                {isSyncingXkt ? 'Syncing from Geminus Plus…' : 'Sync from Geminus Plus'}
+              </button>
+            ) : (
+              <button
+                className="px-4 py-2 rounded bg-primary text-primary-foreground text-sm hover:opacity-90"
+                onClick={() => { setPhase('init'); initialize(); }}
+              >
+                Try Again
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

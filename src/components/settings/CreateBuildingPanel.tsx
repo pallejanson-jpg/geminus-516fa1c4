@@ -92,6 +92,8 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
 
   // ── Sync from Geminus Plus state ──
   const [isSyncingGeminusPlus, setIsSyncingGeminusPlus] = useState(false);
+  const [isSyncingAllXkt, setIsSyncingAllXkt] = useState(false);
+  const [syncAllXktProgress, setSyncAllXktProgress] = useState<{ current: number; total: number; name: string } | null>(null);
 
   // ── Batch enqueue state ──
   const [isBatchEnqueuing, setIsBatchEnqueuing] = useState(false);
@@ -940,6 +942,41 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
     await startIfcUpload(chosenModelName);
   };
 
+  // ── Sync XKT for all buildings from Geminus Plus ──
+  const handleSyncAllXkt = async () => {
+    setIsSyncingAllXkt(true);
+    try {
+      const { data: buildingRows, error } = await supabase
+        .from('assets')
+        .select('fm_guid, common_name, name')
+        .eq('category', 'Building');
+      if (error) throw error;
+      const buildings = buildingRows || [];
+      setSyncAllXktProgress({ current: 0, total: buildings.length, name: '' });
+      let synced = 0;
+      let failed = 0;
+      for (let i = 0; i < buildings.length; i++) {
+        const b = buildings[i];
+        const displayName = b.common_name || b.name || b.fm_guid;
+        setSyncAllXktProgress({ current: i + 1, total: buildings.length, name: displayName });
+        try {
+          await supabase.functions.invoke('geminus-plus-sync', {
+            body: { action: 'sync-xkt-building', buildingFmGuid: b.fm_guid },
+          });
+          synced++;
+        } catch {
+          failed++;
+        }
+      }
+      toast({ title: 'XKT sync complete', description: `${synced} synced, ${failed} failed.` });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'XKT sync failed', description: err.message });
+    } finally {
+      setIsSyncingAllXkt(false);
+      setSyncAllXktProgress(null);
+    }
+  };
+
   // ── Sync from Geminus Plus for selected building ──
   const handleSyncGeminusPlus = async () => {
     if (!targetBuildingFmGuid) return;
@@ -1076,7 +1113,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       error: { variant: 'destructive', label: 'Error' },
     };
     const s = map[status] || { variant: 'secondary' as const, label: status };
-    return <Badge variant={s.variant} className="text-[9px]">{s.label}</Badge>;
+    return <Badge variant={s.variant} className="text-2xs">{s.label}</Badge>;
   };
 
   const isStuckJob = (job: any) => {
@@ -1110,8 +1147,8 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                   <SelectItem key={b.fmGuid} value={b.fmGuid}>
                     <span className="flex items-center gap-2">
                       {b.commonName}
-                      {b.hasCustomGeminusPlus && <Badge variant="secondary" className="text-[9px] px-1 py-0 ml-1">Geminus Plus</Badge>}
-                      {b.hasCustomGeminusPremium && <Badge variant="secondary" className="text-[9px] px-1 py-0">Geminus Premium</Badge>}
+                      {b.hasCustomGeminusPlus && <Badge variant="secondary" className="text-2xs px-1 py-0 ml-1">Geminus Plus</Badge>}
+                      {b.hasCustomGeminusPremium && <Badge variant="secondary" className="text-2xs px-1 py-0">Geminus Premium</Badge>}
                     </span>
                   </SelectItem>
                 ))}
@@ -1192,7 +1229,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
               onChange={e => setCustomFmGuid(e.target.value)}
               className="h-9 text-sm font-mono"
             />
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-2xs text-muted-foreground">
               {t('Används vid import från Forma/ACC — ange samma GUID som sätts på byggnaden i Geminus.', 'Used for Forma/ACC import — enter the same GUID set on the building in Geminus.')}
             </p>
           </div>
@@ -1229,7 +1266,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
             <><PlayCircle className="h-4 w-4" />{t('Köa alla byggnader', 'Enqueue all buildings')}</>
           )}
         </Button>
-        <p className="text-[11px] text-muted-foreground mt-1.5">
+        <p className="text-2xs text-muted-foreground mt-1.5">
           Creates conversion jobs for all buildings with IFC or XKT files.
         </p>
       </div>
@@ -1240,7 +1277,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
           <div className="flex items-center gap-2 mb-3 px-1">
             <Building2 className="h-4 w-4 text-primary" />
             <span className="font-medium text-sm truncate">{selectedBuilding?.commonName || selectedBuildingFmGuid}</span>
-            <span className="text-[10px] font-mono text-muted-foreground truncate">{selectedBuildingFmGuid.slice(0, 8)}…</span>
+            <span className="text-2xs font-mono text-muted-foreground truncate">{selectedBuildingFmGuid.slice(0, 8)}…</span>
           </div>
 
           <Accordion type="multiple" className="space-y-1">
@@ -1251,7 +1288,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                   <KeyRound className="h-4 w-4 text-muted-foreground" />
                   <span>Edit Credentials</span>
                   {(selectedBuilding?.hasCustomGeminusPlus || selectedBuilding?.hasCustomGeminusPremium) && (
-                    <Badge variant="secondary" className="text-[9px] px-1.5 py-0 ml-1">Custom</Badge>
+                    <Badge variant="secondary" className="text-2xs px-1.5 py-0 ml-1">Custom</Badge>
                   )}
                 </div>
               </AccordionTrigger>
@@ -1305,17 +1342,17 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                       )}
                     </div>
                     {isConverting && !conversionDone && (
-                      <p className="text-[10px] text-muted-foreground animate-pulse flex items-center gap-1">
+                      <p className="text-2xs text-muted-foreground animate-pulse flex items-center gap-1">
                         <Cloud className="h-3 w-3" /> {t('Konverterar — detta kan ta några minuter…', 'Converting — this may take a few minutes…')}
                       </p>
                     )}
                     <div className="rounded-md border bg-background p-2 max-h-32 overflow-y-auto">
                       {conversionLogs.map((log, i) => (
-                        <p key={i} className="text-[10px] font-mono text-muted-foreground leading-relaxed">{log}</p>
+                        <p key={i} className="text-2xs font-mono text-muted-foreground leading-relaxed">{log}</p>
                       ))}
                     </div>
                     {conversionDone && (
-                      <div className="flex items-center gap-1.5 text-xs text-green-600">
+                      <div className="flex items-center gap-1.5 text-xs text-success">
                         <CheckCircle2 className="h-3.5 w-3.5" />
                         {t('Modellen är klar — den visas automatiskt i 3D-visaren.', 'Model is ready — it will appear automatically in the 3D viewer.')}
                       </div>
@@ -1334,7 +1371,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
             <AccordionItem value="acc" className="border rounded-lg">
               <AccordionTrigger className="px-3 py-2.5 hover:no-underline hover:bg-muted/50 text-sm">
                 <div className="flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-blue-500" />
+                  <Layers className="h-4 w-4 text-accent" />
                   <span>Upload from Autodesk Forma</span>
                 </div>
               </AccordionTrigger>
@@ -1361,17 +1398,34 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
               </AccordionTrigger>
               <AccordionContent className="px-3 pb-3 pt-1 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Sync structure and assets from Geminus Plus for this building. Use the <strong>Sync</strong> tab to sync all buildings.
+                  Sync structure and assets from Geminus Plus for this building, or sync XKT 3D models for all buildings at once.
                 </p>
-                <Button
-                  onClick={handleSyncGeminusPlus}
-                  disabled={isSyncingGeminusPlus}
-                  size="sm"
-                  className="gap-1.5"
-                >
-                  {isSyncingGeminusPlus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  Sync this building
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    onClick={handleSyncGeminusPlus}
+                    disabled={isSyncingGeminusPlus}
+                    size="sm"
+                    className="gap-1.5"
+                  >
+                    {isSyncingGeminusPlus ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                    Sync this building
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleSyncAllXkt}
+                    disabled={isSyncingAllXkt}
+                    size="sm"
+                    className="gap-1.5"
+                  >
+                    {isSyncingAllXkt ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                    Sync XKT — alla byggnader
+                  </Button>
+                </div>
+                {syncAllXktProgress && (
+                  <p className="text-xs text-muted-foreground">
+                    {syncAllXktProgress.current}/{syncAllXktProgress.total} — {syncAllXktProgress.name}
+                  </p>
+                )}
               </AccordionContent>
             </AccordionItem>
 
@@ -1412,7 +1466,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                   <Layers className="h-4 w-4 text-muted-foreground" />
                   <span>Conversion Jobs</span>
                   {conversionJobs.length > 0 && (
-                    <Badge variant="secondary" className="text-[9px] px-1.5 py-0 ml-1">{conversionJobs.length}</Badge>
+                    <Badge variant="secondary" className="text-2xs px-1.5 py-0 ml-1">{conversionJobs.length}</Badge>
                   )}
                 </div>
               </AccordionTrigger>
@@ -1426,7 +1480,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                         <span className="text-xs font-medium truncate flex-1">{job.model_name || job.ifc_storage_path?.split('/').pop() || 'Unnamed'}</span>
                         {getStatusBadge(job.status)}
                       </div>
-                      <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                      <div className="flex items-center gap-2 text-2xs text-muted-foreground">
                         <span>{formatDistanceToNow(new Date(job.created_at), { addSuffix: true })}</span>
                         {job.progress > 0 && job.status !== 'done' && (
                           <span>• {job.progress}%</span>
@@ -1436,19 +1490,19 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                         <Progress value={job.progress} className="h-1.5" />
                       )}
                       {job.error_message && (
-                        <p className="text-[10px] text-destructive bg-destructive/10 rounded px-2 py-1">{job.error_message}</p>
+                        <p className="text-2xs text-destructive bg-destructive/10 rounded px-2 py-1">{job.error_message}</p>
                       )}
                       {expandedJobLogs.has(job.id) && job.log_messages && job.log_messages.length > 0 && (
                         <div className="rounded border bg-background p-2 max-h-32 overflow-y-auto">
                           {(job.log_messages as string[]).map((msg: string, i: number) => (
-                            <p key={i} className="text-[10px] font-mono text-muted-foreground leading-relaxed">{msg}</p>
+                            <p key={i} className="text-2xs font-mono text-muted-foreground leading-relaxed">{msg}</p>
                           ))}
                         </div>
                       )}
                       <div className="flex items-center gap-1.5 pt-1">
                         {job.log_messages && job.log_messages.length > 0 && (
                           <Button
-                            variant="ghost" size="sm" className="h-6 text-[10px] px-2 gap-1"
+                            variant="ghost" size="sm" className="h-6 text-2xs px-2 gap-1"
                             onClick={() => setExpandedJobLogs(prev => {
                               const next = new Set(prev);
                               next.has(job.id) ? next.delete(job.id) : next.add(job.id);
@@ -1460,12 +1514,12 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
                           </Button>
                         )}
                         {isStuckJob(job) && (
-                          <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 gap-1" onClick={() => handleResetJob(job.id)}>
+                          <Button variant="ghost" size="sm" className="h-6 text-2xs px-2 gap-1" onClick={() => handleResetJob(job.id)}>
                             <RotateCcw className="h-3 w-3" /> Reset
                           </Button>
                         )}
                         {(job.status === 'done' || job.status === 'error') && (
-                          <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2 gap-1 text-destructive" onClick={() => handleDeleteJob(job.id)}>
+                          <Button variant="ghost" size="sm" className="h-6 text-2xs px-2 gap-1 text-destructive" onClick={() => handleDeleteJob(job.id)}>
                             <X className="h-3 w-3" /> Delete
                           </Button>
                         )}
@@ -1483,7 +1537,7 @@ const CreateBuildingPanel: React.FC<CreateBuildingPanelProps> = ({ onSwitchToAcc
       )}
 
       <Dialog open={slotDialogOpen} onOpenChange={setSlotDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>{t('Välj modellplats', 'Select model slot')}</DialogTitle>
             <DialogDescription>
