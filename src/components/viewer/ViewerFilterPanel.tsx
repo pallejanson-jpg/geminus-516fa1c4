@@ -972,7 +972,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           const cat = a.asset_type || 'Other';
           const existing = groups.get(cat);
           const sym = a.symbol_id ? symbolMap.get(a.symbol_id) : null;
-          const color = sym?.color || '#3B82F6';
+          const color = sym?.color || 'hsl(var(--accent))';
           if (existing) { existing.count++; }
           else { groups.set(cat, { count: 1, color }); }
         });
@@ -981,7 +981,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
       }
 
       if (issueCount && issueCount > 0) {
-        categories.push({ category: 'Issues', count: issueCount, color: '#EF4444' });
+        categories.push({ category: 'Issues', count: issueCount, color: 'hsl(var(--destructive))' });
       }
 
       setAnnotationCategories(categories.sort((a, b) => b.count - a.count));
@@ -2054,7 +2054,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
           <Filter className="h-4 w-4 text-primary shrink-0" />
           <span className="font-semibold text-sm text-foreground shrink-0">Filter</span>
           {totalFilters > 0 && (
-            <Badge variant="default" className="text-[10px] px-1.5 py-0 h-5 shrink-0">{totalFilters}</Badge>
+            <Badge variant="default" className="text-2xs px-1.5 py-0 h-5 shrink-0">{totalFilters}</Badge>
           )}
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
@@ -2272,7 +2272,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
               <Checkbox checked={showMovedAssets} className="h-4 w-4 shrink-0"
                 onClick={(e) => e.stopPropagation()}
                 onCheckedChange={(v) => setShowMovedAssets(!!v)} />
-              <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: '#FF9919' }} />
+              <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: 'hsl(var(--warning))' }} />
               <span className="text-sm truncate flex-1 text-foreground">{t('Visa flyttade objekt', 'Show moved objects')}</span>
               <span className="text-xs text-muted-foreground shrink-0">
                 {modifiedAssets.filter(a => a.modification_status === 'moved').length}
@@ -2283,7 +2283,7 @@ const ViewerFilterPanel: React.FC<ViewerFilterPanelProps> = ({
               <Checkbox checked={showDeletedAssets} className="h-4 w-4 shrink-0"
                 onClick={(e) => e.stopPropagation()}
                 onCheckedChange={(v) => setShowDeletedAssets(!!v)} />
-              <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: '#FF3333' }} />
+              <span className="h-3 w-3 rounded-full shrink-0" style={{ backgroundColor: 'hsl(var(--destructive))' }} />
               <span className="text-sm truncate flex-1 text-foreground">{t('Visa borttagna objekt', 'Show deleted objects')}</span>
               <span className="text-xs text-muted-foreground shrink-0">
                 {modifiedAssets.filter(a => a.modification_status === 'deleted').length}

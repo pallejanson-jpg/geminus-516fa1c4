@@ -210,7 +210,7 @@ export default function CreatePropertyDialog({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+      <SheetContent size="md" className="w-full overflow-y-auto">
         <SheetHeader>
           <SheetTitle>{editFmGuid ? 'Edit Property' : 'Add Property'}</SheetTitle>
           <SheetDescription>

@@ -140,7 +140,7 @@ const ViewerThemeSelector: React.FC<ViewerThemeSelectorProps> = ({
           <SelectItem value={NONE_VALUE} className="text-xs sm:text-sm">
             <div className="flex items-center gap-2">
               <span>{t('Ingen (modellens färger)', 'None (model colors)')}</span>
-              <span className="text-[10px] text-muted-foreground">({t('Standard', 'Default')})</span>
+              <span className="text-2xs text-muted-foreground">({t('Standard', 'Default')})</span>
             </div>
           </SelectItem>
           {themes.map((theme) => (
@@ -152,7 +152,7 @@ const ViewerThemeSelector: React.FC<ViewerThemeSelectorProps> = ({
               <div className="flex items-center gap-2">
                 <span>{theme.name}</span>
                 {theme.is_system && (
-                  <span className="text-[10px] text-muted-foreground">(System)</span>
+                  <span className="text-2xs text-muted-foreground">(System)</span>
                 )}
               </div>
             </SelectItem>

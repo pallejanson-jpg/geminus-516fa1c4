@@ -17,15 +17,15 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 const ISSUE_TYPES = [
   { value: 'fault', label: 'Fault / Problem', icon: AlertCircle, color: 'text-destructive' },
-  { value: 'improvement', label: 'Improvement', icon: Lightbulb, color: 'text-amber-500' },
-  { value: 'question', label: 'Question', icon: HelpCircle, color: 'text-blue-500' },
+  { value: 'improvement', label: 'Improvement', icon: Lightbulb, color: 'text-warning' },
+  { value: 'question', label: 'Question', icon: HelpCircle, color: 'text-accent' },
   { value: 'observation', label: 'Observation', icon: Eye, color: 'text-muted-foreground' },
 ] as const;
 
 const PRIORITY_OPTIONS = [
-  { value: 'low', label: 'Low', color: 'bg-slate-400' },
-  { value: 'medium', label: 'Medium', color: 'bg-amber-500' },
-  { value: 'high', label: 'High', color: 'bg-orange-500' },
+  { value: 'low', label: 'Low', color: 'bg-muted-foreground' },
+  { value: 'medium', label: 'Medium', color: 'bg-warning' },
+  { value: 'high', label: 'High', color: 'bg-warning' },
   { value: 'critical', label: 'Critical', color: 'bg-destructive' },
 ] as const;
 

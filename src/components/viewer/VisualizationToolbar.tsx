@@ -122,7 +122,7 @@ const NavigationSpeedSlider: React.FC = () => {
         <Slider value={[master]} onValueChange={handleMaster} min={25} max={300} step={25} className="w-full" />
         <button
           onClick={() => setExpanded(!expanded)}
-          className="text-[10px] sm:text-xs text-primary hover:underline"
+          className="text-2xs sm:text-xs text-primary hover:underline"
         >
           {expanded ? 'Hide per-axis' : 'Per-axis settings ▸'}
         </button>
@@ -134,7 +134,7 @@ const NavigationSpeedSlider: React.FC = () => {
               { label: 'Rotate', key: 'rotate' as const, val: rotate },
             ]).map(({ label, key, val }) => (
               <div key={key}>
-                <div className="flex justify-between text-[10px] sm:text-xs text-muted-foreground mb-0.5">
+                <div className="flex justify-between text-2xs sm:text-xs text-muted-foreground mb-0.5">
                   <span>{label}</span><span>{val}%</span>
                 </div>
                 <Slider value={[val]} onValueChange={(v) => handleAxis(key, v)} min={25} max={300} step={25} className="w-full" />
@@ -144,10 +144,10 @@ const NavigationSpeedSlider: React.FC = () => {
         )}
         {/* FastNav toggle */}
         <div className="flex items-center justify-between pt-1">
-          <span className="text-[10px] sm:text-xs text-muted-foreground">FastNav (snappier interaction)</span>
+          <span className="text-2xs sm:text-xs text-muted-foreground">FastNav (snappier interaction)</span>
           <Switch checked={fastNav} onCheckedChange={handleFastNav} />
         </div>
-        <p className="text-[10px] sm:text-xs text-muted-foreground">
+        <p className="text-2xs sm:text-xs text-muted-foreground">
           {isMobile ? 'Touch navigation' : 'Mouse & keyboard navigation'}
         </p>
       </div>
@@ -208,7 +208,7 @@ const RoomVisualizationList: React.FC<{
             </div>
             <span className="text-xs sm:text-sm font-medium">Color filter</span>
             {activeViz !== 'none' && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+              <Badge variant="secondary" className="text-2xs px-1.5 py-0 h-4">
                 {VIZ_LIST_ITEMS.find(v => v.type === activeViz)?.label || activeViz}
               </Badge>
             )}
@@ -986,7 +986,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
       {/* Visibility section */}
       <div>
-        <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
+        <Label className="text-2xs sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
           {t('Synlighet', 'Visibility')}
         </Label>
 
@@ -1126,7 +1126,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             </div>
             <div className="pl-8 sm:pl-10">
               <Slider value={[clipHeight]} onValueChange={handleClipHeightChange} min={0.5} max={2.5} step={0.1} className="w-full" />
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">{t('Höjd ovanför golv', 'Height above floor')}</p>
+              <p className="text-2xs sm:text-xs text-muted-foreground mt-1">{t('Höjd ovanför golv', 'Height above floor')}</p>
             </div>
           </div>
 
@@ -1141,7 +1141,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             </div>
             <div className="pl-8 sm:pl-10">
               <Slider value={[clipHeight3D]} onValueChange={handleClipHeight3DChange} min={-1.5} max={1.5} step={0.1} className="w-full" disabled={is2DMode || !isSoloFloor} />
-              <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">
+              <p className="text-2xs sm:text-xs text-muted-foreground mt-1">
                 {isSoloFloor && !is2DMode ? t('Offset från nästa våningsnivå', 'Offset from next floor level') : t('Aktiveras när en enskild våning isoleras i 3D', 'Enabled when a single floor is isolated in 3D')}
               </p>
             </div>
@@ -1212,7 +1212,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
 
       {/* Actions section */}
       <div>
-        <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
+        <Label className="text-2xs sm:text-xs text-muted-foreground uppercase tracking-wider mb-1.5 sm:mb-2 block">
           {t('Åtgärder', 'Actions')}
         </Label>
 
@@ -1327,7 +1327,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
                 <Button
                   variant="outline"
                   size="icon"
-                  className="h-8 w-8 !text-red-400 !border-red-400/50 hover:!bg-red-500 hover:!text-white"
+                  className="h-8 w-8 !text-destructive !border-destructive/50 hover:!bg-destructive hover:!text-white"
                   onClick={() => handleSetIsOpen(false)}
                 >
                   <X className="h-5 w-5" />

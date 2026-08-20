@@ -185,7 +185,7 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
               style={{ backgroundColor: cat.color }}
             />
             <span className="text-xs">{cat.displayName}</span>
-            <span className="text-[10px] text-muted-foreground">({cat.count})</span>
+            <span className="text-2xs text-muted-foreground">({cat.count})</span>
           </div>
           <Switch
             checked={cat.visible}

@@ -103,7 +103,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
             className={cn(
               "p-1 sm:p-1.5 rounded-md",
               lightingState.enabled
-                ? "bg-amber-500/10 text-amber-500"
+                ? "bg-warning/10 text-warning"
                 : "bg-muted text-muted-foreground"
             )}
           >
@@ -127,8 +127,8 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
         <div className="space-y-2 pl-8 sm:pl-10">
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label className="text-[10px] sm:text-xs text-muted-foreground">{t('Omgivningsljus', 'Ambient light')}</Label>
-              <span className="text-[10px] sm:text-xs text-muted-foreground">
+              <Label className="text-2xs sm:text-xs text-muted-foreground">{t('Omgivningsljus', 'Ambient light')}</Label>
+              <span className="text-2xs sm:text-xs text-muted-foreground">
                 {Math.round(lightingState.ambientIntensity * 100)}%
               </span>
             </div>
@@ -145,8 +145,8 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
           
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label className="text-[10px] sm:text-xs text-muted-foreground">{t('Riktat ljus', 'Directional light')}</Label>
-              <span className="text-[10px] sm:text-xs text-muted-foreground">
+              <Label className="text-2xs sm:text-xs text-muted-foreground">{t('Riktat ljus', 'Directional light')}</Label>
+              <span className="text-2xs sm:text-xs text-muted-foreground">
                 {Math.round(lightingState.directionalIntensity * 100)}%
               </span>
             </div>
@@ -174,7 +174,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
                 className={cn(
                   "p-1 sm:p-1.5 rounded-md",
                   sunStudyState.enabled
-                    ? "bg-orange-500/10 text-orange-500"
+                    ? "bg-warning/10 text-warning"
                     : "bg-muted text-muted-foreground"
                 )}
               >
@@ -196,7 +196,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <MapPin className="h-3 w-3 text-muted-foreground" />
-                <Label className="text-[10px] sm:text-xs text-muted-foreground">{t('Plats', 'Location')}</Label>
+                <Label className="text-2xs sm:text-xs text-muted-foreground">{t('Plats', 'Location')}</Label>
               </div>
               <div className="flex flex-wrap gap-1">
                 {locationPresets.map(loc => (
@@ -208,7 +208,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
                         : "outline"
                     }
                     size="sm"
-                    className="h-6 px-2 text-[10px]"
+                    className="h-6 px-2 text-2xs"
                     onClick={() => updateSunStudy({ latitude: loc.lat, longitude: loc.lng })}
                     disabled={!sunStudyState.enabled}
                   >
@@ -218,7 +218,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
               </div>
               <div className="grid grid-cols-2 gap-2 mt-1">
                 <div>
-                  <Label className="text-[9px] text-muted-foreground">Lat</Label>
+                  <Label className="text-2xs text-muted-foreground">Lat</Label>
                   <Input
                     type="number"
                     step="0.0001"
@@ -229,7 +229,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
                   />
                 </div>
                 <div>
-                  <Label className="text-[9px] text-muted-foreground">Lng</Label>
+                  <Label className="text-2xs text-muted-foreground">Lng</Label>
                   <Input
                     type="number"
                     step="0.0001"
@@ -246,7 +246,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <Calendar className="h-3 w-3 text-muted-foreground" />
-                <Label className="text-[10px] sm:text-xs text-muted-foreground">{t('Datum', 'Date')}</Label>
+                <Label className="text-2xs sm:text-xs text-muted-foreground">{t('Datum', 'Date')}</Label>
               </div>
               <Input
                 type="date"
@@ -261,7 +261,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <Clock className="h-3 w-3 text-muted-foreground" />
-                <Label className="text-[10px] sm:text-xs text-muted-foreground">{t('Tid', 'Time')}</Label>
+                <Label className="text-2xs sm:text-xs text-muted-foreground">{t('Tid', 'Time')}</Label>
               </div>
               <Input
                 type="time"
@@ -276,7 +276,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
                     key={preset.label}
                     variant={sunStudyState.time === preset.time ? "secondary" : "outline"}
                     size="sm"
-                    className="h-5 px-1.5 text-[9px]"
+                    className="h-5 px-1.5 text-2xs"
                     onClick={() => updateSunStudy({ time: preset.time })}
                     disabled={!sunStudyState.enabled}
                   >
@@ -288,7 +288,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
 
             {/* Sun position info */}
             {sunPosition && sunStudyState.enabled && (
-              <div className="mt-2 p-2 rounded-md bg-muted/50 text-[10px] space-y-1">
+              <div className="mt-2 p-2 rounded-md bg-muted/50 text-2xs space-y-1">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">{t('Höjd:', 'Altitude:')}</span>
                   <span>{formatAltitude(sunPosition.altitude)}</span>
@@ -298,7 +298,7 @@ const LightingControlsPanel: React.FC<LightingControlsPanelProps> = ({
                   <span>{formatAzimuth(sunPosition.azimuth)}</span>
                 </div>
                 {sunPosition.altitude < 0 && (
-                  <div className="text-orange-500 mt-1">
+                  <div className="text-warning mt-1">
                     ⚠️ {t('Solen är under horisonten', 'Sun is below the horizon')}
                   </div>
                 )}

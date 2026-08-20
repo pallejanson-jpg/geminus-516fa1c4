@@ -279,7 +279,7 @@ const ApprovalDialog: React.FC<{
 
   return (
     <Dialog open={open} onOpenChange={() => onClose()}>
-      <DialogContent className="sm:max-w-xl max-h-[95vh] overflow-y-auto text-foreground">
+      <DialogContent size="lg" className="max-h-[95vh] overflow-y-auto text-foreground">
         <DialogHeader>
           <DialogTitle className="text-foreground">Approve Detection</DialogTitle>
         </DialogHeader>
@@ -850,7 +850,7 @@ const DetectionReviewQueue: React.FC<DetectionReviewQueueProps> = ({
 
       {/* Detail Dialog (read-only view) */}
       <Dialog open={!!detailDialog} onOpenChange={() => setDetailDialog(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent size="lg">
           <DialogHeader>
             <DialogTitle>
               {detailDialog?.detection_templates?.name || detailDialog?.object_type}

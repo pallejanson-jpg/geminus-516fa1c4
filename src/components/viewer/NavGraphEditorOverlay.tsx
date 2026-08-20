@@ -177,7 +177,7 @@ const NavGraphEditorOverlay: React.FC<NavGraphEditorOverlayProps> = ({
           <button
             key={m}
             className={cn(
-              'px-2 py-1 text-[10px] rounded border transition-colors',
+              'px-2 py-1 text-2xs rounded border transition-colors',
               mode === m
                 ? 'bg-primary text-primary-foreground border-primary'
                 : 'bg-card/90 text-foreground border-border hover:bg-accent'
@@ -255,7 +255,7 @@ const NavGraphEditorOverlay: React.FC<NavGraphEditorOverlayProps> = ({
               cy={`${node.coordinates[1]}%`}
               r={node.type === 'entrance' ? NODE_RADIUS + 2 : NODE_RADIUS}
               fill={
-                node.type === 'entrance' ? '#22c55e' :
+                node.type === 'entrance' ? 'hsl(var(--success))' :
                 node.room_fm_guid ? 'hsl(var(--accent))' : 'hsl(var(--primary))'
               }
               stroke={selectedNodeId === node.nodeId ? '#fff' : 'hsl(var(--primary-foreground))'}

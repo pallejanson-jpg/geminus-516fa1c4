@@ -53,7 +53,7 @@ const VisualizationQuickBar: React.FC<{ className?: string }> = ({ className }) 
             onClick={() => toggle(type)}
             title={config?.label ?? label}
             className={cn(
-              'flex items-center gap-1 rounded-md px-2 py-1.5 text-[11px] font-medium transition-all duration-150 select-none',
+              'flex items-center gap-1 rounded-md px-2 py-1.5 text-2xs font-medium transition-all duration-150 select-none',
               'hover:bg-white/15 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-white/40',
               isActive
                 ? 'text-white ring-1 ring-white/30'

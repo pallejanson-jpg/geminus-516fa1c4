@@ -27,10 +27,24 @@ const DialogOverlay = React.forwardRef<
 ));
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
+// Standard dialog width tiers — pick one instead of a one-off max-w-* override.
+// sm: confirmations/simple forms · md: standard forms (previous default) · lg: tables/multi-step flows
+// xl: dense multi-panel tools · full: mobile-style fullscreen forced at every breakpoint (camera/picker flows)
+const dialogSizeClasses = {
+  sm: "sm:max-w-sm",
+  md: "sm:max-w-lg",
+  lg: "sm:max-w-2xl",
+  xl: "sm:max-w-4xl",
+  "2xl": "sm:max-w-[88rem]", // wide multi-panel admin consoles (e.g. API/tenant settings)
+  full: "sm:max-w-[calc(100vw-2rem)] sm:w-[calc(100vw-2rem)] sm:h-[calc(100dvh-2rem)] sm:rounded-lg",
+} as const;
+
+type DialogSize = keyof typeof dialogSizeClasses;
+
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & { size?: DialogSize }
+>(({ className, children, size = "md", ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -39,7 +53,8 @@ const DialogContent = React.forwardRef<
         // Mobile: fixed fullscreen, no transform/animation for stability
         "fixed inset-0 z-50 flex flex-col bg-background p-4 shadow-lg overflow-hidden",
         // Desktop: centered modal with max dimensions
-        "sm:inset-auto sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:max-w-lg sm:w-full sm:max-h-[90vh] sm:rounded-lg sm:border sm:p-6",
+        "sm:inset-auto sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:w-full sm:max-h-[90vh] sm:rounded-lg sm:border sm:p-6",
+        dialogSizeClasses[size],
         // Animations only on desktop
         "sm:duration-200 sm:data-[state=open]:animate-in sm:data-[state=closed]:animate-out sm:data-[state=closed]:fade-out-0 sm:data-[state=open]:fade-in-0 sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95",
         className,

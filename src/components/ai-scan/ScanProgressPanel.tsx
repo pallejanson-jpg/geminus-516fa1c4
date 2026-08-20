@@ -246,7 +246,7 @@ const ScanProgressPanel: React.FC<ScanProgressPanelProps> = ({
       case 'paused':
         return <Badge variant="outline"><Pause className="h-3 w-3 mr-1" />Paused</Badge>;
       case 'completed':
-        return <Badge variant="default" className="bg-green-600"><CheckCircle2 className="h-3 w-3 mr-1" />Done</Badge>;
+        return <Badge variant="default" className="bg-success text-success-foreground"><CheckCircle2 className="h-3 w-3 mr-1" />Done</Badge>;
       case 'cancelled':
         return <Badge variant="outline"><StopCircle className="h-3 w-3 mr-1" />Cancelled</Badge>;
       case 'failed':

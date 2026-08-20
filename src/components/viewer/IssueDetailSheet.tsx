@@ -55,8 +55,8 @@ interface BcfComment {
 
 const ISSUE_TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string }> = {
   fault: { label: 'Fault', icon: AlertCircle, color: 'text-destructive' },
-  improvement: { label: 'Improvement', icon: Lightbulb, color: 'text-amber-500' },
-  question: { label: 'Question', icon: HelpCircle, color: 'text-blue-500' },
+  improvement: { label: 'Improvement', icon: Lightbulb, color: 'text-warning' },
+  question: { label: 'Question', icon: HelpCircle, color: 'text-accent' },
   observation: { label: 'Observation', icon: Eye, color: 'text-muted-foreground' },
 };
 
@@ -255,7 +255,7 @@ const IssueDetailSheet: React.FC<IssueDetailSheetProps> = ({
   return (
     <>
       <Sheet open={open} onOpenChange={(o) => !o && onClose()} modal={false}>
-        <SheetContent className="sm:max-w-lg w-full flex flex-col [&>div[data-radix-dialog-overlay]]:hidden">
+        <SheetContent size="md" className="w-full flex flex-col [&>div[data-radix-dialog-overlay]]:hidden">
           <SheetHeader className="flex-shrink-0">
             <div className="flex items-start gap-3">
               <div className={cn("p-2 rounded-lg bg-muted", typeConfig.color)}>

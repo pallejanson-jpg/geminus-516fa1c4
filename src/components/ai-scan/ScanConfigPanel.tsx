@@ -385,8 +385,8 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
                       </>
                     ) : ivionStatus?.connected ? (
                       <>
-                        <Wifi className="h-4 w-4 text-green-600" />
-                        <span className="text-sm text-green-700 dark:text-green-400">
+                        <Wifi className="h-4 w-4 text-success" />
+                        <span className="text-sm text-success">
                           Ivion connected
                         </span>
                         <Badge variant="secondary" className="ml-auto text-xs">
@@ -425,7 +425,7 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
                     </Button>
                     {accessTestResult && (
                       <div className={`flex items-center gap-1 text-sm ${
-                        accessTestResult.success ? 'text-green-600' : 'text-destructive'
+                        accessTestResult.success ? 'text-success' : 'text-destructive'
                       }`}>
                         {accessTestResult.success ? (
                           <CheckCircle2 className="h-4 w-4" />
@@ -460,7 +460,7 @@ const ScanConfigPanel: React.FC<ScanConfigPanelProps> = ({
                       <div className="flex items-center gap-2 font-medium mb-2">
                         {downloadTestResult.success ? (
                           <>
-                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            <CheckCircle2 className="h-4 w-4 text-success" />
                             <span className="text-green-700 dark:text-green-400">
                               Image download OK ({downloadTestResult.contentType}, {formatBytes(downloadTestResult.imageSize || 0)})
                             </span>

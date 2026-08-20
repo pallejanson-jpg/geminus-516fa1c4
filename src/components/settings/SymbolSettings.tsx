@@ -296,12 +296,12 @@ const SymbolSettings: React.FC = () => {
                       <span className="font-medium text-sm">{symbol.name}</span>
                       <div className="flex items-center gap-2 mt-0.5">
                         {symbol.symbol_id && (
-                          <Badge variant="outline" className="text-[10px] font-mono">
+                          <Badge variant="outline" className="text-2xs font-mono">
                             #{symbol.symbol_id}
                           </Badge>
                         )}
                         {symbol.is_default && (
-                          <Badge variant="secondary" className="text-[10px]">
+                          <Badge variant="secondary" className="text-2xs">
                             Standard
                           </Badge>
                         )}
@@ -357,7 +357,7 @@ const SymbolSettings: React.FC = () => {
 
       {/* Create/Edit Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>
               {editingSymbol ? t('Redigera symbol', 'Edit Symbol') : t('Ny annoteringsymbol', 'New Annotation Symbol')}

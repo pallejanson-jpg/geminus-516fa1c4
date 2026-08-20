@@ -281,7 +281,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
       </div>
 
       {isEditMode && (
-        <div className="text-[10px] text-muted-foreground bg-muted/50 rounded p-2">
+        <div className="text-2xs text-muted-foreground bg-muted/50 rounded p-2">
           <p><strong>📍 {t('Nod', 'Node')}:</strong> {t('Klicka för att placera vägpunkter', 'Click to place waypoints')}</p>
           <p><strong>🔗 {t('Kant', 'Edge')}:</strong> {t('Klicka två noder för att koppla', 'Click two nodes to connect')}</p>
           <p><strong>🏠 {t('Rum', 'Room')}:</strong> {t('Koppla nod till närmaste rum', 'Link node to nearest room')}</p>
@@ -384,7 +384,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
           </Button>
 
           {graph.nodes.size === 0 && (
-            <p className="text-[10px] text-muted-foreground text-center">
+            <p className="text-2xs text-muted-foreground text-center">
               {t('Ingen navigeringsgraf finns. Aktivera redigeringsläget för att skapa en.', 'No navigation graph exists. Enable edit mode to create one.')}
             </p>
           )}
@@ -393,14 +393,14 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
           {route && (
             <div className="bg-muted/50 rounded p-2 space-y-1">
               <p className="text-xs font-medium text-foreground">{t('Rutt hittad!', 'Route found!')}</p>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-2xs text-muted-foreground">
                 {t('Avstånd', 'Distance')}: {route.totalDistance.toFixed(1)} {t('enheter', 'units')}
               </p>
-              <p className="text-[10px] text-muted-foreground">
+              <p className="text-2xs text-muted-foreground">
                 {t('Vägpunkter', 'Waypoints')}: {route.path.length}
               </p>
               {route.floorTransitions.length > 0 && (
-                <p className="text-[10px] text-muted-foreground">
+                <p className="text-2xs text-muted-foreground">
                   {t('Våningsövergångar', 'Floor transitions')}: {route.floorTransitions.length}
                 </p>
               )}

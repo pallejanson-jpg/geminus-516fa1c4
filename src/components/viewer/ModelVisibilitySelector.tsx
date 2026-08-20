@@ -147,7 +147,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
             <span className={cn("text-xs sm:text-sm truncate", isVisible ? "text-foreground" : "text-muted-foreground")} title={model.name}>{model.shortName}</span>
           </div>
           {!isSolo && (
-            <Button variant="ghost" size="sm" className="h-4 sm:h-5 px-1 sm:px-1.5 text-[9px] sm:text-[10px] text-muted-foreground hover:text-primary flex-shrink-0" onClick={() => handleShowOnlyModel(model.id)} title="Visa endast denna modell">Solo</Button>
+            <Button variant="ghost" size="sm" className="h-4 sm:h-5 px-1 sm:px-1.5 text-2xs text-muted-foreground hover:text-primary flex-shrink-0" onClick={() => handleShowOnlyModel(model.id)} title="Visa endast denna modell">Solo</Button>
           )}
         </div>
       );
@@ -160,7 +160,7 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
             {models.map(renderModelRow)}
           </div>
           <div className="pt-1 border-t border-border/30">
-            <Button variant="ghost" size="sm" className="w-full h-6 text-[10px] sm:text-xs" onClick={handleShowAll} disabled={allVisible}>Visa alla modeller</Button>
+            <Button variant="ghost" size="sm" className="w-full h-6 text-2xs sm:text-xs" onClick={handleShowAll} disabled={allVisible}>Visa alla modeller</Button>
           </div>
         </div>
       );
@@ -172,12 +172,12 @@ const ModelVisibilitySelector = forwardRef<HTMLDivElement, ModelVisibilitySelect
           <CollapsibleTrigger asChild>
             <Button variant="ghost" size="sm" className="h-auto p-0 hover:bg-transparent justify-start gap-1 sm:gap-1.5 min-w-0 flex-1">
               <Box className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground flex-shrink-0" />
-              <Label className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider cursor-pointer truncate">BIM-modeller</Label>
-              <span className="text-[10px] sm:text-xs text-muted-foreground flex-shrink-0">({visibleCount}/{totalCount})</span>
+              <Label className="text-2xs sm:text-xs text-muted-foreground uppercase tracking-wider cursor-pointer truncate">BIM-modeller</Label>
+              <span className="text-2xs sm:text-xs text-muted-foreground flex-shrink-0">({visibleCount}/{totalCount})</span>
               <ChevronDown className={cn("h-3 w-3 sm:h-3.5 sm:w-3.5 text-muted-foreground transition-transform flex-shrink-0", isExpanded && "rotate-180")} />
             </Button>
           </CollapsibleTrigger>
-          <Button variant="ghost" size="sm" className="h-5 sm:h-6 px-1.5 sm:px-2 text-[10px] sm:text-xs flex-shrink-0" onClick={handleShowAll} disabled={allVisible}>Alla</Button>
+          <Button variant="ghost" size="sm" className="h-5 sm:h-6 px-1.5 sm:px-2 text-2xs sm:text-xs flex-shrink-0" onClick={handleShowAll} disabled={allVisible}>Alla</Button>
         </div>
         <CollapsibleContent className="space-y-0.5 sm:space-y-1">
           <div className="space-y-0.5 sm:space-y-1 max-h-[200px] sm:max-h-[300px] overflow-y-auto pr-0.5 sm:pr-1">

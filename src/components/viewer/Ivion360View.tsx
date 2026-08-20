@@ -504,13 +504,13 @@ export default function Ivion360View({
             {syncEnabled && (
               <>
                 {postMessageActive && (
-                  <span className="text-xs text-green-600 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-green-500 animate-pulse" />
+                  <span className="text-xs text-success bg-success/15 px-1.5 py-0.5 rounded flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
                     {renderMode === 'sdk' ? 'SDK Sync' : 'Auto-sync'}
                   </span>
                 )}
                 {renderMode === 'iframe' && sdkStatus === 'failed' && (
-                  <span className="text-xs text-amber-600 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded flex items-center gap-1">
+                  <span className="text-xs text-warning bg-warning/15 px-1.5 py-0.5 rounded flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
                     {t('Iframe-läge', 'Iframe mode')}
                   </span>
@@ -601,8 +601,8 @@ export default function Ivion360View({
         
         {/* Image cache error banner */}
         {syncEnabled && !isLoadingImages && imageCache.length === 0 && hasImageLoadError && (
-          <div className="absolute top-12 left-2 right-2 z-20 bg-amber-100 dark:bg-amber-900/40 
-                          text-amber-800 dark:text-amber-200 text-xs px-3 py-2 rounded shadow flex items-center justify-between gap-2">
+          <div className="absolute top-12 left-2 right-2 z-20 bg-warning/15
+                          text-warning text-xs px-3 py-2 rounded shadow flex items-center justify-between gap-2">
              <span>⚠️ {t('Kunde inte hämta bildpositioner för synk.', 'Could not fetch image positions for sync.')}</span>
              <button
                onClick={retryLoadImages}

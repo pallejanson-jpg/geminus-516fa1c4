@@ -154,7 +154,7 @@ const SupportCaseDetail: React.FC<Props> = ({ supportCase, open, onClose, onUpda
 
   return (
     <Sheet open={open} onOpenChange={o => !o && onClose()}>
-      <SheetContent className="sm:max-w-lg w-full flex flex-col">
+      <SheetContent size="md" className="w-full flex flex-col">
         <SheetHeader className="flex-shrink-0">
           <SheetTitle className="text-left">{supportCase.title}</SheetTitle>
           <SheetDescription className="text-left flex items-center gap-2 mt-1 flex-wrap">

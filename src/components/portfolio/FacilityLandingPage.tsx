@@ -576,17 +576,17 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
               <CardContent className="px-3 sm:px-6 min-w-0 overflow-hidden">
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-y-3 sm:gap-y-4 gap-x-4 sm:gap-x-6 text-sm min-w-0">
                   <div className="min-w-0">
-                    <label className="text-[11px] sm:text-xs uppercase font-bold text-muted-foreground">Name</label>
+                    <label className="text-2xs sm:text-xs uppercase font-bold text-muted-foreground">Name</label>
                     <p className="font-medium truncate">{title}</p>
                   </div>
                   <div className="min-w-0">
-                    <label className="text-[11px] sm:text-xs uppercase font-bold text-muted-foreground">
+                    <label className="text-2xs sm:text-xs uppercase font-bold text-muted-foreground">
                       {isBuilding ? 'Address' : 'Designation'}
                     </label>
                     <p className="font-medium truncate">{subTitle}</p>
                   </div>
                   <div className="min-w-0">
-                    <label className="text-[11px] sm:text-xs uppercase font-bold text-muted-foreground">Category</label>
+                    <label className="text-2xs sm:text-xs uppercase font-bold text-muted-foreground">Category</label>
                     <p className="font-medium truncate">{facility.category || '-'}</p>
                   </div>
                 </div>
@@ -645,7 +645,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                           {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Save'}
                         </Button>
                       </div>
-                      <p className="text-[11px] sm:text-xs text-muted-foreground">
+                      <p className="text-2xs sm:text-xs text-muted-foreground">
                         Used for 360° viewer integration
                       </p>
                     </div>
@@ -663,7 +663,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                           {settings?.isFavorite ? 'In Favorites' : 'Add to Favorites'}
                         </Button>
                       </div>
-                      <p className="text-[11px] sm:text-xs text-muted-foreground">
+                      <p className="text-2xs sm:text-xs text-muted-foreground">
                         Favorite buildings appear on the home landing page
                       </p>
                     </div>
@@ -730,7 +730,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       </div>
                       
                       <div className="flex items-center justify-between gap-2 bg-muted/30 rounded-md p-2 min-w-0">
-                        <p className="text-[11px] sm:text-xs text-muted-foreground truncate min-w-0">
+                        <p className="text-2xs sm:text-xs text-muted-foreground truncate min-w-0">
                           Building orientation relative to north
                         </p>
                         <Button 
@@ -789,7 +789,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                       </div>
                     )}
                     
-                    <p className="text-[11px] sm:text-xs text-muted-foreground">
+                    <p className="text-2xs sm:text-xs text-muted-foreground">
                       Shown as background image on the building landing page
                     </p>
                     
@@ -867,7 +867,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                           >
                             <img src={img} alt="" className="w-full h-full object-cover" />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-                            <span className="absolute bottom-1.5 left-2 right-2 text-[11px] font-semibold text-white truncate">
+                            <span className="absolute bottom-1.5 left-2 right-2 text-2xs font-semibold text-white truncate">
                               {storey.commonName || storey.name || storey.attributes?.levelName || storey.attributes?.levelCommonName || `Floor ${idx + 1}`}
                             </span>
                           </button>
@@ -906,7 +906,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                           key={key}
                           type="button"
                           onClick={() => setRoomSortKey(key)}
-                          className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${
+                          className={`px-2 py-1 rounded text-2xs font-medium transition-colors ${
                             roomSortKey === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
                           }`}
                         >
@@ -918,13 +918,13 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
 
                   {/* Sensor metric buttons */}
                   <div className="flex items-center gap-1.5 mb-3">
-                    <span className="text-[10px] text-muted-foreground mr-1">Visualize:</span>
+                    <span className="text-2xs text-muted-foreground mr-1">Visualize:</span>
                     {ROOM_VIZ_METRICS.map(m => (
                       <Button
                         key={m.key}
                         size="sm"
                         variant={activeRoomMetric === m.key ? 'default' : 'outline'}
-                        className="h-7 px-2 text-[10px] gap-1"
+                        className="h-7 px-2 text-2xs gap-1"
                         onClick={() => setActiveRoomMetric(prev => prev === m.key ? 'none' : m.key)}
                       >
                         <m.icon className="h-3 w-3" />
@@ -973,7 +973,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                               attributes: space.attributes,
                             })}
                           >
-                            <div className="text-[10px] text-muted-foreground truncate mb-0.5">
+                            <div className="text-2xs text-muted-foreground truncate mb-0.5">
                               {space.commonName || space.name || '(unnamed)'}
                             </div>
                             <div
@@ -984,7 +984,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                                 ? sensorVal.toFixed(1)
                                 : displayArea ? `${displayArea}` : '—'}
                             </div>
-                            <div className="text-[9px] text-muted-foreground">
+                            <div className="text-2xs text-muted-foreground">
                               {activeRoomMetric !== 'none' && sensorVal !== null
                                 ? (activeRoomMetric === 'temperature' ? '°C' : activeRoomMetric === 'co2' ? 'ppm' : '%')
                                 : <>
@@ -1043,7 +1043,7 @@ const FacilityLandingPage: React.FC<FacilityLandingPageProps> = ({
                           {asset.commonName || asset.common_name || asset.name || '(unnamed)'}
                         </span>
                       </div>
-                      <div className="text-[10px] sm:text-[11px] text-muted-foreground truncate">
+                      <div className="text-2xs text-muted-foreground truncate">
                         {asset.asset_type || asset.assetType || asset.category || ''}
                       </div>
                     </button>

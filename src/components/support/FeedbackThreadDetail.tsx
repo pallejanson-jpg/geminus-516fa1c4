@@ -142,7 +142,7 @@ const FeedbackThreadDetail: React.FC<FeedbackThreadDetailProps> = ({
 
   return (
     <Sheet open={open} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side="right" className="w-full sm:max-w-md p-0 flex flex-col">
+      <SheetContent side="right" size="md" className="w-full p-0 flex flex-col">
         <SheetHeader className="p-4 pb-3 border-b">
           <SheetTitle className="text-base text-foreground pr-6">{thread.title}</SheetTitle>
           <SheetDescription className="text-xs text-muted-foreground">

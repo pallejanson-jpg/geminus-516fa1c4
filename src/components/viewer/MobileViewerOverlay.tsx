@@ -55,7 +55,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
             <Button
               size="sm"
               variant={viewMode === 'split2d3d' ? 'default' : 'ghost'}
-              className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${viewMode !== 'split2d3d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+              className={`h-6 px-1.5 text-2xs rounded-md gap-0.5 ${viewMode !== 'split2d3d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
               onClick={() => onChangeViewMode('split2d3d')}
             >
               <LayoutPanelLeft className="h-3 w-3" />
@@ -64,7 +64,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
             <Button
               size="sm"
               variant={viewMode === '2d' ? 'default' : 'ghost'}
-              className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${viewMode !== '2d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+              className={`h-6 px-1.5 text-2xs rounded-md gap-0.5 ${viewMode !== '2d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
               onClick={() => onChangeViewMode('2d')}
             >
               <Square className="h-3 w-3" />
@@ -73,7 +73,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
             <Button
               size="sm"
               variant={viewMode === '3d' ? 'default' : 'ghost'}
-              className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${viewMode !== '3d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+              className={`h-6 px-1.5 text-2xs rounded-md gap-0.5 ${viewMode !== '3d' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
               onClick={() => onChangeViewMode('3d')}
             >
               <Box className="h-3 w-3" />
@@ -83,7 +83,7 @@ const MobileViewerOverlay: React.FC<MobileViewerOverlayProps> = ({
               <Button
                 size="sm"
                 variant={viewMode === '360' ? 'default' : 'ghost'}
-                className={`h-6 px-1.5 text-[9px] rounded-md gap-0.5 ${viewMode !== '360' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
+                className={`h-6 px-1.5 text-2xs rounded-md gap-0.5 ${viewMode !== '360' ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`}
                 onClick={() => onChangeViewMode('360')}
               >
                 <View className="h-3 w-3" />

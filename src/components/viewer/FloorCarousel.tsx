@@ -408,7 +408,7 @@ const FloorCarousel: React.FC<FloorCarouselProps> = ({
                     </span>
                   </div>
                 )}
-                <div className="px-1.5 py-0.5 bg-background/90 text-[10px] font-medium text-center truncate">
+                <div className="px-1.5 py-0.5 bg-background/90 text-2xs font-medium text-center truncate">
                   {floor.name}
                 </div>
               </button>

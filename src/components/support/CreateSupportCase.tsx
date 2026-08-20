@@ -175,7 +175,7 @@ const CreateSupportCase: React.FC<Props> = ({ open, onClose, onCreated, prefill 
 
   return (
     <Sheet open={open} onOpenChange={o => !o && onClose()}>
-      <SheetContent className="sm:max-w-lg w-full overflow-y-auto">
+      <SheetContent size="md" className="w-full overflow-y-auto">
         <SheetHeader>
           <SheetTitle>{t('Nytt supportärende', 'New support case')}</SheetTitle>
           <SheetDescription>{t('Beskriv ditt ärende så återkommer vi till dig', 'Describe your case and we will get back to you')}</SheetDescription>

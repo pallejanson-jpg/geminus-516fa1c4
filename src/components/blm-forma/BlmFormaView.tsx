@@ -56,17 +56,17 @@ const SYSTEM_TYPES = [
 ];
 
 const STATUS_CONFIG = {
-  planning:  { label: 'Planning',  icon: Clock,        color: 'bg-gray-500/15 text-gray-400 border-gray-500/30' },
-  active:    { label: 'Active',    icon: Activity,     color: 'bg-blue-500/15 text-blue-400 border-blue-500/30' },
-  completed: { label: 'Completed', icon: CheckCircle,  color: 'bg-green-500/15 text-green-400 border-green-500/30' },
+  planning:  { label: 'Planning',  icon: Clock,        color: 'bg-muted/40 text-muted-foreground border-border' },
+  active:    { label: 'Active',    icon: Activity,     color: 'bg-accent/15 text-accent border-accent/30' },
+  completed: { label: 'Completed', icon: CheckCircle,  color: 'bg-success/15 text-success border-success/30' },
   archived:  { label: 'Archived',  icon: Archive,      color: 'bg-muted/40 text-muted-foreground border-border' },
 };
 
 const SETUP_STATUS_CONFIG = {
   pending:   { label: 'Not set up in Autodesk Forma', color: 'text-muted-foreground' },
-  creating:  { label: 'Setting up in Autodesk Forma…', color: 'text-blue-400' },
-  ready:     { label: 'Ready in Autodesk Forma',       color: 'text-green-400' },
-  error:     { label: 'Setup error',        color: 'text-red-400' },
+  creating:  { label: 'Setting up in Autodesk Forma…', color: 'text-accent' },
+  ready:     { label: 'Ready in Autodesk Forma',       color: 'text-success' },
+  error:     { label: 'Setup error',        color: 'text-destructive' },
 };
 
 export default function BlmFormaView() {
@@ -337,7 +337,7 @@ export default function BlmFormaView() {
       {/* Header */}
       <div className="sticky top-0 z-10 bg-background border-b border-border px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <HardHat className="h-5 w-5 text-orange-400" />
+          <HardHat className="h-5 w-5 text-warning" />
           <h1 className="text-lg font-semibold">BLM ↔ Forma</h1>
           <span className="text-sm text-muted-foreground">Renovation project handover</span>
         </div>
@@ -384,12 +384,12 @@ export default function BlmFormaView() {
                         </Badge>
                         {deleteConfirm === project.id ? (
                           <div className="flex items-center gap-1">
-                            <span className="text-xs text-red-400">Delete?</span>
+                            <span className="text-xs text-destructive">Delete?</span>
                             <Button variant="destructive" size="sm" className="h-6 px-2 text-xs" onClick={() => handleDeleteProject(project.id)}>Yes</Button>
                             <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setDeleteConfirm(null)}>No</Button>
                           </div>
                         ) : (
-                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-red-400" onClick={() => setDeleteConfirm(project.id)}>
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive" onClick={() => setDeleteConfirm(project.id)}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         )}
@@ -437,7 +437,7 @@ export default function BlmFormaView() {
                       </div>
 
                       {project.acc_setup_error && (
-                        <p className="text-xs text-red-400 bg-red-500/10 rounded p-2">{project.acc_setup_error}</p>
+                        <p className="text-xs text-destructive bg-destructive/10 rounded p-2">{project.acc_setup_error}</p>
                       )}
 
                       {/* Workset guide — shown when ready */}
@@ -500,7 +500,7 @@ export default function BlmFormaView() {
 
       {/* Create modal */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-md bg-background text-foreground">
+        <DialogContent size="md" className="bg-background text-foreground">
           <DialogHeader><DialogTitle className="text-foreground">New Renovation Project</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
@@ -622,10 +622,10 @@ export default function BlmFormaView() {
 
       {/* ACC Setup modal */}
       <Dialog open={!!setupOpen} onOpenChange={open => { if (!open) setSetupOpen(null); }}>
-        <DialogContent className="max-w-lg bg-background text-foreground">
+        <DialogContent size="md" className="bg-background text-foreground">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FolderOpen className="h-4 w-4 text-orange-400" /> Set Up in Autodesk Forma
+              <FolderOpen className="h-4 w-4 text-warning" /> Set Up in Autodesk Forma
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -666,7 +666,7 @@ export default function BlmFormaView() {
                 return (
                   <div key={folderId}>
                     <div className="flex items-center gap-1" style={{ paddingLeft: `${depth * 12}px` }}>
-                      <FolderOpen className="h-3.5 w-3.5 shrink-0 text-yellow-500" />
+                      <FolderOpen className="h-3.5 w-3.5 shrink-0 text-warning" />
                       <span className="text-sm flex-1 truncate">{f.name}</span>
                       <Button variant={setupForm.archiveFolderId === folderId ? 'default' : 'ghost'} size="sm" className="h-5 px-1.5 text-xs"
                         onClick={() => setSetupForm(s => ({ ...s, archiveFolderId: folderId, archiveFolderName: f.name }))}>Archive</Button>

@@ -177,7 +177,7 @@ const SpaceRow = React.memo<{
         <DoorOpen className="h-3.5 w-3.5 text-primary shrink-0" />
         <span className="truncate flex-1 text-xs">{space.name}</span>
         {hasAssets && (
-          <Badge variant="secondary" className="text-[9px] px-1 py-0 h-4 shrink-0">{space.assets.length}</Badge>
+          <Badge variant="secondary" className="text-2xs px-1 py-0 h-4 shrink-0">{space.assets.length}</Badge>
         )}
       </div>
 
@@ -260,7 +260,7 @@ const StoreyRow = React.memo<{
         <Layers className="h-4 w-4 text-primary/70 shrink-0" />
         <span className="truncate flex-1 font-medium text-sm">{storey.name}</span>
         {storey.spaces.length > 0 && (
-          <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 shrink-0">{storey.spaces.length} rooms</Badge>
+          <Badge variant="outline" className="text-2xs px-1 py-0 h-4 shrink-0">{storey.spaces.length} rooms</Badge>
         )}
       </div>
 
@@ -675,7 +675,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
           <div className="px-2 py-1 bg-primary/10 text-primary text-xs flex items-center justify-between border-b">
             <span>Solo: {checkedStoreyFmGuids.size} level(s) selected</span>
             <button
-              className="underline text-[10px]"
+              className="underline text-2xs"
               onClick={() => {
                 setCheckedStoreyFmGuids(new Set());
                 applyStoreyVisibility(new Set());
@@ -749,7 +749,7 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
         <div className="px-3 py-1.5 bg-primary/10 text-primary text-xs flex items-center justify-between border-b">
           <span>Solo: {checkedStoreyFmGuids.size} level(s)</span>
           <button
-            className="underline text-[10px]"
+            className="underline text-2xs"
             onClick={() => {
               setCheckedStoreyFmGuids(new Set());
               applyStoreyVisibility(new Set());

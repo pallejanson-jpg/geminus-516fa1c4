@@ -296,7 +296,7 @@ const GeminusBase2DPanel: React.FC<GeminusBase2DPanelProps> = ({
         />
       )}
 
-      <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-background/80 backdrop-blur-sm rounded px-2 py-1 text-[10px] text-muted-foreground border z-20">
+      <div className="absolute bottom-2 right-2 flex items-center gap-1 bg-background/80 backdrop-blur-sm rounded px-2 py-1 text-2xs text-muted-foreground border z-20">
         <Square className="h-3 w-3" />
         Geminus Base 2D
       </div>

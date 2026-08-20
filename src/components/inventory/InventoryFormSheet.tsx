@@ -40,8 +40,9 @@ const InventoryFormSheet: React.FC<InventoryFormSheetProps> = ({
   return (
     <Sheet open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <SheetContent 
-        side="right" 
-        className="w-full sm:max-w-md overflow-y-auto p-0"
+        side="right"
+        size="md"
+        className="w-full overflow-y-auto p-0"
         // Prevent closing when clicking overlay while picking position
         onInteractOutside={(e) => {
           if (isPickingPosition) {

@@ -18,13 +18,13 @@ interface GeminusPremiumDashboardViewProps {
 // ── Live / Demo status badge ──
 const StatusBadge = ({ isLive, isLoading }: { isLive: boolean; isLoading: boolean }) => {
   if (isLoading) return (
-    <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 border-muted-foreground/40 text-muted-foreground">
+    <Badge variant="outline" className="text-2xs px-1.5 py-0 gap-1 border-muted-foreground/40 text-muted-foreground">
       <Loader2 className="h-2.5 w-2.5 animate-spin" /> Loading…
     </Badge>
   );
   if (isLive) return (
-    <Badge variant="outline" className="text-[9px] px-1.5 py-0 gap-1 border-green-500/50 text-green-400 bg-green-500/10">
-      <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />LIVE
+    <Badge variant="outline" className="text-2xs px-1.5 py-0 gap-1 border-success/50 text-success bg-success/10">
+      <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />LIVE
     </Badge>
   );
   return null;
@@ -109,9 +109,9 @@ const SensorChart: React.FC<SensorChartProps> = ({ timeSeries, isLive }) => {
   });
 
   const lines = [
-    { key: 'temperature', label: 'Temp (°C)', color: '#22c55e', strokeDash: isLive ? '0' : '4 2' },
-    { key: 'co2',         label: 'CO₂ (ppm)', color: '#60a5fa', strokeDash: isLive ? '0' : '4 2' },
-    { key: 'humidity',    label: 'Humidity (%)', color: '#a78bfa', strokeDash: isLive ? '0' : '4 2' },
+    { key: 'temperature', label: 'Temp (°C)', color: 'hsl(var(--chart-1))', strokeDash: isLive ? '0' : '4 2' },
+    { key: 'co2',         label: 'CO₂ (ppm)', color: 'hsl(var(--chart-2))', strokeDash: isLive ? '0' : '4 2' },
+    { key: 'humidity',    label: 'Humidity (%)', color: 'hsl(var(--chart-3))', strokeDash: isLive ? '0' : '4 2' },
   ] as const;
 
   return (
@@ -123,7 +123,7 @@ const SensorChart: React.FC<SensorChartProps> = ({ timeSeries, isLive }) => {
             key={l.key}
             onClick={() => setActiveLines(prev => ({ ...prev, [l.key]: !prev[l.key] }))}
             className={cn(
-              'text-[10px] px-2 py-0.5 rounded-full border transition-colors',
+              'text-2xs px-2 py-0.5 rounded-full border transition-colors',
               activeLines[l.key]
                 ? 'border-transparent text-background'
                 : 'border-border text-muted-foreground bg-transparent'
@@ -318,8 +318,8 @@ const GeminusPremiumDashboardView: React.FC<GeminusPremiumDashboardViewProps> = 
             </div>
           )}
           {!isLoading && isLive && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-green-500/30 px-3 py-2 bg-green-500/5">
-              <Wifi className="h-3.5 w-3.5 shrink-0 text-green-400" />
+            <div className="flex items-center gap-2 text-xs text-muted-foreground rounded-md border border-success/30 px-3 py-2 bg-success/5">
+              <Wifi className="h-3.5 w-3.5 shrink-0 text-success" />
               <span>Live data from Geminus Premium · Machine: {data?.machinePk}</span>
             </div>
           )}

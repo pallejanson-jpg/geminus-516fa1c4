@@ -220,7 +220,7 @@ export function BCFViewpointsPanel({ buildingFmGuid, buildingName }: Props) {
                   onClick={() => handleLoad(view)}
                 >
                   <p className="text-xs font-medium text-white truncate">{view.name}</p>
-                  <p className="text-[10px] text-white/40">
+                  <p className="text-2xs text-white/40">
                     {new Date(view.created_at).toLocaleString('sv-SE').slice(0, 16)}
                   </p>
                 </button>
@@ -228,7 +228,7 @@ export function BCFViewpointsPanel({ buildingFmGuid, buildingName }: Props) {
                 {/* Delete */}
                 <Button
                   variant="ghost" size="icon"
-                  className="h-6 w-6 text-white/0 group-hover:text-white/50 hover:text-red-400 hover:bg-white/10 shrink-0"
+                  className="h-6 w-6 text-white/0 group-hover:text-white/50 hover:text-destructive hover:bg-white/10 shrink-0"
                   onClick={() => handleDelete(view.id, view.name)}
                 >
                   <Trash2 className="h-3 w-3" />

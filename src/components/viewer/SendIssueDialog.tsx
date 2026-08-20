@@ -95,7 +95,7 @@ const SendIssueDialog: React.FC<SendIssueDialogProps> = ({
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>Send Issue</DialogTitle>
           <DialogDescription>

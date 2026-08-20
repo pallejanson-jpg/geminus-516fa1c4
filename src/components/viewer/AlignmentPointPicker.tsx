@@ -240,7 +240,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
       {/* Distance slider — visible during step 1 and adjustable in step 2 */}
       {(step === 'picking360' || step === 'picking3D') && (
         <div className="bg-muted/50 rounded-md p-2 space-y-1.5">
-          <div className="flex items-center justify-between text-[10px]">
+          <div className="flex items-center justify-between text-2xs">
             <span className="flex items-center gap-1 text-foreground/70">
               <Ruler className="h-3 w-3" />
               {t('Avstånd till yta', 'Distance to surface')}
@@ -255,7 +255,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
             step={0.1}
             className="w-full"
           />
-          <p className="text-[9px] text-foreground/50">
+          <p className="text-2xs text-foreground/50">
             {t('Ungefärligt avstånd från kameran till ytan du pekar på.', 'Approximate distance from the camera to the surface you are pointing at.')}
           </p>
         </div>
@@ -265,15 +265,15 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
       <div className={`flex items-start gap-2 p-2 rounded-md text-xs ${
         step === 'picking360' ? 'bg-primary/10 border border-primary/30' : 'bg-muted/50'
       }`}>
-        <div className={`shrink-0 mt-0.5 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-          ivionPoint ? 'bg-green-500 text-white' : 'bg-foreground/20 text-foreground/70'
+        <div className={`shrink-0 mt-0.5 h-5 w-5 rounded-full flex items-center justify-center text-2xs font-bold ${
+          ivionPoint ? 'bg-success text-success-foreground' : 'bg-foreground/20 text-foreground/70'
         }`}>
           {ivionPoint ? <Check className="h-3 w-3" /> : '1'}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-medium text-foreground">{t('Klicka i 360°-vyn', 'Click in the 360° view')}</p>
           {ivionPoint ? (
-            <p className="text-green-400 font-mono text-[10px] mt-1.5">✓ {formatCoord(ivionPoint)}</p>
+            <p className="text-success font-mono text-2xs mt-1.5">✓ {formatCoord(ivionPoint)}</p>
           ) : (
             <div className="mt-0.5 space-y-1.5">
               <p className="text-foreground/70 leading-snug">
@@ -283,13 +283,13 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
               {step === 'picking360' && (
                 <div className="flex items-center gap-1.5 text-primary">
                   <MousePointerClick className="h-3 w-3" />
-                  <span className="text-[11px] font-medium animate-pulse">{t('Väntar på klick i 360°...', 'Waiting for click in 360°...')}</span>
+                  <span className="text-2xs font-medium animate-pulse">{t('Väntar på klick i 360°...', 'Waiting for click in 360°...')}</span>
                 </div>
               )}
               {captureError && (
                 <div className="flex items-start gap-1.5 text-destructive">
                   <AlertCircle className="h-3 w-3 shrink-0 mt-0.5" />
-                  <p className="text-[10px] leading-snug">{captureError}</p>
+                  <p className="text-2xs leading-snug">{captureError}</p>
                 </div>
               )}
             </div>
@@ -301,28 +301,28 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
       <div className={`flex items-start gap-2 p-2 rounded-md text-xs ${
         step === 'picking3D' ? 'bg-primary/10 border border-primary/30' : 'bg-muted/50'
       }`}>
-        <div className={`shrink-0 mt-0.5 h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-          bimPoint ? 'bg-green-500 text-white' : 'bg-foreground/20 text-foreground/70'
+        <div className={`shrink-0 mt-0.5 h-5 w-5 rounded-full flex items-center justify-center text-2xs font-bold ${
+          bimPoint ? 'bg-success text-success-foreground' : 'bg-foreground/20 text-foreground/70'
         }`}>
           {bimPoint ? <Check className="h-3 w-3" /> : '2'}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-medium text-foreground">{t('Klicka på samma punkt i 3D', 'Click the same point in 3D')}</p>
           {bimPoint ? (
-            <p className="text-green-400 font-mono text-[10px] mt-1">✓ {formatCoord(bimPoint)}</p>
+            <p className="text-success font-mono text-2xs mt-1">✓ {formatCoord(bimPoint)}</p>
           ) : step === 'picking3D' ? (
             <div className="mt-1 space-y-1">
               <p className="text-foreground/70 leading-snug">
                 {t('Klicka nu på', 'Now click on')} <strong>{t('exakt samma punkt', 'exactly the same point')}</strong> {t('i 3D-modellen till vänster.', 'in the 3D model on the left.')}
               </p>
               {ivionPoint && (
-                <p className="text-foreground/50 text-[10px] font-mono">
+                <p className="text-foreground/50 text-2xs font-mono">
                   360°: {formatCoord(ivionPoint)} (avstånd: {rayDistance.toFixed(1)}m)
                 </p>
               )}
               <div className="flex items-center gap-1.5 text-primary">
                 <Loader2 className="h-3 w-3 animate-spin" />
-                <span className="text-[11px] font-medium animate-pulse">{t('Väntar på klick i 3D...', 'Waiting for click in 3D...')}</span>
+                <span className="text-2xs font-medium animate-pulse">{t('Väntar på klick i 3D...', 'Waiting for click in 3D...')}</span>
               </div>
             </div>
           ) : (
@@ -334,7 +334,7 @@ const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({
       {/* Step 3: Result + Apply */}
       {step === 'done' && ivionPoint && bimPoint && (
         <div className="space-y-2">
-          <div className="bg-muted/50 rounded-md p-2 text-[10px] font-mono space-y-0.5">
+          <div className="bg-muted/50 rounded-md p-2 text-2xs font-mono space-y-0.5">
             <div className="flex justify-between">
               <span className="text-foreground/70">360°:</span>
               <span className="text-foreground">{formatCoord(ivionPoint)}</span>

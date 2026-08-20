@@ -288,7 +288,7 @@ const MinimapPanel: React.FC<MinimapPanelProps> = ({ viewerRef, isVisible, onClo
               key={preset}
               variant={sizePreset === preset ? 'secondary' : 'ghost'}
               size="icon"
-              className="h-6 w-6 text-[10px] font-bold"
+              className="h-6 w-6 text-2xs font-bold"
               onClick={() => applyPreset(preset)}
               title={preset === 'mini' ? 'Small' : preset === 'medium' ? 'Medium' : 'Large (~50%)'}
             >

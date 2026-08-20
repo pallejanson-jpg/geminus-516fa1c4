@@ -441,7 +441,7 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                     </Button>
                     {hasCoordinates && (
                       <div className="flex items-center gap-1 px-2 bg-muted rounded text-xs">
-                        <Check className="h-3 w-3 text-green-500" />
+                        <Check className="h-3 w-3 text-success" />
                         <span className="font-mono">
                           {formData.coordinate_x.toFixed(1)}, {formData.coordinate_y.toFixed(1)}
                         </span>

@@ -1,10 +1,10 @@
-import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useContext, useCallback, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import {
     Search, Home, LayoutGrid, Globe, Network, User as UserIcon,
     Menu as MenuIcon, Cuboid, HelpCircle, Loader2, Settings, LogOut, Shield, Sparkles, AppWindow, Code, Wand2,
-    Building2, Check, ChevronDown
+    Building2, Check, ChevronDown, Wrench
 } from 'lucide-react';
 import ApiSettingsModal from '@/components/settings/ApiSettingsModal';
 import ProfileModal from '@/components/settings/ProfileModal';
@@ -13,6 +13,10 @@ import { AppButton } from '@/components/common/AppButton';
 import { useToast } from "@/hooks/use-toast";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+
+// Admin-only BIM/data tools (IFC import, Forma sync, ACC handover) — desktop workflows, not part of the mobile-facing app switcher
+const GeminusToolsView = lazy(() => import('@/components/geminus-tools/GeminusToolsView'));
 
 import { AppContext } from '@/context/AppContext';
 import { Input } from '@/components/ui/input';
@@ -62,6 +66,7 @@ const AppHeader: React.FC<AppHeaderProps> = ({
     const [isApiSettingsOpen, setIsApiSettingsOpen] = useState(false);
     const [isProfileOpen, setIsProfileOpen] = useState(false);
     const [isAppMenuOpen, setIsAppMenuOpen] = useState(false);
+    const [isAdminToolsOpen, setIsAdminToolsOpen] = useState(false);
     const [isCommandOpen, setIsCommandOpen] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
 
@@ -290,6 +295,12 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                             <AppWindow className="mr-2 h-4 w-4" />
                             {t('Appar', 'Apps')}
                         </DropdownMenuItem>
+                        {isAdmin && (
+                            <DropdownMenuItem onClick={() => setIsAdminToolsOpen(true)}>
+                                <Wrench className="mr-2 h-4 w-4" />
+                                {t('Admin-verktyg', 'Admin Tools')}
+                            </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem onClick={() => navigate('/onboarding')}>
                             <Sparkles className="mr-2 h-4 w-4" />
                             {t('Starta introduktion', 'Start introduction')}
@@ -318,6 +329,15 @@ const AppHeader: React.FC<AppHeaderProps> = ({
                     isOpen={isAppMenuOpen}
                     onClose={() => setIsAppMenuOpen(false)}
                 />
+                {isAdmin && (
+                    <Dialog open={isAdminToolsOpen} onOpenChange={setIsAdminToolsOpen}>
+                        <DialogContent size="xl" className="h-[85vh] p-0 flex flex-col">
+                            <Suspense fallback={<div className="flex-1 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+                                <GeminusToolsView />
+                            </Suspense>
+                        </DialogContent>
+                    </Dialog>
+                )}
             </div>
         </header>
     );

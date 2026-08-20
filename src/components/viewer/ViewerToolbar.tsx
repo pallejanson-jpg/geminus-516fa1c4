@@ -58,6 +58,7 @@ type ViewMode = '3d' | '2d';
 interface ViewerToolbarProps {
   viewer: any;
   buildingFmGuid?: string;
+  buildingName?: string;
   className?: string;
 }
 
@@ -143,7 +144,7 @@ ToolButton.displayName = 'ToolButton';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, className }) => {
+const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, buildingName, className }) => {
   const [activeTool, setActiveTool] = useState<ViewerTool>(null);
   const [navMode, setNavMode] = useState<NavMode>('orbit');
   const [viewMode, setViewMode] = useState<ViewMode>('3d');
@@ -1322,7 +1323,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
                 }}
                 className="flex-1"
               />
-              <span className="text-[10px] text-muted-foreground w-8 text-right">
+              <span className="text-2xs text-muted-foreground w-8 text-right">
                 {navSpeed}%
               </span>
             </div>
@@ -1363,7 +1364,12 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, c
             <GunnarChat
               open={true}
               onClose={() => setIsGunnarOpen(false)}
-              context={{ activeApp: 'viewer' } as GunnarContext}
+              context={{
+                activeApp: 'viewer',
+                currentBuilding: buildingFmGuid
+                  ? { fmGuid: buildingFmGuid, name: buildingName || buildingFmGuid }
+                  : undefined,
+              } as GunnarContext}
               embedded
             />
           </div>

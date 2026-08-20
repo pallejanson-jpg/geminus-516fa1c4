@@ -144,6 +144,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
   // Listen for quick-select events from VisualizationQuickBar
   useEffect(() => {
     const handler = (e: CustomEvent<{ type: VisualizationType }>) => {
+      if (!e.detail?.type) return;
       setVisualizationType(e.detail.type);
       if (e.detail.type !== 'none' && !hasRealData) {
         setUseMockData(true);
@@ -888,7 +889,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       {!hasRealData && visualizationType !== 'none' && (
         <div className="flex items-center justify-between">
           <Label className="text-xs flex items-center gap-1">
-            <AlertCircle className="h-3 w-3 text-amber-500" />
+            <AlertCircle className="h-3 w-3 text-warning" />
             {t('Simulerad data', 'Simulated data')}
           </Label>
           <Switch checked={useMockData} onCheckedChange={setUseMockData} />
@@ -896,7 +897,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
       )}
 
       {hasRealData && visualizationType !== 'none' && (
-        <p className="text-xs text-green-600">✓ {t('Verklig sensordata tillgänglig', 'Real sensor data available')}</p>
+        <p className="text-xs text-success">✓ {t('Verklig sensordata tillgänglig', 'Real sensor data available')}</p>
       )}
 
       {/* Legend */}
@@ -904,7 +905,7 @@ const RoomVisualizationPanel: React.FC<RoomVisualizationPanelProps> = ({
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground">{t('Färgskala', 'Color scale')} ({config.unit})</Label>
           <div className="h-4 rounded-sm" style={{ background: legendGradient }} />
-          <div className="flex justify-between text-[10px] text-muted-foreground">
+          <div className="flex justify-between text-2xs text-muted-foreground">
             <span>{config.min} {config.unit}</span>
             <span>{config.max} {config.unit}</span>
           </div>

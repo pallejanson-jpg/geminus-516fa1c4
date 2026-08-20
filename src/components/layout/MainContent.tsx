@@ -17,8 +17,6 @@ import NativeViewerPage from "@/pages/NativeViewerPage";
 
 // Lazy load heavy views
 const MapView = lazy(() => import("@/components/map/MapView"));
-const BlmFormaView = lazy(() => import("@/components/blm-forma/BlmFormaView"));
-const GeminusToolsView = lazy(() => import("@/components/geminus-tools/GeminusToolsView"));
 const AssetRegistration = lazy(() => import("@/pages/AssetRegistration"));
 const Inventory = lazy(() => import("@/pages/Inventory"));
 const IvionCreate = lazy(() => import("@/pages/IvionCreate"));
@@ -54,8 +52,6 @@ const MainContent: React.FC = () => {
         insights: t('Insikter', 'Insights'), entity_insights: t('Byggnadsinsikter', 'Building Insights'), inventory: t('Inventering', 'Inventory'),
         globe: t('Glob', 'Globe'), support: t('Support', 'Support'), fault_report: t('Felrapport', 'Fault Report'),
         ai_scan: t('AI-skanning', 'AI Scan'), radar: t('360°-vy', '360° View'), fma_plus: t('Geminus Base', 'Geminus Base'), geminus_base_native: t('Geminus Base', 'Geminus Base'),
-        blm_forma: t('BLM ↔ Forma', 'BLM ↔ Forma'),
-        geminus_tools: t('Geminus Tools', 'Geminus Tools'),
     };
     useDocumentTitle(titleMap[activeApp] || null);
 
@@ -186,18 +182,6 @@ const MainContent: React.FC = () => {
                 return (
                     <Suspense fallback={<LazyFallback />}>
                         <CustomerPortalView />
-                    </Suspense>
-                );
-            case 'blm_forma':
-                return (
-                    <Suspense fallback={<LazyFallback />}>
-                        <BlmFormaView />
-                    </Suspense>
-                );
-            case 'geminus_tools':
-                return (
-                    <Suspense fallback={<LazyFallback />}>
-                        <GeminusToolsView />
                     </Suspense>
                 );
             default:

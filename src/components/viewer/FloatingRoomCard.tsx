@@ -130,7 +130,7 @@ const FloatingRoomCard: React.FC<FloatingRoomCardProps> = ({
 
       {/* FM GUID (truncated) */}
       <div className="pt-1 border-t">
-        <code className="text-[10px] text-muted-foreground/70 truncate block">
+        <code className="text-2xs text-muted-foreground/70 truncate block">
           {room.fmGuid}
         </code>
       </div>

@@ -1092,7 +1092,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
       {/* Bottom toolbar — always mounted for event handling, hidden visually when hideToolbar */}
       {isViewerReady && xeokitViewer && (
         <div style={hideToolbar ? { position: 'absolute', opacity: 0, pointerEvents: 'none', height: 0, overflow: 'hidden' } : undefined}>
-          <ViewerToolbar viewer={xeokitViewer} buildingFmGuid={buildingFmGuid} />
+          <ViewerToolbar viewer={xeokitViewer} buildingFmGuid={buildingFmGuid} buildingName={buildingName} />
         </div>
       )}
 

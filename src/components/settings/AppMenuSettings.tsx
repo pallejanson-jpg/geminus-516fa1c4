@@ -198,7 +198,7 @@ const AppMenuSettings: React.FC<AppMenuSettingsProps> = ({ isOpen, onClose }) =>
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-[calc(100vw-1rem)] sm:max-w-md max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
+      <DialogContent size="md" className="max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Customize App Menu</DialogTitle>
         </DialogHeader>

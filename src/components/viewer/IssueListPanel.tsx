@@ -24,22 +24,22 @@ export interface BcfIssue {
 
 const ISSUE_TYPE_CONFIG: Record<string, { icon: React.ElementType; color: string }> = {
   fault: { icon: AlertCircle, color: 'text-destructive' },
-  improvement: { icon: Lightbulb, color: 'text-amber-500' },
-  question: { icon: HelpCircle, color: 'text-blue-500' },
+  improvement: { icon: Lightbulb, color: 'text-warning' },
+  question: { icon: HelpCircle, color: 'text-accent' },
   observation: { icon: Eye, color: 'text-muted-foreground' },
 };
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon?: React.ElementType }> = {
   open: { label: 'New', color: 'bg-destructive' },
-  in_progress: { label: 'In Progress', color: 'bg-amber-500' },
-  resolved: { label: 'Resolved', color: 'bg-emerald-500', icon: CheckCircle },
+  in_progress: { label: 'In Progress', color: 'bg-warning' },
+  resolved: { label: 'Resolved', color: 'bg-success', icon: CheckCircle },
   closed: { label: 'Closed', color: 'bg-muted-foreground' },
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
-  low: 'border-slate-300',
-  medium: 'border-amber-400',
-  high: 'border-orange-500',
+  low: 'border-muted-foreground/30',
+  medium: 'border-warning/60',
+  high: 'border-warning',
   critical: 'border-destructive',
 };
 
@@ -212,7 +212,7 @@ const IssueCard: React.FC<IssueCardProps> = ({ issue, onClick, compact }) => {
     >
       <div className="flex items-start gap-2">
         {StatusIcon ? (
-          <StatusIcon className={cn("h-4 w-4 mt-0.5 flex-shrink-0", "text-emerald-500")} />
+          <StatusIcon className={cn("h-4 w-4 mt-0.5 flex-shrink-0", "text-success")} />
         ) : (
           <TypeIcon className={cn("h-4 w-4 mt-0.5 flex-shrink-0", typeConfig.color)} />
         )}

@@ -431,24 +431,24 @@ export default function IfcToGeminusPlusPanel() {
       {stats && (
         <div className="rounded-lg border p-4 space-y-3">
           <Label className="text-sm font-medium flex items-center gap-2">
-            <FileCode2 className="h-4 w-4 text-blue-500" />
+            <FileCode2 className="h-4 w-4 text-primary" />
             {t('FMGUID-analys', 'FMGUID analysis')}
             <Badge variant="outline" className="ml-auto font-normal">
               {stats.total_elements} {t('element', 'elements')}
             </Badge>
           </Label>
           <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-md bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 p-2">
-              <p className="text-lg font-bold text-green-700 dark:text-green-400">{stats.had_fmguid}</p>
-              <p className="text-[10px] text-green-600 dark:text-green-500">{t('Befintliga i IFC', 'Existing in IFC')}</p>
+            <div className="rounded-md bg-success/10 border border-success/30 p-2">
+              <p className="text-lg font-bold text-success">{stats.had_fmguid}</p>
+              <p className="text-2xs text-success">{t('Befintliga i IFC', 'Existing in IFC')}</p>
             </div>
-            <div className="rounded-md bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 p-2">
-              <p className="text-lg font-bold text-blue-700 dark:text-blue-400">{stats.reused_from_map}</p>
-              <p className="text-[10px] text-blue-600 dark:text-blue-500">{t('Återanvända', 'Reused')}</p>
+            <div className="rounded-md bg-accent/10 border border-accent/30 p-2">
+              <p className="text-lg font-bold text-accent">{stats.reused_from_map}</p>
+              <p className="text-2xs text-accent">{t('Återanvända', 'Reused')}</p>
             </div>
-            <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 p-2">
-              <p className="text-lg font-bold text-amber-700 dark:text-amber-400">{stats.newly_generated}</p>
-              <p className="text-[10px] text-amber-600 dark:text-amber-500">{t('Nya', 'New')}</p>
+            <div className="rounded-md bg-warning/10 border border-warning/30 p-2">
+              <p className="text-lg font-bold text-warning">{stats.newly_generated}</p>
+              <p className="text-2xs text-warning">{t('Nya', 'New')}</p>
             </div>
           </div>
           {stats.reused_from_map > 0 && (
@@ -496,10 +496,10 @@ export default function IfcToGeminusPlusPanel() {
                         {isOpen
                           ? <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
                           : <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />}
-                        <Building2 className="h-3 w-3 shrink-0 text-blue-400" />
+                        <Building2 className="h-3 w-3 shrink-0 text-primary/70" />
                         <span className="truncate flex-1">{b.name}</span>
                         {slots.length > 0 && (
-                          <Badge variant="outline" className="text-[9px] shrink-0">{slots.length}</Badge>
+                          <Badge variant="outline" className="text-2xs shrink-0">{slots.length}</Badge>
                         )}
                       </button>
 
@@ -528,7 +528,7 @@ export default function IfcToGeminusPlusPanel() {
                             }}
                             className={`flex items-center gap-1.5 w-full px-2 py-1 rounded text-xs text-left text-muted-foreground hover:bg-muted/50 border border-dashed border-muted-foreground/20 mt-1 ${isBuildingSelected && !slots.includes(selectedModelName) ? 'bg-primary/10 border-primary/30 text-primary' : ''}`}
                           >
-                            <span className="text-[10px]">＋</span>
+                            <span className="text-2xs">＋</span>
                             <span>{t('Ny modell', 'New model')}</span>
                             {isBuildingSelected && !slots.includes(selectedModelName) && selectedModelName && (
                               <span className="ml-1 text-muted-foreground font-normal truncate">({selectedModelName})</span>
@@ -581,9 +581,9 @@ export default function IfcToGeminusPlusPanel() {
           )}
 
           <ScrollArea className="h-40 rounded-md border bg-muted/20 p-2">
-            <div className="space-y-1 font-mono text-[11px]">
+            <div className="space-y-1 font-mono text-2xs">
               {logs.map((l, i) => (
-                <div key={i} className={`flex gap-2 ${l.level === 'error' ? 'text-red-600' : l.level === 'ok' ? 'text-green-600 dark:text-green-400' : l.level === 'warn' ? 'text-amber-600' : 'text-muted-foreground'}`}>
+                <div key={i} className={`flex gap-2 ${l.level === 'error' ? 'text-destructive' : l.level === 'ok' ? 'text-success' : l.level === 'warn' ? 'text-warning' : 'text-muted-foreground'}`}>
                   <span className="shrink-0 text-muted-foreground/60">{l.time}</span>
                   <span>{l.msg}</span>
                 </div>

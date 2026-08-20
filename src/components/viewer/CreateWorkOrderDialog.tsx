@@ -25,9 +25,9 @@ const CATEGORIES = [
 ];
 
 const PRIORITY_OPTIONS = [
-  { value: "low", label: "Low", color: "bg-slate-400" },
-  { value: "medium", label: "Medium", color: "bg-amber-500" },
-  { value: "high", label: "High", color: "bg-orange-500" },
+  { value: "low", label: "Low", color: "bg-muted-foreground" },
+  { value: "medium", label: "Medium", color: "bg-warning" },
+  { value: "high", label: "High", color: "bg-warning" },
   { value: "critical", label: "Critical", color: "bg-destructive" },
 ];
 

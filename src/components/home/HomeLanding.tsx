@@ -188,7 +188,7 @@ export default function HomeLanding() {
           <section className="space-y-2 sm:space-y-3 w-full mb-4 sm:mb-6">
             <div className="text-center">
               <h2 className="text-base sm:text-lg font-semibold text-foreground">AI Assistants</h2>
-              <p className="text-[11px] sm:text-xs text-muted-foreground">Quick help for data, documents and integrations</p>
+              <p className="text-2xs sm:text-xs text-muted-foreground">Quick help for data, documents and integrations</p>
             </div>
             <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 justify-center">
               {ASSISTANTS.map((a) => {
@@ -211,10 +211,10 @@ export default function HomeLanding() {
                         <div className="flex items-center gap-1.5 sm:gap-2">
                           <span className="font-semibold text-sm sm:text-base leading-none text-foreground">{a.title}</span>
                           {!a.available && (
-                            <span className="text-[11px] sm:text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">Soon</span>
+                            <span className="text-2xs sm:text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded">Soon</span>
                           )}
                         </div>
-                        <div className="text-[11px] sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">{a.description}</div>
+                        <div className="text-2xs sm:text-xs text-muted-foreground mt-0.5 sm:mt-1 truncate">{a.description}</div>
                       </div>
                     </div>
                   </button>
@@ -231,7 +231,7 @@ export default function HomeLanding() {
                   <Building2 className="h-4 w-4 text-primary" />
                   Recent
                 </CardTitle>
-                <CardDescription className="text-[11px] sm:text-xs">Buildings you recently worked with</CardDescription>
+                <CardDescription className="text-2xs sm:text-xs">Buildings you recently worked with</CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
                 {enrichedRecent.length === 0 ? (
@@ -240,7 +240,7 @@ export default function HomeLanding() {
                       <Building2 className="h-6 w-6 sm:h-8 sm:w-8 opacity-50 shrink-0" />
                       <div>
                          <p className="text-xs sm:text-sm font-medium">No recent buildings</p>
-                        <p className="text-[11px] sm:text-xs">Open a building from Portfolio to see it here.</p>
+                        <p className="text-2xs sm:text-xs">Open a building from Portfolio to see it here.</p>
                       </div>
                     </div>
                   </div>
@@ -275,7 +275,7 @@ export default function HomeLanding() {
                   <Eye className="h-4 w-4 text-primary" />
                   Saved Views
                 </CardTitle>
-                <CardDescription className="text-[11px] sm:text-xs">Your most recently saved views</CardDescription>
+                <CardDescription className="text-2xs sm:text-xs">Your most recently saved views</CardDescription>
               </CardHeader>
               <CardContent className="pt-0">
                 {loadingViews ? (
@@ -290,7 +290,7 @@ export default function HomeLanding() {
                       <Eye className="h-6 w-6 sm:h-8 sm:w-8 opacity-50 shrink-0" />
                       <div>
                          <p className="text-xs sm:text-sm font-medium">No saved views</p>
-                        <p className="text-[11px] sm:text-xs">Save a view from the 3D viewer to see it here.</p>
+                        <p className="text-2xs sm:text-xs">Save a view from the 3D viewer to see it here.</p>
                       </div>
                     </div>
                   </div>
@@ -344,7 +344,7 @@ function BuildingCard({ building, onClick }: { building: RecentBuilding; onClick
           <h3 className="font-semibold text-white text-xs sm:text-sm truncate">{building.name}</h3>
         </div>
       </div>
-      <div className="p-2.5 sm:p-3 grid grid-cols-3 gap-2 text-[11px] sm:text-xs text-muted-foreground text-center">
+      <div className="p-2.5 sm:p-3 grid grid-cols-3 gap-2 text-2xs sm:text-xs text-muted-foreground text-center">
         <span>{building.numberOfLevels || 0} fl</span>
         <span>{building.numberOfSpaces || 0} rm</span>
         <span>{building.area ? building.area.toLocaleString('sv-SE') : '0'} m²</span>
@@ -379,7 +379,7 @@ const ViewCard = React.forwardRef<HTMLButtonElement, { view: SavedView; onClick:
           <h3 className="font-semibold text-white text-xs sm:text-sm truncate">{view.name}</h3>
         </div>
       </div>
-      <div className="p-2.5 sm:p-3 text-[11px] sm:text-xs text-muted-foreground truncate">
+      <div className="p-2.5 sm:p-3 text-2xs sm:text-xs text-muted-foreground truncate">
         {view.building_name || 'Unknown building'}
       </div>
     </button>

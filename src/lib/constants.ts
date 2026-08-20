@@ -80,7 +80,6 @@ export const DEFAULT_SIDEBAR_ORDER: SidebarItem[] = [
     { id: 'original_archive', hasDividerAfter: false },
     { id: 'radar', hasDividerAfter: false },
     { id: 'globe', hasDividerAfter: false },
-    { id: 'geminus_tools', hasDividerAfter: false },
 ];
 
 export const SIDEBAR_ORDER_STORAGE_KEY = 'sidebar-app-order';

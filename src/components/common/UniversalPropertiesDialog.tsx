@@ -1098,7 +1098,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       return (
         <div className="flex flex-col gap-1">
           {prop.isDifferent && (
-            <span className="text-xs text-amber-500">Will overwrite all</span>
+            <span className="text-xs text-warning">Will overwrite all</span>
           )}
           <Input
             value={formData[prop.key] ?? prop.value ?? ''}
@@ -1114,7 +1114,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
       return (
         <div className="flex flex-col gap-1">
           {prop.isDifferent && (
-            <span className="text-xs text-amber-500">Will overwrite all</span>
+            <span className="text-xs text-warning">Will overwrite all</span>
           )}
           <Input
             type="number"
@@ -1178,8 +1178,8 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
     <>
       {/* Multi-select indicator */}
       {isMultiMode && (
-        <div className="p-3 border-b bg-amber-500/10 shrink-0">
-          <p className="text-xs text-amber-600 flex items-center gap-1">
+        <div className="p-3 border-b bg-warning/10 shrink-0">
+          <p className="text-xs text-warning flex items-center gap-1">
             <AlertCircle className="h-3 w-3" />
             Editing {fmGuids.length} items. Changes will apply to all selected.
           </p>
@@ -1246,7 +1246,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                     <div className="flex items-center gap-2">
                       {isOpen ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5 rotate-180" />}
                       <span className="text-sm font-medium">{SECTION_LABELS[section]}</span>
-                      <Badge variant="secondary" className="text-[10px]">{sectionProps.length}</Badge>
+                      <Badge variant="secondary" className="text-2xs">{sectionProps.length}</Badge>
                     </div>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="pt-2 space-y-2">
@@ -1261,7 +1261,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                         <Label className="text-xs text-muted-foreground flex items-center gap-1 shrink-0">
                           {prop.label}
                           {prop.source === 'geminus-plus' && (
-                            <Badge variant="outline" className="text-[8px] px-1 py-0">A+</Badge>
+                            <Badge variant="outline" className="text-2xs px-1 py-0">A+</Badge>
                           )}
                         </Label>
                         <div className="flex-1 sm:text-right">
@@ -1285,7 +1285,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                 <div className="flex items-center gap-2">
                   {openSections.has('bim') ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5 rotate-180" />}
                   <span className="text-sm font-medium">BIM Properties</span>
-                  <Badge variant="secondary" className="text-[10px]">{Object.keys(bimFallbackData).length}</Badge>
+                  <Badge variant="secondary" className="text-2xs">{Object.keys(bimFallbackData).length}</Badge>
                 </div>
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-2 space-y-1">
@@ -1326,15 +1326,15 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                   </div>
                   <div className="flex flex-wrap gap-1.5 text-xs">
                     {s.usercode_syntax && (
-                      <Badge variant="secondary" className="text-[10px]">Typ: {s.usercode_syntax}</Badge>
+                      <Badge variant="secondary" className="text-2xs">Typ: {s.usercode_syntax}</Badge>
                     )}
                     {s.bsab_e && (
-                      <Badge variant="secondary" className="text-[10px]">BSAB-E: {s.bsab_e}</Badge>
+                      <Badge variant="secondary" className="text-2xs">BSAB-E: {s.bsab_e}</Badge>
                     )}
                     {s.aff && (
-                      <Badge variant="secondary" className="text-[10px]">AFF: {s.aff}</Badge>
+                      <Badge variant="secondary" className="text-2xs">AFF: {s.aff}</Badge>
                     )}
-                    <Badge variant={s.confidence >= 0.7 ? "default" : "secondary"} className="text-[10px]">
+                    <Badge variant={s.confidence >= 0.7 ? "default" : "secondary"} className="text-2xs">
                       {Math.round(s.confidence * 100)}%
                     </Badge>
                   </div>
@@ -1356,7 +1356,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                 <div className="flex items-center gap-2">
                   {openSections.has('dou') ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5 rotate-180" />}
                   <span className="text-sm font-medium">{t('Drift & Underhåll', 'Operations & Maintenance')}</span>
-                  <Badge variant="secondary" className="text-[10px]">{douData.length}</Badge>
+                  <Badge variant="secondary" className="text-2xs">{douData.length}</Badge>
                 </div>
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-2 space-y-2">
@@ -1364,7 +1364,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                   <div key={dou.id} className="border rounded-md p-2.5 space-y-1 bg-muted/20">
                     {dou.title && <p className="text-sm font-medium">{dou.title}</p>}
                     {dou.doc_type && (
-                      <Badge variant="outline" className="text-[10px]">{dou.doc_type}</Badge>
+                      <Badge variant="outline" className="text-2xs">{dou.doc_type}</Badge>
                     )}
                     {dou.content && (
                       <p className="text-xs text-muted-foreground whitespace-pre-wrap">{dou.content}</p>
@@ -1385,7 +1385,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                 <div className="flex items-center gap-2">
                   {openSections.has('geminus-base-docs') ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronUp className="h-3.5 w-3.5 rotate-180" />}
                   <span className="text-sm font-medium">{t('Dokument (Geminus Base)', 'Documents (Geminus Base)')}</span>
-                  <Badge variant="secondary" className="text-[10px]">{fmaDocuments.length}</Badge>
+                  <Badge variant="secondary" className="text-2xs">{fmaDocuments.length}</Badge>
                 </div>
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-2 space-y-1">
@@ -1398,7 +1398,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                       )}
                     </div>
                     {doc.document_id && (
-                      <Badge variant="outline" className="text-[10px] shrink-0">#{doc.document_id}</Badge>
+                      <Badge variant="outline" className="text-2xs shrink-0">#{doc.document_id}</Badge>
                     )}
                   </div>
                 ))}
@@ -1416,7 +1416,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
           {syncStatus && (
             <div className="flex items-center gap-2 flex-wrap">
               {syncStatus.allLocal && (
-                <Badge variant="outline" className="text-xs gap-1 border-amber-500/50 text-amber-600">
+                <Badge variant="outline" className="text-xs gap-1 border-warning/50 text-warning">
                   <CloudOff className="h-3 w-3" />
                   Local only
                 </Badge>
@@ -1433,7 +1433,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
                 </Badge>
               )}
               {syncStatus.hasBimCreated && (
-                <Badge variant="secondary" className="text-[10px]">BIM</Badge>
+                <Badge variant="secondary" className="text-2xs">BIM</Badge>
               )}
             </div>
           )}
@@ -1471,7 +1471,7 @@ const UniversalPropertiesDialog: React.FC<UniversalPropertiesDialogProps> = ({
               )}
               {/* Show explanation when delete is blocked due to BIM */}
               {syncStatus?.isInstance && syncStatus.hasBimCreated && (
-                <Badge variant="outline" className="text-[10px] gap-1 text-muted-foreground">
+                <Badge variant="outline" className="text-2xs gap-1 text-muted-foreground">
                   <AlertCircle className="h-3 w-3" />
                   {t('Finns i BIM-modell — kan inte raderas', 'In BIM model — cannot be deleted')}
                 </Badge>

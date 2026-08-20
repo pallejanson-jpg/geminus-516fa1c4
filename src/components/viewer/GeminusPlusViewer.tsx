@@ -1707,7 +1707,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
       assets.forEach(asset => {
         const symbol = asset.symbol_id ? symbolMap.get(asset.symbol_id) : null;
         const iconUrl = symbol?.icon_url || '';
-        const color = symbol?.color || '#3B82F6';
+        const color = symbol?.color || 'hsl(var(--accent))';
 
         annotationsData.push({
           id: `local-${asset.fm_guid}`,
@@ -1888,7 +1888,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
       }
 
       const sensorSymbol = symbolResult.data;
-      const symbolColor = sensorSymbol?.color || '#14B8A6';
+      const symbolColor = sensorSymbol?.color || 'hsl(var(--accent))';
       const symbolIcon = sensorSymbol?.icon_url || '';
       const symbolMarkerHtml = sensorSymbol?.marker_html || '';
 
@@ -2178,10 +2178,10 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
 
       // Issue type color map
       const issueColors: Record<string, string> = {
-        fault: '#EF4444',       // red
-        improvement: '#F59E0B', // amber
-        observation: '#6366F1', // indigo
-        safety: '#DC2626',     // dark red
+        fault: 'hsl(var(--destructive))',       // red
+        improvement: 'hsl(var(--warning))', // amber
+        observation: 'hsl(var(--accent))', // indigo
+        safety: 'hsl(var(--destructive))',     // dark red
       };
 
       let createdCount = 0;
@@ -2231,7 +2231,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
 
         if (!worldPos) return;
 
-        const color = issueColors[issue.issue_type] || '#EF4444';
+        const color = issueColors[issue.issue_type] || 'hsl(var(--destructive))';
 
         // Create marker DOM element
         const marker = document.createElement('div');
@@ -2245,7 +2245,7 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
           background: ${color};
           border-radius: 50%;
           border: 2px solid white;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 3px ${color}40;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.5), 0 0 0 3px color-mix(in srgb, ${color} 25%, transparent);
           display: ${issueAnnotationsVisibleRef.current ? 'flex' : 'none'};
           align-items: center;
           justify-content: center;

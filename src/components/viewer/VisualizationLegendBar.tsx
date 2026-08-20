@@ -139,10 +139,10 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
         {/* Header */}
         <div className="flex items-center gap-1.5 mb-2 px-0.5">
           {IconComp && <IconComp size={14} className="text-white/80" />}
-          <span className="text-[11px] font-semibold text-white/90 leading-none">
+          <span className="text-2xs font-semibold text-white/90 leading-none">
             {config.label}
           </span>
-          <span className="text-[10px] text-white/50 leading-none">({config.unit})</span>
+          <span className="text-2xs text-white/50 leading-none">({config.unit})</span>
         </div>
 
         <div className="flex gap-1.5">
@@ -180,7 +180,7 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
           >
             {/* Actual max */}
             {actualMax !== null && (
-              <div className="text-[9px] text-white/50 font-medium px-1 -mt-1 mb-0.5">
+              <div className="text-2xs text-white/50 font-medium px-1 -mt-1 mb-0.5">
                 ▲ {actualMax.toFixed(1)}
               </div>
             )}
@@ -197,7 +197,7 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
                   key={stop.value}
                   onClick={() => handleStopClick(idx)}
                   className={cn(
-                    'flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium leading-none',
+                    'flex items-center gap-1 px-1.5 py-0.5 rounded text-2xs font-medium leading-none',
                     'transition-all duration-150 cursor-pointer select-none',
                     'hover:bg-white/15',
                     isActive
@@ -217,17 +217,17 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
                     }}
                   />
                   {matchCount > 0 && (
-                    <span className="text-[9px] text-white/50 ml-0.5">({matchCount})</span>
+                    <span className="text-2xs text-white/50 ml-0.5">({matchCount})</span>
                   )}
                   {idx === 0 && (
-                    <span className="text-[9px] text-white/50 ml-0.5">{config.unit}</span>
+                    <span className="text-2xs text-white/50 ml-0.5">{config.unit}</span>
                   )}
                 </button>
               );
             })}
             {/* Actual min */}
             {actualMin !== null && (
-              <div className="text-[9px] text-white/50 font-medium px-1 mt-0.5 -mb-1">
+              <div className="text-2xs text-white/50 font-medium px-1 mt-0.5 -mb-1">
                 ▼ {actualMin.toFixed(1)}
               </div>
             )}
@@ -236,7 +236,7 @@ const VisualizationLegendBar: React.FC<VisualizationLegendBarProps> = ({
 
         {/* Mean summary */}
         {actualMean !== null && (
-          <div className="text-[9px] text-white/60 text-center mt-1.5 border-t border-white/10 pt-1">
+          <div className="text-2xs text-white/60 text-center mt-1.5 border-t border-white/10 pt-1">
             {t('Medel', 'Mean')}: {actualMean.toFixed(1)} {config.unit} · {roomValues.length} {t('rum', 'rooms')}
           </div>
         )}

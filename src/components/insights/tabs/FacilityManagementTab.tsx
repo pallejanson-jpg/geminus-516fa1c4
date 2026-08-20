@@ -480,7 +480,7 @@ export default function FacilityManagementTab() {
 
             {/* Work Order List Dialog */}
             <Dialog open={showWorkOrderList} onOpenChange={setShowWorkOrderList}>
-                <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
+                <DialogContent size="xl" className="max-h-[85vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <Wrench className="h-5 w-5 text-orange-500" />

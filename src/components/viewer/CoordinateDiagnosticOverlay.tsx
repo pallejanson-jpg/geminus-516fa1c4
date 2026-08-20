@@ -66,7 +66,7 @@ const CoordinateDiagnosticOverlay: React.FC<CoordinateDiagnosticOverlayProps> = 
   const ivionInBim = ivionPos ? bimToIvion(ivionPos, { ...transform, offsetX: 0, offsetY: 0, offsetZ: 0 }) : null;
 
   return (
-    <div className="absolute bottom-16 left-2 z-30 bg-background/90 backdrop-blur-md border border-border rounded-lg shadow-lg p-3 text-[10px] font-mono w-64 space-y-2">
+    <div className="absolute bottom-16 left-2 z-30 bg-background/90 backdrop-blur-md border border-border rounded-lg shadow-lg p-3 text-2xs font-mono w-64 space-y-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-foreground font-sans">
           <Bug className="h-3.5 w-3.5 text-primary" />
@@ -78,7 +78,7 @@ const CoordinateDiagnosticOverlay: React.FC<CoordinateDiagnosticOverlayProps> = 
       </div>
 
       <div className="space-y-1">
-        <div className="text-foreground/70 font-sans text-[11px]">Ivion (360°)</div>
+        <div className="text-foreground/70 font-sans text-2xs">Ivion (360°)</div>
         {ivionPos ? (
           <div className="text-foreground">
             x:{fmt(ivionPos.x)} y:{fmt(ivionPos.y)} z:{fmt(ivionPos.z)}
@@ -87,7 +87,7 @@ const CoordinateDiagnosticOverlay: React.FC<CoordinateDiagnosticOverlayProps> = 
       </div>
 
       <div className="space-y-1">
-        <div className="text-foreground/70 font-sans text-[11px]">BIM (3D kamera)</div>
+        <div className="text-foreground/70 font-sans text-2xs">BIM (3D kamera)</div>
         {bimPos ? (
           <div className="text-foreground">
             x:{fmt(bimPos.x)} y:{fmt(bimPos.y)} z:{fmt(bimPos.z)}
@@ -96,7 +96,7 @@ const CoordinateDiagnosticOverlay: React.FC<CoordinateDiagnosticOverlayProps> = 
       </div>
 
       <div className="border-t border-border pt-1.5 space-y-0.5">
-        <div className="text-foreground/70 font-sans text-[11px]">Transform</div>
+        <div className="text-foreground/70 font-sans text-2xs">Transform</div>
         <div className="text-foreground">
           offset: ({fmt(transform.offsetX)}, {fmt(transform.offsetY)}, {fmt(transform.offsetZ)})
         </div>

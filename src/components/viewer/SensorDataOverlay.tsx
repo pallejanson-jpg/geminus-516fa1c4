@@ -33,17 +33,17 @@ function getSensorIcon(type: string) {
 
 function getStatusColor(status: string) {
   switch (status) {
-    case 'critical': return 'text-red-500 bg-red-500/10 border-red-500/30';
-    case 'warning': return 'text-amber-500 bg-amber-500/10 border-amber-500/30';
-    default: return 'text-emerald-500 bg-emerald-500/10 border-emerald-500/30';
+    case 'critical': return 'text-destructive bg-destructive/10 border-destructive/30';
+    case 'warning': return 'text-warning bg-warning/10 border-warning/30';
+    default: return 'text-success bg-success/10 border-success/30';
   }
 }
 
 function getStatusDot(status: string) {
   switch (status) {
-    case 'critical': return 'bg-red-500';
-    case 'warning': return 'bg-amber-500';
-    default: return 'bg-emerald-500';
+    case 'critical': return 'bg-destructive';
+    case 'warning': return 'bg-warning';
+    default: return 'bg-success';
   }
 }
 
@@ -118,10 +118,10 @@ const SensorDataOverlay: React.FC<SensorDataOverlayProps> = ({ className }) => {
           </div>
           <div>
             <h3 className="text-sm font-semibold text-foreground leading-tight">Sensor Data</h3>
-            <p className="text-[10px] text-muted-foreground">
+            <p className="text-2xs text-muted-foreground">
               {readings.length} reading{readings.length !== 1 ? 's' : ''}
               {warningCount > 0 && (
-                <span className="text-amber-500 ml-1">• {warningCount} alert{warningCount !== 1 ? 's' : ''}</span>
+                <span className="text-warning ml-1">• {warningCount} alert{warningCount !== 1 ? 's' : ''}</span>
               )}
             </p>
           </div>
@@ -175,8 +175,8 @@ const SensorDataOverlay: React.FC<SensorDataOverlayProps> = ({ className }) => {
                         </div>
                         <span className={cn(
                           "font-medium tabular-nums",
-                          reading.status === 'critical' ? 'text-red-500' :
-                          reading.status === 'warning' ? 'text-amber-500' : 'text-foreground'
+                          reading.status === 'critical' ? 'text-destructive' :
+                          reading.status === 'warning' ? 'text-warning' : 'text-foreground'
                         )}>
                           {formatValue(reading.value, reading.type, reading.unit)}
                         </span>
@@ -193,16 +193,16 @@ const SensorDataOverlay: React.FC<SensorDataOverlayProps> = ({ className }) => {
       {/* Legend footer */}
       <div className="px-3 py-1.5 border-t border-border flex items-center gap-3 shrink-0">
         <div className="flex items-center gap-1">
-          <div className="h-2 w-2 rounded-full bg-emerald-500" />
-          <span className="text-[10px] text-muted-foreground">Normal</span>
+          <div className="h-2 w-2 rounded-full bg-success" />
+          <span className="text-2xs text-muted-foreground">Normal</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="h-2 w-2 rounded-full bg-amber-500" />
-          <span className="text-[10px] text-muted-foreground">Warning</span>
+          <div className="h-2 w-2 rounded-full bg-warning" />
+          <span className="text-2xs text-muted-foreground">Warning</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="h-2 w-2 rounded-full bg-red-500" />
-          <span className="text-[10px] text-muted-foreground">Critical</span>
+          <div className="h-2 w-2 rounded-full bg-destructive" />
+          <span className="text-2xs text-muted-foreground">Critical</span>
         </div>
       </div>
     </div>

@@ -71,7 +71,7 @@ function FolderNode({
         {isOpen ? <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />}
         <FolderOpen className="h-3 w-3 shrink-0 text-amber-500" />
         <span className="font-medium truncate flex-1">{folder.name}</span>
-        {bimItems.length > 0 && <Badge variant="outline" className="text-[9px] shrink-0">{bimItems.length}</Badge>}
+        {bimItems.length > 0 && <Badge variant="outline" className="text-2xs shrink-0">{bimItems.length}</Badge>}
       </button>
 
       {isOpen && (
@@ -91,13 +91,13 @@ function FolderNode({
                   onChange={() => onToggleFile({ versionUrn: item.versionUrn, itemId: item.id, name: item.name, folderId: folder.id, folderName: folder.name })}
                   className="h-3.5 w-3.5 shrink-0"
                 />
-                <FileCode2 className="h-3 w-3 shrink-0 text-blue-400" />
+                <FileCode2 className="h-3 w-3 shrink-0 text-accent" />
                 <span className="truncate flex-1">{item.name}</span>
                 {selected && (
                   <button
                     title={t('Markera som A-modell (master)', 'Mark as A-model (master)')}
                     onClick={() => onSetMaster(item.versionUrn)}
-                    className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold border ${isMaster ? 'bg-primary text-primary-foreground border-primary' : 'border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary'}`}
+                    className={`shrink-0 px-1.5 py-0.5 rounded text-2xs font-bold border ${isMaster ? 'bg-primary text-primary-foreground border-primary' : 'border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary'}`}
                   >
                     A
                   </button>
@@ -610,10 +610,10 @@ export default function FormaToGeminusPlusPanel() {
                   return (
                     <div key={item.id} className={`flex items-center gap-2 px-2 py-1 rounded text-xs ${sel ? 'bg-primary/10 border border-primary/20' : 'hover:bg-muted/40'}`}>
                       <input type="checkbox" checked={sel} onChange={() => toggleFile({ versionUrn: item.versionUrn, itemId: item.id, name: item.name })} className="h-3.5 w-3.5 shrink-0" />
-                      <FileCode2 className="h-3 w-3 shrink-0 text-blue-400" />
+                      <FileCode2 className="h-3 w-3 shrink-0 text-accent" />
                       <span className="truncate flex-1">{item.name}</span>
                       {sel && (
-                        <button onClick={() => setMasterUrn(item.versionUrn)} className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold border ${isMaster ? 'bg-primary text-primary-foreground border-primary' : 'border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary'}`}>A</button>
+                        <button onClick={() => setMasterUrn(item.versionUrn)} className={`shrink-0 px-1.5 py-0.5 rounded text-2xs font-bold border ${isMaster ? 'bg-primary text-primary-foreground border-primary' : 'border-muted-foreground/40 text-muted-foreground hover:border-primary hover:text-primary'}`}>A</button>
                       )}
                     </div>
                   );
@@ -644,7 +644,7 @@ export default function FormaToGeminusPlusPanel() {
               <p className="font-medium text-foreground">{t('Valda modeller:', 'Selected models:')}</p>
               {selectedFiles.map(f => (
                 <div key={f.versionUrn} className="flex items-center gap-1.5">
-                  {masterUrn === f.versionUrn && <span className="text-[10px] font-bold bg-primary text-primary-foreground px-1 rounded">A</span>}
+                  {masterUrn === f.versionUrn && <span className="text-2xs font-bold bg-primary text-primary-foreground px-1 rounded">A</span>}
                   <span>{f.name}</span>
                 </div>
               ))}
@@ -656,7 +656,7 @@ export default function FormaToGeminusPlusPanel() {
       {/* Target building + model in Geminus Plus */}
       <div className="rounded-lg border p-4 space-y-3">
         <Label className="text-sm font-medium flex items-center gap-2">
-          <Building2 className="h-4 w-4 text-blue-500" />
+          <Building2 className="h-4 w-4 text-accent" />
           {t('Målbyggnad och modell i Geminus Plus', 'Target building and model in Geminus Plus')}
           <button onClick={fetchGpHierarchy} disabled={isLoadingGp} className="ml-auto text-muted-foreground hover:text-foreground transition-colors">
             <RefreshCw className={`h-3.5 w-3.5 ${isLoadingGp ? 'animate-spin' : ''}`} />
@@ -698,7 +698,7 @@ export default function FormaToGeminusPlusPanel() {
                     >
                       {isComplexOpen ? <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />}
                       <span className="truncate flex-1">{complex.name}</span>
-                      <Badge variant="outline" className="text-[9px] shrink-0">{complex.buildings.length}</Badge>
+                      <Badge variant="outline" className="text-2xs shrink-0">{complex.buildings.length}</Badge>
                     </button>
 
                     {isComplexOpen && complex.buildings.map((building: any) => {
@@ -714,9 +714,9 @@ export default function FormaToGeminusPlusPanel() {
                             className="flex items-center gap-1.5 w-full px-2 py-1.5 rounded text-xs text-left hover:bg-muted/50"
                           >
                             {isBuildingOpen ? <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" /> : <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />}
-                            <Building2 className="h-3 w-3 shrink-0 text-blue-400" />
+                            <Building2 className="h-3 w-3 shrink-0 text-accent" />
                             <span className="truncate flex-1">{building.name}</span>
-                            {building.models.length > 0 && <Badge variant="outline" className="text-[9px] shrink-0">{building.models.length}</Badge>}
+                            {building.models.length > 0 && <Badge variant="outline" className="text-2xs shrink-0">{building.models.length}</Badge>}
                           </button>
 
                           {isBuildingOpen && (
@@ -728,7 +728,7 @@ export default function FormaToGeminusPlusPanel() {
                                     className={`flex items-center gap-1.5 w-full px-2 py-1 rounded text-xs text-left ${isSelected ? 'bg-primary/15 text-primary font-medium' : 'hover:bg-muted/50'}`}>
                                     <FileCode2 className="h-3 w-3 shrink-0 text-muted-foreground" />
                                     <span className="truncate flex-1">{model.name}</span>
-                                    <span className="text-[9px] text-muted-foreground shrink-0">{model.modelType}</span>
+                                    <span className="text-2xs text-muted-foreground shrink-0">{model.modelType}</span>
                                     {isSelected && <CheckCircle2 className="h-3 w-3 ml-1 shrink-0" />}
                                   </button>
                                 );
@@ -818,16 +818,16 @@ export default function FormaToGeminusPlusPanel() {
             {isSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
             {isSyncing ? 'Running…' : 'Run selected'}
           </Button>
-          {syncDone && <CheckCircle2 className="h-5 w-5 text-green-600" />}
+          {syncDone && <CheckCircle2 className="h-5 w-5 text-success" />}
         </div>
 
         {syncLogs.length > 0 && (
           <ScrollArea className="h-40 rounded-md border bg-muted/30 p-2">
-            <div className="space-y-0.5 font-mono text-[11px]">
+            <div className="space-y-0.5 font-mono text-2xs">
               {syncLogs.map((l, i) => (
                 <div key={i} className={
-                  l.level === 'ok' ? 'text-green-700 dark:text-green-400' :
-                  l.level === 'warn' ? 'text-yellow-700 dark:text-yellow-400' :
+                  l.level === 'ok' ? 'text-success' :
+                  l.level === 'warn' ? 'text-warning' :
                   l.level === 'error' ? 'text-destructive' :
                   'text-muted-foreground'
                 }>
@@ -865,14 +865,14 @@ export default function FormaToGeminusPlusPanel() {
 
               return (
                 <div key={job.version_urn} className={`flex items-start gap-2.5 rounded-md border px-3 py-2 text-xs ${
-                  isActive ? 'border-blue-400/40 bg-blue-500/5' :
-                  isDone   ? 'border-green-400/40 bg-green-500/5' :
-                  isFailed ? 'border-red-400/40 bg-red-500/5' :
+                  isActive ? 'border-accent/40 bg-accent/5' :
+                  isDone   ? 'border-success/40 bg-success/5' :
+                  isFailed ? 'border-destructive/40 bg-destructive/5' :
                   'border-border bg-muted/20'
                 }`}>
                   <div className="mt-0.5 shrink-0">
-                    {isActive && <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-500" />}
-                    {isDone   && <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />}
+                    {isActive && <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />}
+                    {isDone   && <CheckCircle2 className="h-3.5 w-3.5 text-success" />}
                     {isFailed && <AlertCircle className="h-3.5 w-3.5 text-destructive" />}
                   </div>
                   <div className="flex-1 min-w-0 space-y-0.5">
@@ -885,26 +885,26 @@ export default function FormaToGeminusPlusPanel() {
                       {!isActive && !isDone && !isFailed && status}
                     </p>
                     {jobCheckResults[job.version_urn] && (
-                      <p className="text-[10px] text-muted-foreground italic truncate">{jobCheckResults[job.version_urn]}</p>
+                      <p className="text-2xs text-muted-foreground italic truncate">{jobCheckResults[job.version_urn]}</p>
                     )}
                   </div>
                   {(isActive || isDone) && (
                     <button
                       onClick={() => checkJob(job.version_urn, job.building_fm_guid ?? null)}
-                      className="shrink-0 text-[10px] text-blue-600 hover:underline"
+                      className="shrink-0 text-2xs text-accent hover:underline"
                     >
                       {jobCheckResults[job.version_urn] === '…' ? '…' : t('Kör check', 'Run check')}
                     </button>
                   )}
                   <button
                     onClick={() => setJobToDelete(job)}
-                    className="shrink-0 text-[10px] text-muted-foreground hover:text-destructive"
+                    className="shrink-0 text-2xs text-muted-foreground hover:text-destructive"
                     title={t('Radera jobb', 'Delete job')}
                   >✕</button>
-                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${
-                    isActive ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400' :
-                    isDone   ? 'bg-green-500/15 text-green-700 dark:text-green-400' :
-                    isFailed ? 'bg-red-500/15 text-destructive' :
+                  <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-2xs font-medium ${
+                    isActive ? 'bg-accent/15 text-accent' :
+                    isDone   ? 'bg-success/15 text-success' :
+                    isFailed ? 'bg-destructive/15 text-destructive' :
                     'bg-muted text-muted-foreground'
                   }`}>{status}</span>
                 </div>

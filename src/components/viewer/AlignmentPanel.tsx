@@ -183,7 +183,7 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
       {/* Help text */}
       <div className="flex gap-2 bg-muted/50 rounded-md p-2.5">
         <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
-        <p className="text-[11px] text-muted-foreground leading-relaxed">
+        <p className="text-2xs text-muted-foreground leading-relaxed">
           Use point calibration to match 360° and 3D. Click the same point in both views.
         </p>
       </div>
@@ -357,7 +357,7 @@ function FineSliderField({
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between">
-        <Label className="text-[11px] text-muted-foreground">{label}</Label>
+        <Label className="text-2xs text-muted-foreground">{label}</Label>
         <div className="flex items-center gap-0.5">
           <Button
             variant="ghost" size="icon"
@@ -367,7 +367,7 @@ function FineSliderField({
           >
             <Minus className="h-2.5 w-2.5" />
           </Button>
-          <span className="text-[11px] text-foreground w-16 text-right font-mono">
+          <span className="text-2xs text-foreground w-16 text-right font-mono">
             {value.toFixed(unit === '°' ? 1 : 2)}{unit}
           </span>
           <Button

@@ -101,7 +101,7 @@ const SortableColumnHeader: React.FC<{
   };
 
   return (
-    <TableHead ref={setNodeRef} style={style} className="select-none whitespace-nowrap text-[10px] font-semibold uppercase tracking-wider h-7 px-1.5">
+    <TableHead ref={setNodeRef} style={style} className="select-none whitespace-nowrap text-2xs font-semibold uppercase tracking-wider h-7 px-1.5">
       <div className="flex items-center gap-0.5">
         <span {...attributes} {...listeners} className="cursor-grab hover:text-primary">
           <GripVertical size={10} className="text-muted-foreground" />
@@ -419,7 +419,7 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
             <Package className="h-3.5 w-3.5 text-primary" />
             <span className="text-xs font-semibold text-foreground">
               ASSET PANEL
-              <Badge variant="outline" className="ml-1.5 text-[9px] px-1 py-0 h-4 font-normal">
+              <Badge variant="outline" className="ml-1.5 text-2xs px-1 py-0 h-4 font-normal">
                 {filteredAssets.length}
                 {filteredAssets.length !== allAssets.length && ` / ${allAssets.length}`}
               </Badge>
@@ -432,20 +432,20 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
             {/* Column selector */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="h-6 gap-1 text-[10px] text-muted-foreground px-1.5">
+                <Button variant="ghost" size="sm" className="h-6 gap-1 text-2xs text-muted-foreground px-1.5">
                   <Settings2 className="h-3 w-3" />
                   Columns
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56 max-h-80 overflow-y-auto">
-                <DropdownMenuLabel className="text-[10px]">Standard columns</DropdownMenuLabel>
+                <DropdownMenuLabel className="text-2xs">Standard columns</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 {CORE_COLUMNS.map(col => (
                   <DropdownMenuCheckboxItem
                     key={col.key}
                     checked={visibleColumns.includes(col.key)}
                     onCheckedChange={() => toggleColumn(col.key)}
-                    className="text-[11px]"
+                    className="text-2xs"
                   >
                     {col.label}
                   </DropdownMenuCheckboxItem>
@@ -453,14 +453,14 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
                 {propertyColumns.length > 0 && (
                   <>
                     <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-[10px]">Properties</DropdownMenuLabel>
+                    <DropdownMenuLabel className="text-2xs">Properties</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     {propertyColumns.map(col => (
                       <DropdownMenuCheckboxItem
                         key={col.key}
                         checked={visibleColumns.includes(col.key)}
                         onCheckedChange={() => toggleColumn(col.key)}
-                        className="text-[11px]"
+                        className="text-2xs"
                       >
                         {col.label}
                       </DropdownMenuCheckboxItem>
@@ -477,7 +477,7 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search assets…"
-                className="h-6 pl-6 w-40 text-[11px]"
+                className="h-6 pl-6 w-40 text-2xs"
               />
             </div>
 
@@ -516,7 +516,7 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
                   <TableRow
                     key={asset.fmGuid}
                     className={cn(
-                      'cursor-pointer text-[11px] leading-tight',
+                      'cursor-pointer text-2xs leading-tight',
                       selectedFmGuid === asset.fmGuid
                         ? 'bg-primary/20 hover:bg-primary/25 text-foreground ring-1 ring-inset ring-primary/30'
                         : 'hover:bg-muted/50',
@@ -533,14 +533,14 @@ export default function InventoryPanel({ buildingFmGuid, buildingName, open, onC
                 ))}
                 {filteredAssets.length > 500 && (
                   <TableRow>
-                    <TableCell colSpan={orderedColumns.length} className="text-center text-[10px] text-muted-foreground py-1.5">
+                    <TableCell colSpan={orderedColumns.length} className="text-center text-2xs text-muted-foreground py-1.5">
                       Showing 500 of {filteredAssets.length} assets. Use search to filter.
                     </TableCell>
                   </TableRow>
                 )}
                 {filteredAssets.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={orderedColumns.length} className="text-center text-[10px] text-muted-foreground py-6">
+                    <TableCell colSpan={orderedColumns.length} className="text-center text-2xs text-muted-foreground py-6">
                       {search ? 'No matching assets.' : 'No assets in this building.'}
                     </TableCell>
                   </TableRow>
@@ -613,7 +613,7 @@ function renderCell(asset: AssetRow, key: string): React.ReactNode {
     case 'assetType':
       return <span className="text-muted-foreground">{asset.assetType}</span>;
     case 'category':
-      return <Badge variant="outline" className="text-[9px] px-1 py-0 font-normal">{asset.category}</Badge>;
+      return <Badge variant="outline" className="text-2xs px-1 py-0 font-normal">{asset.category}</Badge>;
     case 'levelName':
       return <span className="text-muted-foreground">{asset.levelName}</span>;
     case 'roomName':
@@ -621,7 +621,7 @@ function renderCell(asset: AssetRow, key: string): React.ReactNode {
     case 'systemNames':
       return <span className="text-muted-foreground">{asset.systemNames.length > 0 ? asset.systemNames.join(', ') : '–'}</span>;
     case 'fmGuid':
-      return <span className="text-muted-foreground font-mono text-[9px]">{asset.fmGuid}</span>;
+      return <span className="text-muted-foreground font-mono text-2xs">{asset.fmGuid}</span>;
     default:
       return null;
   }

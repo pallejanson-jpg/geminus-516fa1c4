@@ -155,9 +155,9 @@ const AccFolderNode: React.FC<{
                     ) : (
                         <span className="w-3 shrink-0" />
                     )}
-                    <FolderOpen className="h-3 w-3 text-amber-500 shrink-0" />
+                    <FolderOpen className="h-3 w-3 text-warning shrink-0" />
                     <span className="font-medium truncate">{folder.name}</span>
-                    <Badge variant="outline" className="ml-auto text-[9px] shrink-0">
+                    <Badge variant="outline" className="ml-auto text-2xs shrink-0">
                         {totalCount} {totalCount === 1 ? t('fil', 'file') : t('filer', 'files')}
                     </Badge>
                 </button>
@@ -171,7 +171,7 @@ const AccFolderNode: React.FC<{
                         disabled={!!syncingBimFolderId}
                         size="sm"
                         variant="ghost"
-                        className="gap-1 h-7 text-[10px] sm:text-xs shrink-0 mx-1 self-start sm:self-auto"
+                        className="gap-1 h-7 text-2xs sm:text-xs shrink-0 mx-1 self-start sm:self-auto"
                     >
                         {isSyncingThisFolder ? (
                             <Loader2 className="h-3 w-3 animate-spin" />
@@ -196,7 +196,7 @@ const AccFolderNode: React.FC<{
                                 const isBim = item.versionUrn || item.isBim;
                                 const isSelected = selectedBimFiles.has(item.id);
                                 return (
-                                    <div key={item.id} className="flex flex-wrap items-center gap-1 sm:gap-2 text-[10px] sm:text-xs py-1 px-1 sm:px-1.5 rounded hover:bg-muted/50">
+                                    <div key={item.id} className="flex flex-wrap items-center gap-1 sm:gap-2 text-2xs sm:text-xs py-1 px-1 sm:px-1.5 rounded hover:bg-muted/50">
                                         {isBim && (
                                             <input
                                                 type="checkbox"
@@ -209,7 +209,7 @@ const AccFolderNode: React.FC<{
                                         <File className="h-3 w-3 text-muted-foreground shrink-0" />
                                         <span className="truncate max-w-[120px] sm:max-w-none">{item.name}</span>
                                         {isBim && (
-                                            <Badge variant="secondary" className="text-[8px] sm:text-[9px] shrink-0 px-1 py-0">BIM</Badge>
+                                            <Badge variant="secondary" className="text-2xs shrink-0 px-1 py-0">BIM</Badge>
                                         )}
                                         {isBim && item.versionUrn && (
                                             <label className="flex items-center gap-0.5 cursor-pointer shrink-0" title="A-modell (master) — skapar våningsplan och rum">
@@ -221,17 +221,17 @@ const AccFolderNode: React.FC<{
                                                     className="h-2.5 w-2.5 accent-primary"
                                                     onClick={(e) => e.stopPropagation()}
                                                 />
-                                                <span className="text-[8px] sm:text-[9px] text-muted-foreground">A</span>
+                                                <span className="text-2xs text-muted-foreground">A</span>
                                             </label>
                                         )}
                                         {isBim && item.versionUrn && (() => {
                                             const ts = translationStatuses[item.versionUrn];
                                             if (ts?.status === 'complete' || ts?.status === 'success') {
-                                                return <Badge className="text-[8px] sm:text-[9px] shrink-0 px-1 py-0 bg-green-600">3D ✓</Badge>;
+                                                return <Badge className="text-2xs shrink-0 px-1 py-0 bg-success text-success-foreground">3D ✓</Badge>;
                                             }
                                             if (ts && ts.status !== 'idle' && ts.status !== 'failed') {
                                                 return (
-                                                    <Badge variant="outline" className="text-[8px] sm:text-[9px] shrink-0 px-1 py-0 gap-0.5">
+                                                    <Badge variant="outline" className="text-2xs shrink-0 px-1 py-0 gap-0.5">
                                                         <Loader2 className="h-2.5 w-2.5 animate-spin" />
                                                         {ts.status === 'server-converting' ? 'Server...' : (ts.progress || ts.status)}
                                                     </Badge>
@@ -242,7 +242,7 @@ const AccFolderNode: React.FC<{
                                                     onClick={(e) => { e.stopPropagation(); onTranslate3D(item, folder); }}
                                                     size="sm"
                                                     variant="ghost"
-                                                    className="h-5 px-1 text-[8px] sm:text-[9px] gap-0.5"
+                                                    className="h-5 px-1 text-2xs gap-0.5"
                                                     disabled={ts?.status === 'pending' || ts?.status === 'inprogress'}
                                                 >
                                                     <Cuboid className="h-2.5 w-2.5" />
@@ -250,8 +250,8 @@ const AccFolderNode: React.FC<{
                                                 </Button>
                                             );
                                         })()}
-                                        <span className="ml-auto text-muted-foreground shrink-0 uppercase text-[9px] sm:text-[10px]">{item.type}</span>
-                                        {item.size && <span className="text-muted-foreground shrink-0 text-[9px] sm:text-[10px]">{formatFileSize(item.size)}</span>}
+                                        <span className="ml-auto text-muted-foreground shrink-0 uppercase text-2xs">{item.type}</span>
+                                        {item.size && <span className="text-muted-foreground shrink-0 text-2xs">{formatFileSize(item.size)}</span>}
                                     </div>
                                 );
                             })}
@@ -366,19 +366,19 @@ const GeminusBaseDocSyncPanel: React.FC = () => {
                 </p>
             )}
             <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" className="gap-1 h-7 text-[10px]" disabled={isSyncing} onClick={() => handleSync('sync-drawings')}>
+                <Button size="sm" variant="outline" className="gap-1 h-7 text-2xs" disabled={isSyncing} onClick={() => handleSync('sync-drawings')}>
                     {isSyncing && syncAction === 'sync-drawings' ? <Loader2 className="h-3 w-3 animate-spin" /> : <FileText className="h-3 w-3" />}
                     Drawings
                 </Button>
-                <Button size="sm" variant="outline" className="gap-1 h-7 text-[10px]" disabled={isSyncing} onClick={() => handleSync('sync-documents')}>
+                <Button size="sm" variant="outline" className="gap-1 h-7 text-2xs" disabled={isSyncing} onClick={() => handleSync('sync-documents')}>
                     {isSyncing && syncAction === 'sync-documents' ? <Loader2 className="h-3 w-3 animate-spin" /> : <File className="h-3 w-3" />}
                     Documents
                 </Button>
-                <Button size="sm" variant="outline" className="gap-1 h-7 text-[10px]" disabled={isSyncing} onClick={() => handleSync('sync-dou')}>
+                <Button size="sm" variant="outline" className="gap-1 h-7 text-2xs" disabled={isSyncing} onClick={() => handleSync('sync-dou')}>
                     {isSyncing && syncAction === 'sync-dou' ? <Loader2 className="h-3 w-3 animate-spin" /> : <Wrench className="h-3 w-3" />}
                     DoU
                 </Button>
-                <Button size="sm" className="gap-1 h-7 text-[10px]" disabled={isSyncing} onClick={() => handleSync('sync-all')}>
+                <Button size="sm" className="gap-1 h-7 text-2xs" disabled={isSyncing} onClick={() => handleSync('sync-all')}>
                     {isSyncing && syncAction === 'sync-all' ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                     Sync All
                 </Button>
@@ -465,7 +465,7 @@ const ImdfExportPanel: React.FC<{ allBuildings: any[] }> = ({ allBuildings }) =>
                     Export IMDF
                 </Button>
                 {exportResult && (
-                    <span className={`text-xs ${exportResult.startsWith('Error') ? 'text-destructive' : 'text-green-600'}`}>
+                    <span className={`text-xs ${exportResult.startsWith('Error') ? 'text-destructive' : 'text-success'}`}>
                         {exportResult}
                     </span>
                 )}
@@ -2443,7 +2443,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
     const getSyncStatusBadge = (status: string) => {
         switch (status) {
             case 'completed':
-                return <Badge variant="default" className="bg-green-600"><CheckCircle2 className="w-3 h-3 mr-1" />Complete</Badge>;
+                return <Badge variant="default" className="bg-success text-success-foreground"><CheckCircle2 className="w-3 h-3 mr-1" />Complete</Badge>;
             case 'running':
                 return <Badge variant="secondary"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Syncing</Badge>;
             case 'failed':
@@ -2455,7 +2455,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="fixed left-[50%] top-[50%] flex h-full max-h-dvh w-full max-w-full translate-x-[-50%] translate-y-[-50%] flex-col overflow-hidden rounded-none sm:h-[90vh] sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:max-w-[88rem] sm:rounded-lg">
+            <DialogContent
+              size="2xl"
+              className="fixed left-[50%] top-[50%] flex h-full max-h-dvh w-full max-w-full translate-x-[-50%] translate-y-[-50%] flex-col overflow-hidden rounded-none sm:h-[90vh] sm:max-h-[calc(100dvh-2rem)] sm:w-[calc(100vw-2rem)] sm:rounded-lg"
+            >
                 <DialogHeader className="flex-shrink-0 pr-8">
                     <DialogTitle className="flex items-center gap-2">
                         <Server className="h-5 w-5" />
@@ -2468,39 +2471,39 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4 flex flex-1 min-h-0 flex-col overflow-hidden">
                     <TabsList className="flex h-auto w-full flex-shrink-0 flex-nowrap gap-0.5 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-x-visible">
-                        <TabsTrigger value="apps" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                        <TabsTrigger value="apps" className="gap-1 px-2 py-1.5 text-2xs sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <LayoutGrid className="h-3 w-3 sm:h-4 sm:w-4" />
                             Apps
                         </TabsTrigger>
-                        <TabsTrigger value="apis" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                        <TabsTrigger value="apis" className="gap-1 px-2 py-1.5 text-2xs sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Settings2 className="h-3 w-3 sm:h-4 sm:w-4" />
                             API
                         </TabsTrigger>
-                        <TabsTrigger value="sync" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                        <TabsTrigger value="sync" className="gap-1 px-2 py-1.5 text-2xs sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Database className="h-3 w-3 sm:h-4 sm:w-4" />
                             Sync
                         </TabsTrigger>
-                        <TabsTrigger value="symbols" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                        <TabsTrigger value="symbols" className="gap-1 px-2 py-1.5 text-2xs sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Circle className="h-3 w-3 sm:h-4 sm:w-4" />
                             Symbols
                         </TabsTrigger>
-                        <TabsTrigger value="viewer" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                        <TabsTrigger value="viewer" className="gap-1 px-2 py-1.5 text-2xs sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <View className="h-3 w-3 sm:h-4 sm:w-4" />
                             Viewer
                         </TabsTrigger>
-                        <TabsTrigger value="assistants" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                        <TabsTrigger value="assistants" className="gap-1 px-2 py-1.5 text-2xs sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Bot className="h-3 w-3 sm:h-4 sm:w-4" />
                             AI Assistants
                         </TabsTrigger>
-                        <TabsTrigger value="building" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                        <TabsTrigger value="building" className="gap-1 px-2 py-1.5 text-2xs sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Building2 className="h-3 w-3 sm:h-4 sm:w-4" />
                             Building
                         </TabsTrigger>
-                        <TabsTrigger value="api-profiles" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                        <TabsTrigger value="api-profiles" className="gap-1 px-2 py-1.5 text-2xs sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Network className="h-3 w-3 sm:h-4 sm:w-4" />
                             API Profiles
                         </TabsTrigger>
-                        <TabsTrigger value="tenants" className="gap-1 px-2 py-1.5 text-[10px] sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
+                        <TabsTrigger value="tenants" className="gap-1 px-2 py-1.5 text-2xs sm:text-sm sm:gap-2 sm:px-3 whitespace-nowrap flex-shrink-0">
                             <Users className="h-3 w-3 sm:h-4 sm:w-4" />
                             Customers
                         </TabsTrigger>
@@ -2711,9 +2714,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     </Button>
                                                 </div>
                                                 {connectionStatus !== 'idle' && (
-                                                    <div className={`rounded-lg border p-3 text-sm ${connectionStatus === 'success' ? 'bg-green-50 border-green-200 dark:bg-green-950/30' : 'bg-red-50 border-red-200 dark:bg-red-950/30'}`}>
+                                                    <div className={`rounded-lg border p-3 text-sm ${connectionStatus === 'success' ? 'bg-success/10 border-success/30' : 'bg-destructive/10 border-destructive/30'}`}>
                                                         <div className="flex items-start gap-2">
-                                                            {connectionStatus === 'success' ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <AlertCircle className="h-4 w-4 text-red-600" />}
+                                                            {connectionStatus === 'success' ? <CheckCircle2 className="h-4 w-4 text-success" /> : <AlertCircle className="h-4 w-4 text-destructive" />}
                                                             <div><p className="font-medium">{connectionStatus === 'success' ? 'Connection successful' : 'Connection failed'}</p><p className="text-xs">{connectionMessage}</p></div>
                                                         </div>
                                                     </div>
@@ -2728,7 +2731,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             <div className="flex items-center gap-2 flex-1">
                                                 <Building2 className="h-5 w-5 text-primary" />
                                                 <span className="font-medium">Geminus Base</span>
-                                                {geminusBaseStatus === 'success' && <Badge className="ml-auto mr-2 text-xs bg-green-100 text-green-800">Connected</Badge>}
+                                                {geminusBaseStatus === 'success' && <Badge className="ml-auto mr-2 text-xs bg-success/15 text-success">Connected</Badge>}
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="px-4 pb-4 pt-2">
@@ -2762,7 +2765,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     />
                                                 </div>
                                                 {geminusBaseMessage && (
-                                                    <p className={`text-xs ${geminusBaseStatus === 'success' ? 'text-green-600' : 'text-destructive'}`}>
+                                                    <p className={`text-xs ${geminusBaseStatus === 'success' ? 'text-success' : 'text-destructive'}`}>
                                                         {geminusBaseMessage}
                                                     </p>
                                                 )}
@@ -2791,7 +2794,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 <View className="h-5 w-5 text-primary" />
                                                 <span className="font-medium">Ivion (360+)</span>
                                                 {ivionConnectionStatus === 'connected' ? (
-                                                    <Badge className="ml-auto mr-2 text-xs bg-green-100 text-green-800 border-green-200">Connected</Badge>
+                                                    <Badge className="ml-auto mr-2 text-xs bg-success/15 text-success border-success/30">Connected</Badge>
                                                 ) : (
                                                     <Badge variant="outline" className="ml-auto mr-2 text-xs">Not Connected</Badge>
                                                 )}
@@ -2808,7 +2811,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     <div className="flex items-center justify-between mb-2">
                                                         <span className="text-sm font-medium">Authentication</span>
                                                         {ivionConnectionStatus === 'connected' && (
-                                                            <Badge className="bg-green-600 text-xs gap-1">
+                                                            <Badge className="bg-success text-success-foreground text-xs gap-1">
                                                                 <CheckCircle2 className="h-3 w-3" />
                                                                 Active
                                                             </Badge>
@@ -2861,9 +2864,9 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                     <AccordionItem value="geminus-premium" className="border rounded-lg">
                                         <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
                                             <div className="flex items-center gap-2 flex-1">
-                                                <Zap className="h-5 w-5 text-yellow-500" />
+                                                <Zap className="h-5 w-5 text-warning" />
                                                 <span className="font-medium">Geminus Premium</span>
-                                                <Badge variant="outline" className="ml-auto mr-2 text-xs bg-green-50 text-green-700 border-green-200">IoT</Badge>
+                                                <Badge variant="outline" className="ml-auto mr-2 text-xs bg-success/10 text-success border-success/30">IoT</Badge>
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="px-4 pb-4 pt-2">
@@ -2956,11 +2959,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                     <AccordionItem value="faciliate" className="border rounded-lg">
                                         <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50" onClick={() => { loadFacilitateStats(); checkConnectorStatus(); }}>
                                             <div className="flex items-center gap-2 flex-1">
-                                                <Wrench className="h-5 w-5 text-orange-500" />
+                                                <Wrench className="h-5 w-5 text-warning" />
                                                 <span className="font-medium">Faciliate</span>
                                                 {facilitateCacheStats && facilitateCacheStats.total > 0
-                                                    ? <Badge variant="outline" className="ml-auto mr-2 text-xs bg-green-50 text-green-700 border-green-200">{facilitateCacheStats.total.toLocaleString()} records</Badge>
-                                                    : <Badge variant="outline" className="ml-auto mr-2 text-xs bg-orange-50 text-orange-700 border-orange-200">FM System</Badge>}
+                                                    ? <Badge variant="outline" className="ml-auto mr-2 text-xs bg-success/10 text-success border-success/30">{facilitateCacheStats.total.toLocaleString()} records</Badge>
+                                                    : <Badge variant="outline" className="ml-auto mr-2 text-xs bg-warning/10 text-warning border-warning/30">FM System</Badge>}
                                             </div>
                                         </AccordionTrigger>
                                         <AccordionContent className="px-4 pb-4 pt-2">
@@ -2973,7 +2976,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 <div className="rounded-lg border p-3 space-y-3">
                                                     <div className="flex items-center justify-between">
                                                         <div className="flex items-center gap-2">
-                                                            <div className={`h-2 w-2 rounded-full ${connectorStatus === 'online' ? 'bg-green-500' : connectorStatus === 'offline' ? 'bg-red-400' : 'bg-gray-300'}`} />
+                                                            <div className={`h-2 w-2 rounded-full ${connectorStatus === 'online' ? 'bg-success' : connectorStatus === 'offline' ? 'bg-destructive' : 'bg-muted-foreground/40'}`} />
                                                             <span className="text-sm font-medium">
                                                                 {connectorStatus === 'online' ? 'Connector online' : connectorStatus === 'offline' ? 'Connector offline' : 'Status okänd'}
                                                             </span>
@@ -2984,10 +2987,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     </div>
                                                     {connectorStatus === 'offline' && (
                                                         <div className="rounded bg-muted p-2">
-                                                            <p className="text-[10px] text-muted-foreground mb-1">{t('Starta connectorn (kräver VPN):', 'Start the connector (requires VPN):')}</p>
+                                                            <p className="text-2xs text-muted-foreground mb-1">{t('Starta connectorn (kräver VPN):', 'Start the connector (requires VPN):')}</p>
                                                             <div className="flex items-center gap-1.5">
-                                                                <code className="text-[10px] font-mono flex-1">cd faciliate-connector &amp;&amp; node connector.mjs serve</code>
-                                                                <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] shrink-0"
+                                                                <code className="text-2xs font-mono flex-1">cd faciliate-connector &amp;&amp; node connector.mjs serve</code>
+                                                                <Button size="sm" variant="ghost" className="h-6 px-2 text-2xs shrink-0"
                                                                     onClick={() => { navigator.clipboard.writeText('cd faciliate-connector && node connector.mjs serve'); toast({ title: t('Kopierat!', 'Copied!') }); }}>
                                                                     {t('Kopiera', 'Copy')}
                                                                 </Button>
@@ -3056,7 +3059,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         {facilitateSyncLog.length > 0 && (
                                                             <div className="rounded border bg-muted/50 p-2 max-h-32 overflow-y-auto space-y-0.5">
                                                                 {facilitateSyncLog.map((line, i) => (
-                                                                    <p key={i} className="text-[11px] font-mono text-muted-foreground">{line}</p>
+                                                                    <p key={i} className="text-2xs font-mono text-muted-foreground">{line}</p>
                                                                 ))}
                                                             </div>
                                                         )}
@@ -3100,10 +3103,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                     <AccordionItem value="acc" className="border rounded-lg">
                                         <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
                                             <div className="flex items-center gap-2 flex-1">
-                                                <Layers className="h-5 w-5 text-blue-500" />
+                                                <Layers className="h-5 w-5 text-accent" />
                                                 <span className="font-medium">Autodesk Forma</span>
-                                                {accAuthStatus === 'authenticated' && <Badge className="ml-auto mr-2 text-xs bg-green-100 text-green-800 border-green-200">Inloggad</Badge>}
-                                                {accAuthStatus === 'unauthenticated' && accConnectionStatus === 'success' && <Badge className="ml-auto mr-2 text-xs bg-yellow-100 text-yellow-800 border-yellow-200">App-token</Badge>}
+                                                {accAuthStatus === 'authenticated' && <Badge className="ml-auto mr-2 text-xs bg-success/15 text-success border-success/30">Inloggad</Badge>}
+                                                {accAuthStatus === 'unauthenticated' && accConnectionStatus === 'success' && <Badge className="ml-auto mr-2 text-xs bg-warning/15 text-warning border-warning/30">App-token</Badge>}
                                                 {accAuthStatus === 'unauthenticated' && accConnectionStatus === 'idle' && <Badge variant="outline" className="ml-auto mr-2 text-xs">Autodesk Forma</Badge>}
                                                 {accAuthStatus === 'checking' && <Loader2 className="ml-auto mr-2 h-3.5 w-3.5 animate-spin" />}
                                             </div>
@@ -3149,7 +3152,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                             {isSavingApsCredentials
                                                                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                                                                 : apsCredentialsSaved
-                                                                    ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                                                    ? <CheckCircle2 className="h-3.5 w-3.5 text-success" />
                                                                     : null}
                                                             {apsCredentialsSaved ? 'Saved' : 'Save credentials'}
                                                         </Button>
@@ -3161,8 +3164,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     <Label className="text-sm font-medium">Autodesk Login (3-legged OAuth)</Label>
                                                     {accAuthStatus === 'authenticated' ? (
                                                         <div className="flex items-center gap-2">
-                                                            <CheckCircle2 className="h-4 w-4 text-green-600" />
-                                                            <span className="text-sm text-green-700 dark:text-green-400">{t('Inloggad med Autodesk-konto', 'Logged in with Autodesk account')}</span>
+                                                            <CheckCircle2 className="h-4 w-4 text-success" />
+                                                            <span className="text-sm text-success">{t('Inloggad med Autodesk-konto', 'Logged in with Autodesk account')}</span>
                                                             <Button
                                                                 variant="ghost"
                                                                 size="sm"
@@ -3359,14 +3362,14 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                                                 {/* Hint banner when ACC has no locations */}
                                                 {accLocationsHint && (
-                                                    <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 p-3 flex gap-2 items-start">
-                                                        <AlertCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
+                                                    <div className="rounded-lg border border-accent/30 bg-accent/10 p-3 flex gap-2 items-start">
+                                                        <AlertCircle className="h-4 w-4 text-accent mt-0.5 shrink-0" />
                                                         <div className="space-y-1">
-                                                            <p className="text-sm text-blue-800 dark:text-blue-200">{accLocationsHint}</p>
+                                                            <p className="text-sm text-accent">{accLocationsHint}</p>
                                                             <Button
                                                                 variant="link"
                                                                 size="sm"
-                                                                className="h-auto p-0 text-blue-600 dark:text-blue-400"
+                                                                className="h-auto p-0 text-accent"
                                                                 onClick={() => { setAccLocationsHint(null); handleFetchAccFolders(); }}
                                                             >
                                                                 <FolderOpen className="h-3.5 w-3.5 mr-1" />
@@ -3380,7 +3383,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 <div className="rounded-lg border p-3 space-y-2">
                                                     <div className="flex items-center justify-between">
                                                         <Label className="text-sm font-medium flex items-center gap-1.5">
-                                                            <Building2 className="h-4 w-4 text-blue-500" />
+                                                            <Building2 className="h-4 w-4 text-accent" />
                                                             {t('Koppla till byggnad', 'Link to building')}
                                                         </Label>
                                                         <Button
@@ -3411,11 +3414,11 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         </p>
                                                     )}
                                                     {accTargetBuildingFmGuid && (
-                                                        <p className="text-[10px] text-muted-foreground font-mono truncate">
+                                                        <p className="text-2xs text-muted-foreground font-mono truncate">
                                                             {accTargetBuildingFmGuid}
                                                         </p>
                                                     )}
-                                                    <p className="text-[10px] text-muted-foreground">
+                                                    <p className="text-2xs text-muted-foreground">
                                                         {t('Markera radio "A" vid den fil som är A-modellen — den skapar våningsplan och rum. Övriga modeller matchar automatiskt mot A-modellens plan.', 'Mark radio "A" on the architecture model — it creates floors and rooms. Other models match automatically.')}
                                                     </p>
                                                 </div>
@@ -3460,13 +3463,13 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
 
                                                             {accTopLevelItems.length > 0 && (
                                                                 <div className="pt-1 border-t">
-                                                                    <p className="text-[10px] text-muted-foreground uppercase tracking-wide px-2.5 py-1">Files in root folder</p>
+                                                                    <p className="text-2xs text-muted-foreground uppercase tracking-wide px-2.5 py-1">Files in root folder</p>
                                                                     {accTopLevelItems.map((item: any) => (
                                                                         <div key={item.id} className="flex items-center gap-2 text-xs py-1 px-2.5 rounded hover:bg-muted/50">
                                                                             <File className="h-3 w-3 text-muted-foreground shrink-0" />
                                                                             <span className="truncate">{item.name}</span>
-                                                                            <span className="ml-auto text-muted-foreground shrink-0 uppercase text-[10px]">{item.type}</span>
-                                                                            {item.size && <span className="text-muted-foreground shrink-0 text-[10px]">{formatFileSize(item.size)}</span>}
+                                                                            <span className="ml-auto text-muted-foreground shrink-0 uppercase text-2xs">{item.type}</span>
+                                                                            {item.size && <span className="text-muted-foreground shrink-0 text-2xs">{formatFileSize(item.size)}</span>}
                                                                         </div>
                                                                     ))}
                                                                 </div>
@@ -3561,7 +3564,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                                 <div className="flex items-center gap-1.5">
                                                                     <span className="text-muted-foreground">{b.childCount} obj</span>
                                                                     {b.synced ? (
-                                                                        <CheckCircle2 className="h-3 w-3 text-green-600" />
+                                                                        <CheckCircle2 className="h-3 w-3 text-success" />
                                                                     ) : (
                                                                         <Circle className="h-3 w-3 text-muted-foreground" />
                                                                     )}
@@ -3593,7 +3596,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         </Button>
 
                                         {accToApResult && (
-                                            <div className={`rounded-lg border p-2.5 text-xs space-y-1 ${accToApResult.success ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800' : 'bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800'}`}>
+                                            <div className={`rounded-lg border p-2.5 text-xs space-y-1 ${accToApResult.success ? 'bg-success/10 border-success/30' : 'bg-warning/10 border-warning/30'}`}>
                                                 <p className="font-medium">{accToApResult.success ? 'Sync succeeded' : 'Sync with warnings'}</p>
                                                 {accToApResult.summary && (
                                                     <div className="space-y-0.5">
@@ -3601,7 +3604,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                         <p>Floors: {accToApResult.summary.created?.levels || 0} | Rooms: {accToApResult.summary.created?.spaces || 0} | Instances: {accToApResult.summary.created?.instances || 0}</p>
                                                         <p>Relationships: {accToApResult.summary.totalRelationships || 0} | Properties: {accToApResult.summary.totalPropertiesUpdated || 0}</p>
                                                         {accToApResult.summary.totalErrors > 0 && (
-                                                            <p className="text-red-600 dark:text-red-400">Errors: {accToApResult.summary.totalErrors}</p>
+                                                            <p className="text-destructive">Errors: {accToApResult.summary.totalErrors}</p>
                                                         )}
                                                     </div>
                                                 )}
@@ -3729,7 +3732,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                 </Button>
                                             </div>
                                             {singleBuildingSyncResult && (
-                                                <p className={`text-xs ${singleBuildingSyncResult.success ? 'text-green-600' : 'text-destructive'}`}>
+                                                <p className={`text-xs ${singleBuildingSyncResult.success ? 'text-success' : 'text-destructive'}`}>
                                                     {singleBuildingSyncResult.success ? '✓ ' : '✗ '}{singleBuildingSyncResult.message}
                                                 </p>
                                             )}
@@ -3847,8 +3850,8 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                                     <div className="flex items-center justify-between">
                                                         <span className="text-muted-foreground">Result:</span>
                                                         <span className="font-medium text-xs">
-                                                            <span className="text-green-600">{geminusBaseSyncResult.success} succeeded</span>
-                                                            {geminusBaseSyncResult.failed > 0 && <span className="text-red-600 ml-1.5">{geminusBaseSyncResult.failed} failed</span>}
+                                                            <span className="text-success">{geminusBaseSyncResult.success} succeeded</span>
+                                                            {geminusBaseSyncResult.failed > 0 && <span className="text-destructive ml-1.5">{geminusBaseSyncResult.failed} failed</span>}
                                                         </span>
                                                     </div>
                                                 </>
@@ -3922,10 +3925,10 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                             <AccordionItem value="faciliate-sync" className="border rounded-lg px-4">
                                 <AccordionTrigger className="py-3" onClick={() => { loadFacilitateStats(); checkConnectorStatus(); }}>
                                     <div className="flex items-center gap-2">
-                                        <Wrench className="h-4 w-4 text-orange-500" />
+                                        <Wrench className="h-4 w-4 text-warning" />
                                         <span>Faciliate</span>
                                         {connectorStatus === 'online'
-                                            ? <Badge variant="outline" className="ml-auto mr-2 text-xs bg-green-50 text-green-700 border-green-200">Online</Badge>
+                                            ? <Badge variant="outline" className="ml-auto mr-2 text-xs bg-success/10 text-success border-success/30">Online</Badge>
                                             : facilitateCacheStats && facilitateCacheStats.total > 0
                                                 ? <Badge variant="outline" className="ml-auto mr-2 text-xs">{facilitateCacheStats.total.toLocaleString()} records</Badge>
                                                 : <Badge variant="outline" className="ml-auto mr-2 text-xs">Ej synkad</Badge>}
@@ -3937,7 +3940,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         {/* Connector status + start-server hint */}
                                         <div className="flex items-center justify-between">
                                             <div className="flex items-center gap-2">
-                                                <div className={`h-2 w-2 rounded-full ${connectorStatus === 'online' ? 'bg-green-500' : connectorStatus === 'offline' ? 'bg-red-400' : 'bg-gray-300'}`} />
+                                                <div className={`h-2 w-2 rounded-full ${connectorStatus === 'online' ? 'bg-success' : connectorStatus === 'offline' ? 'bg-destructive' : 'bg-muted-foreground/40'}`} />
                                                 <span className="text-sm text-muted-foreground">
                                                     {connectorStatus === 'online' ? t('Connector igång', 'Connector running') : connectorStatus === 'offline' ? t('Connector ej igång', 'Connector not running') : t('Okänd status', 'Unknown status')}
                                                 </span>
@@ -3948,7 +3951,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         </div>
 
                                         {connectorStatus === 'offline' && (
-                                            <div className="rounded bg-muted p-2 text-[11px] text-muted-foreground">
+                                            <div className="rounded bg-muted p-2 text-2xs text-muted-foreground">
                                                 {t('Starta connectorn (kräver VPN):', 'Start the connector (requires VPN):')}<br />
                                                 <code className="font-mono">cd faciliate-connector &amp;&amp; node connector.mjs serve</code>
                                             </div>
@@ -3995,7 +3998,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                         {facilitateSyncLog.length > 0 && (
                                             <div className="rounded border bg-muted/50 p-2 max-h-28 overflow-y-auto space-y-0.5">
                                                 {facilitateSyncLog.map((line, i) => (
-                                                    <p key={i} className="text-[11px] font-mono text-muted-foreground">{line}</p>
+                                                    <p key={i} className="text-2xs font-mono text-muted-foreground">{line}</p>
                                                 ))}
                                             </div>
                                         )}
@@ -4053,7 +4056,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                             <AccordionItem value="congeria-sync" className="border rounded-lg px-4">
                                 <AccordionTrigger className="py-3">
                                     <div className="flex items-center gap-2">
-                                        <FileText className="h-4 w-4 text-blue-500" />
+                                        <FileText className="h-4 w-4 text-accent" />
                                         <span>Congeria Documents</span>
                                         <Badge variant="outline" className="ml-auto mr-2 text-xs">{documentCount} docs</Badge>
                                     </div>
@@ -4161,7 +4164,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                             </Button>
                                         </div>
                                         {bipImportResult && (
-                                            <p className={`text-xs ${bipImportResult.startsWith('Error') || bipImportResult.startsWith('Importing') ? (bipImportResult.startsWith('Error') ? 'text-destructive' : 'text-muted-foreground') : 'text-green-600'}`}>
+                                            <p className={`text-xs ${bipImportResult.startsWith('Error') || bipImportResult.startsWith('Importing') ? (bipImportResult.startsWith('Error') ? 'text-destructive' : 'text-muted-foreground') : 'text-success'}`}>
                                                 {bipImportResult}
                                             </p>
                                         )}

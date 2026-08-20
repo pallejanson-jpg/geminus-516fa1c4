@@ -708,7 +708,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                     <span className="text-sm">{isSavingStartView ? 'Saving…' : 'Set as start view'}</span>
                   </Button>
                   <Button variant="outline" className="w-full justify-start gap-2 h-10" onClick={captureIssueState} disabled={!isViewerReady}>
-                    <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-600"><MessageSquarePlus className="h-4 w-4" /></div>
+                    <div className="p-1.5 rounded-md bg-warning/10 text-warning"><MessageSquarePlus className="h-4 w-4" /></div>
                     <span className="text-sm">Create issue</span>
                   </Button>
                   <Button
@@ -778,7 +778,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                   {/* Show Work Orders Toggle */}
                   <div className="flex items-center justify-between py-1.5 px-2">
                     <div className="flex items-center gap-2">
-                      <div className={cn("p-1.5 rounded-md", showWorkorders ? "bg-amber-500/10 text-amber-600" : "bg-muted text-muted-foreground")}>
+                      <div className={cn("p-1.5 rounded-md", showWorkorders ? "bg-warning/10 text-warning" : "bg-muted text-muted-foreground")}>
                         <ClipboardList className="h-4 w-4" />
                       </div>
                       <span className="text-sm">Arbetsordrar</span>
@@ -872,7 +872,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                               onClick={() => handleRoomLabelConfigSelect(config.id)}
                             >
                               {config.name}
-                              {config.is_default && <span className="ml-1 text-[10px] text-foreground/70">(standard)</span>}
+                              {config.is_default && <span className="ml-1 text-2xs text-foreground/70">(standard)</span>}
                             </button>
                           ))}
                           {roomLabelConfigs.length === 0 && (

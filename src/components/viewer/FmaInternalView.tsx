@@ -56,7 +56,7 @@ const FmaInternalView: React.FC<FmaInternalViewProps> = ({
       {loadError && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-background">
           <div className="text-center space-y-4 p-6 max-w-sm">
-            <AlertTriangle className="h-10 w-10 text-yellow-500 mx-auto" />
+            <AlertTriangle className="h-10 w-10 text-warning mx-auto" />
             <h3 className="text-lg font-semibold text-foreground">{t('FMA+ kunde inte laddas', 'FMA+ could not be loaded')}</h3>
             <p className="text-sm text-muted-foreground">
               {t('Servern svarar inte eller blockerar inbäddning. Prova att öppna i en ny flik istället.', 'The server is not responding or is blocking embedding. Try opening in a new tab instead.')}

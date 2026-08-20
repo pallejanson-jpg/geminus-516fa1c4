@@ -4,7 +4,7 @@
 import React from 'react';
 import {
   Box, ClipboardList, AlertTriangle, BarChart2, Building2,
-  Zap, Archive, Radar, Scan, Globe, Cuboid, LifeBuoy, HardHat, Wrench,
+  Zap, Archive, Radar, Scan, Globe, Cuboid, LifeBuoy,
 } from 'lucide-react';
 import { DEFAULT_APP_CONFIGS } from '@/lib/constants';
 
@@ -35,8 +35,6 @@ export const SIDEBAR_ITEM_META: Record<string, SidebarItemMeta> = {
   ai_scan:          { icon: Scan,          color: 'text-accent',      label: 'AI Scan',                            type: 'internal', contexts: ['building', 'viewer'] },
   globe:            { icon: Globe,         color: 'text-primary',     label: 'Globe',                              type: 'internal', contexts: ['global'] },
   native_viewer:    { icon: Cuboid,        color: 'text-primary',     label: '3D Viewer',                          type: 'internal', contexts: ['building', 'viewer'] },
-  blm_forma:        { icon: HardHat,       color: 'text-orange-400',  label: 'BLM ↔ Forma',                   type: 'internal', contexts: ['global', 'building'] },
-  geminus_tools:    { icon: Wrench,        color: 'text-blue-500',    label: 'Geminus Tools',                  type: 'internal', contexts: ['global', 'building'] },
 };
 
 /** Derive the current context level from app state */

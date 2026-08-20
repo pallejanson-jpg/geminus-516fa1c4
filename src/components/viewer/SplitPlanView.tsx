@@ -1253,14 +1253,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         <div className="absolute top-2 left-2 z-20" onClick={(e) => e.stopPropagation()}>
           <Select value={selectedFloorId} onValueChange={handleFloorChange}>
             <SelectTrigger
-              className="h-6 w-auto min-w-[70px] max-w-[120px] text-[10px] px-2 py-0 bg-card/95 backdrop-blur-sm border border-border shadow-sm rounded"
+              className="h-6 w-auto min-w-[70px] max-w-[120px] text-2xs px-2 py-0 bg-card/95 backdrop-blur-sm border border-border shadow-sm rounded"
               onMouseDown={(e) => e.stopPropagation()}
             >
               <SelectValue placeholder="Plan" />
             </SelectTrigger>
             <SelectContent>
               {effectiveFloors.map((f: any) => (
-                <SelectItem key={f.id} value={f.id} className="text-[11px]">
+                <SelectItem key={f.id} value={f.id} className="text-2xs">
                   {f.name}
                 </SelectItem>
               ))}
@@ -1283,7 +1283,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       {error && !storeyMap && !isLoading && (
         <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: '#ffffff' }}>
           <div className="flex flex-col items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            <AlertTriangle className="h-5 w-5 text-warning" />
             <span className="text-xs text-muted-foreground">{error}</span>
             <button
               className="text-xs text-primary underline mt-1"
@@ -1380,15 +1380,15 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
                   width: 0, height: 0,
                   borderLeft: `${isMobile ? 14 : 24}px solid transparent`,
                   borderRight: `${isMobile ? 14 : 24}px solid transparent`,
-                  borderBottom: `${isMobile ? 26 : 42}px solid rgba(59, 130, 246, 0.25)`,
+                  borderBottom: `${isMobile ? 26 : 42}px solid hsl(var(--accent) / 0.25)`,
                   transform: `translate(-50%, -100%) rotate(${cameraPos.angle}rad)`,
                   transformOrigin: 'center bottom',
                 }}
               />
               {/* Camera dot with pulse ring */}
               <div className="absolute" style={{ transform: 'translate(-50%, -50%)' }}>
-                <div className={cn("rounded-full bg-blue-500 border-2 border-white shadow-lg relative z-10", isMobile ? "w-4 h-4" : "w-7 h-7")} />
-                <div className={cn("absolute rounded-full border-2 border-blue-400 animate-ping", isMobile ? "w-4 h-4 top-0 left-0" : "w-7 h-7 top-0 left-0")} />
+                <div className={cn("rounded-full bg-accent border-2 border-white shadow-lg relative z-10", isMobile ? "w-4 h-4" : "w-7 h-7")} />
+                <div className={cn("absolute rounded-full border-2 border-accent animate-ping", isMobile ? "w-4 h-4 top-0 left-0" : "w-7 h-7 top-0 left-0")} />
               </div>
             </div>
           )}
@@ -1399,7 +1399,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
       {imgError && storeyMap && (
         <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: '#ffffff' }}>
           <div className="flex flex-col items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-500" />
+            <AlertTriangle className="h-5 w-5 text-warning" />
             <span className="text-xs text-muted-foreground">Plan image failed to render</span>
             <button className="text-xs text-primary underline" onClick={generateMap}>Retry</button>
           </div>
@@ -1408,7 +1408,7 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
 
       {/* Hovered entity tooltip */}
       {hoveredEntity && (
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 px-2 py-0.5 bg-card/90 backdrop-blur-sm rounded text-[10px] text-foreground border border-border shadow-sm pointer-events-none">
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-30 px-2 py-0.5 bg-card/90 backdrop-blur-sm rounded text-2xs text-foreground border border-border shadow-sm pointer-events-none">
           {hoveredEntity}
         </div>
       )}

@@ -503,7 +503,7 @@ ${attrs}
 
       {/* Alarm Detail Sheet */}
       <Sheet open={!!selectedAlarm} onOpenChange={(open) => !open && setSelectedAlarm(null)}>
-        <SheetContent className="w-[400px] sm:w-[480px] overflow-y-auto">
+        <SheetContent size="md" className="w-full overflow-y-auto">
           {selectedAlarm && (
             <>
               <SheetHeader>
