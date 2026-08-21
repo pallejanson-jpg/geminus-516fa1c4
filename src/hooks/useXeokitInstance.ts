@@ -143,6 +143,10 @@ export function useXeokitInstance({ canvasRef, buildingFmGuid, onContextLost }: 
     {
       const navCubeCanvas = document.createElement('canvas');
       navCubeCanvas.id = `native-navcube-${buildingFmGuid.substring(0, 8)}`;
+      // CSS size 150×150 — also set pixel buffer to match (HTML default is 300×150 which skews rendering)
+      const NAV_PX = Math.round(150 * (window.devicePixelRatio || 1));
+      navCubeCanvas.width = NAV_PX;
+      navCubeCanvas.height = NAV_PX;
       navCubeCanvas.style.cssText = 'position:absolute;bottom:60px;right:10px;width:150px;height:150px;pointer-events:auto;';
       const parentEl = canvasRef.current?.parentElement;
       if (parentEl) parentEl.appendChild(navCubeCanvas);

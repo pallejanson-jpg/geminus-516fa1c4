@@ -443,6 +443,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
     viewer: any,
     xktLoader: any,
     metadataFileSet: Set<string>,
+    preSignedUrls?: Map<string, string>,
   ): Promise<boolean> => {
     const modelId = model.model_id;
     const modelStart = performance.now();
@@ -451,10 +452,14 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       const metaPath = `${buildingFmGuid}/${modelId}_metadata.json`;
       let metaModelSrc: string | undefined;
       if (metadataFileSet.has(metaPath)) {
-        const { data: metaUrl } = await supabase.storage
-          .from('xkt-models')
-          .createSignedUrl(metaPath, 3600);
-        if (metaUrl?.signedUrl) metaModelSrc = metaUrl.signedUrl;
+        // Use pre-fetched signed URL if available (avoids a round-trip per model)
+        const preUrl = preSignedUrls?.get(metaPath);
+        if (preUrl) {
+          metaModelSrc = preUrl;
+        } else {
+          const { data: metaUrl } = await supabase.storage.from('xkt-models').createSignedUrl(metaPath, 3600);
+          if (metaUrl?.signedUrl) metaModelSrc = metaUrl.signedUrl;
+        }
       }
 
       const waitForModel = (entity: any) =>
@@ -503,13 +508,17 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         // No storage path — jump straight to tier 4 (direct-stream from Asset+)
         return loadFromAssetPlus(model, viewer, xktLoader, metaModelSrc, modelStart);
       }
-      const { data: urlData } = await supabase.storage
-        .from('xkt-models')
-        .createSignedUrl(model.storage_path, 3600);
-      if (!urlData?.signedUrl) {
+      const preXktUrl = preSignedUrls?.get(model.storage_path);
+      let xktSignedUrl = preXktUrl;
+      if (!xktSignedUrl) {
+        const { data: urlData } = await supabase.storage.from('xkt-models').createSignedUrl(model.storage_path, 3600);
+        xktSignedUrl = urlData?.signedUrl;
+      }
+      if (!xktSignedUrl) {
         // Signed URL failed — fall through to direct-stream as last resort
         return loadFromAssetPlus(model, viewer, xktLoader, metaModelSrc, modelStart);
       }
+      const urlData = { signedUrl: xktSignedUrl };
 
       const shouldStream = (model.file_size ?? 0) > 30 * 1024 * 1024;
       if (shouldStream) {
@@ -623,8 +632,25 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       });
     } catch {}
 
+    // Batch-fetch signed URLs for all XKT + metadata paths at once
+    const preSignedUrls = new Map<string, string>();
+    try {
+      const pathsToSign: string[] = [];
+      for (const m of loadList) {
+        if (m.storage_path) pathsToSign.push(m.storage_path);
+        const mp = `${buildingFmGuid}/${m.model_id}_metadata.json`;
+        if (metadataFileSet.has(mp)) pathsToSign.push(mp);
+      }
+      if (pathsToSign.length > 0) {
+        const { data: signedData } = await supabase.storage.from('xkt-models').createSignedUrls(pathsToSign, 3600);
+        signedData?.forEach(item => {
+          if (item.signedUrl) preSignedUrls.set(item.path, item.signedUrl);
+        });
+      }
+    } catch {}
+
     // Progressive concurrent loading
-    const CONCURRENT = isMobile ? 1 : 2;
+    const CONCURRENT = isMobile ? 1 : 3;
     let loaded = 0;
     onProgress({ loaded: 0, total: loadList.length });
 
@@ -634,7 +660,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       onProgress({ loaded, total: loadList.length, currentModel: model.model_name || model.model_id });
 
       let promise: Promise<void>;
-      promise = loadSingleModel(model, viewer, xktLoader, metadataFileSet).then((ok) => {
+      promise = loadSingleModel(model, viewer, xktLoader, metadataFileSet, preSignedUrls).then((ok) => {
         loaded++;
         if (mountedRef.current) onProgress({ loaded, total: loadList.length });
       }).finally(() => active.delete(promise));
@@ -652,7 +678,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
       for (const model of secondaryQueue) {
         if (!mountedRef.current) break;
         let p: Promise<void>;
-        p = loadSingleModel(model, viewer, xktLoader, metadataFileSet).then((ok) => {
+        p = loadSingleModel(model, viewer, xktLoader, metadataFileSet, preSignedUrls).then((ok) => {
           loaded++;
           if (mountedRef.current) onProgress({ loaded, total: secondaryQueue.length });
         }).finally(() => active2.delete(p));

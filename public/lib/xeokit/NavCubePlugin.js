@@ -29,10 +29,12 @@
         console.error('NavCubePlugin: Canvas not found:', cfg.canvasId);
         return;
       }
-      
+
+      this._dpr = window.devicePixelRatio || 1;
       this._ctx = this._canvas.getContext('2d');
       this._hoveredFace = null;
-      this._cubeSize = 36;
+      // Scale cube size with devicePixelRatio so it looks crisp on HiDPI screens
+      this._cubeSize = 36 * this._dpr;
       this._destroyed = false;
       this._lastProjectedFaces = [];
       

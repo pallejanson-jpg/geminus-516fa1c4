@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useCallback, useRef } from "react";
+import React, { useState, useEffect, useMemo, useContext, useCallback, useRef } from "react";
 import { useLanguage } from '@/context/LanguageContext';
 import { Loader2, ExternalLink, X, Maximize2, Minimize2, Plus, MapPin, RefreshCw, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,10 +9,10 @@ import IvionRegistrationPanel from "@/components/inventory/IvionRegistrationPane
 import GeminusPluginMenu from "./GeminusPluginMenu";
 import UnplacedAssetsPanel from "@/components/inventory/UnplacedAssetsPanel";
 import { useIvionCameraSync } from "@/hooks/useIvionCameraSync";
+import { useIvionSdk } from "@/hooks/useIvionSdk";
 import type { BuildingOrigin } from "@/lib/coordinate-transform";
 import type { IvionBimTransform } from "@/lib/ivion-bim-transform";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { loadIvionSdk, createIvionElement, destroyIvionElement, type IvionApi, type IvionSdkStatus } from "@/lib/ivion-sdk";
 import { logger } from '@/lib/logger';
 
 interface IvionPoiData {
@@ -61,12 +61,7 @@ export default function Ivion360View({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
-  // SDK mode state
-  const [sdkStatus, setSdkStatus] = useState<IvionSdkStatus>('idle');
-  const sdkStatusRef = useRef<IvionSdkStatus>('idle');
-  const ivApiRef = useRef<IvionApi | null>(null);
   const sdkContainerRef = useRef<HTMLDivElement>(null);
-  const ivionElementRef = useRef<HTMLElement | null>(null);
 
   // Rendering mode: 'sdk' if SDK loaded successfully, 'iframe' as fallback
   const renderMode = sdkStatus === 'ready' ? 'sdk' : 'iframe';
@@ -115,103 +110,51 @@ export default function Ivion360View({
   const [isRenewingToken, setIsRenewingToken] = useState(false);
 
   // ─── SDK Loading ──────────────────────────────────────────────────
+  // Loading, auto-auth, token refresh, and <ivion> element lifecycle are all owned by
+  // useIvionSdk now (Phase 4 consolidation — this file used to duplicate all of that
+  // inline with its own, slightly different refresh interval).
 
-  // Fetch a loginToken from the backend
-  const fetchLoginToken = useCallback(async (): Promise<string | null> => {
+  // Origin-only base URL, memoized and parse-error-safe: a malformed ivionUrl must
+  // fall through to the iframe fallback below, not throw during render.
+  const ivionBaseUrl = useMemo(() => {
+    if (!ivionUrl) return '';
     try {
-      const { data, error } = await supabase.functions.invoke('ivion-poi', {
-        body: { action: 'get-login-token', buildingFmGuid },
+      return new URL(ivionUrl).origin;
+    } catch {
+      return '';
+    }
+  }, [ivionUrl]);
+
+  const { sdkStatus, ivApiRef } = useIvionSdk({
+    baseUrl: ivionBaseUrl,
+    siteId: ivionSiteId || '',
+    buildingFmGuid: buildingFmGuid || '',
+    containerRef: sdkContainerRef,
+    enabled: !!ivionUrl,
+  });
+
+  useEffect(() => {
+    if (sdkStatus === 'ready') setIsLoading(false);
+  }, [sdkStatus]);
+
+  // Once ivionUrl is confirmed present (we're past the early-return guard above),
+  // 'idle' can no longer mean "haven't started yet" — useIvionSdk only stays idle when
+  // enabled/baseUrl/siteId aren't all set (e.g. a malformed URL, or no site configured),
+  // which needs the same iframe fallback as an outright load failure.
+  const sdkUnavailable = sdkStatus === 'failed' || sdkStatus === 'idle';
+
+  // Toast once per successful connect (not on every re-render while status stays 'ready').
+  const hasShownReadyToastRef = useRef(false);
+  useEffect(() => {
+    if (sdkStatus === 'ready' && !hasShownReadyToastRef.current) {
+      hasShownReadyToastRef.current = true;
+      toast.success(t('360° SDK ansluten', '360° SDK connected'), {
+        description: t('Automatisk synkronisering aktiv', 'Automatic synchronization active'),
       });
-      if (error || !data?.success) {
-        logger.warn('[Ivion360View] Failed to fetch loginToken:', error || data?.error);
-        return null;
-      }
-      logger.log('[Ivion360View] loginToken obtained, expires in', Math.round((data.expiresInMs || 0) / 1000), 's');
-      return data.loginToken;
-    } catch (e) {
-      logger.warn('[Ivion360View] loginToken fetch error:', e);
-      return null;
+    } else if (sdkStatus !== 'ready') {
+      hasShownReadyToastRef.current = false;
     }
-  }, [buildingFmGuid]);
-
-  // Create <ivion> element on mount — BEFORE SDK loading starts
-  // This ensures the element exists with dimensions when getApi() is called.
-  useEffect(() => {
-    if (!sdkContainerRef.current || ivionElementRef.current) return;
-    const ivionEl = createIvionElement(sdkContainerRef.current);
-    ivionElementRef.current = ivionEl;
-    logger.log('[Ivion360View] <ivion> element created on mount');
-
-    return () => {
-      if (sdkContainerRef.current && ivionElementRef.current) {
-        destroyIvionElement(sdkContainerRef.current, ivionElementRef.current);
-        ivionElementRef.current = null;
-      }
-    };
-  }, []); // mount only
-
-  // SDK loading with loginToken and robust fallback
-  useEffect(() => {
-    if (!ivionUrl) {
-      setSdkStatus('idle');
-      sdkStatusRef.current = 'idle';
-      return;
-    }
-
-    let cancelled = false;
-
-    const updateStatus = (status: IvionSdkStatus) => {
-      sdkStatusRef.current = status;
-      setSdkStatus(status);
-    };
-
-    const tryLoadSdk = async () => {
-      updateStatus('loading');
-      
-      try {
-        const parsedUrl = new URL(ivionUrl);
-        const baseUrl = parsedUrl.origin;
-        
-        if (cancelled) return;
-        
-        // Fetch loginToken for auto-authentication
-        const loginToken = await fetchLoginToken();
-        if (cancelled) return;
-        
-        if (loginToken) {
-          logger.log('[Ivion360View] Will use loginToken for SDK auto-auth');
-        } else {
-          logger.log('[Ivion360View] No loginToken available, SDK will require manual login');
-        }
-        
-        logger.log('[Ivion360View] Attempting SDK load from:', baseUrl);
-        const api = await loadIvionSdk(baseUrl, 45000, loginToken || undefined, ivionSiteId || undefined);
-        
-        if (cancelled) return;
-        
-        ivApiRef.current = api;
-        updateStatus('ready');
-        setIsLoading(false);
-        
-        logger.log('[Ivion360View] ✅ SDK mode active', loginToken ? '(auto-authenticated)' : '(manual login needed)');
-        toast.success(t('360° SDK ansluten', '360° SDK connected'), {
-          description: loginToken ? t('Automatisk autentisering aktiv', 'Automatic authentication active') : t('Automatisk synkronisering aktiv', 'Automatic synchronization active'),
-        });
-      } catch (err) {
-        if (cancelled) return;
-        
-        logger.log('[Ivion360View] SDK load failed, falling back to iframe:', err);
-        updateStatus('failed');
-      }
-    };
-
-    tryLoadSdk();
-
-    return () => {
-      cancelled = true;
-      ivApiRef.current = null;
-    };
-  }, [ivionUrl, syncEnabled, fetchLoginToken]);
+  }, [sdkStatus, t]);
 
   // Inject CSS to shrink Ivion SDK UI elements when ready
   useEffect(() => {
@@ -254,28 +197,6 @@ export default function Ivion360View({
       if (el) el.remove();
     };
   }, [sdkStatus, isMobile]);
-
-  // Token refresh loop — keep SDK authenticated
-  useEffect(() => {
-    if (sdkStatus !== 'ready' || !ivApiRef.current?.auth) return;
-
-    const REFRESH_INTERVAL = 10 * 60 * 1000; // 10 minutes
-
-    const refreshToken = async () => {
-      try {
-        const newToken = await fetchLoginToken();
-        if (newToken && ivApiRef.current?.auth) {
-          ivApiRef.current.auth.updateToken(newToken);
-          logger.log('[Ivion360View] Token refreshed successfully');
-        }
-      } catch (e) {
-        logger.warn('[Ivion360View] Token refresh failed (SDK may still work):', e);
-      }
-    };
-
-    const interval = setInterval(refreshToken, REFRESH_INTERVAL);
-    return () => clearInterval(interval);
-  }, [sdkStatus, fetchLoginToken]);
 
   // Hide Ivion sidebar items on mobile when SDK is ready
   useEffect(() => {
@@ -509,7 +430,7 @@ export default function Ivion360View({
                     {renderMode === 'sdk' ? 'SDK Sync' : 'Auto-sync'}
                   </span>
                 )}
-                {renderMode === 'iframe' && sdkStatus === 'failed' && (
+                {renderMode === 'iframe' && sdkUnavailable && (
                   <span className="text-xs text-warning bg-warning/15 px-1.5 py-0.5 rounded flex items-center gap-1">
                     <AlertTriangle className="h-3 w-3" />
                     {t('Iframe-läge', 'Iframe mode')}
@@ -617,14 +538,15 @@ export default function Ivion360View({
         <div 
           ref={sdkContainerRef} 
           className="w-full h-full transition-opacity duration-300"
-          style={{ 
-            display: sdkStatus === 'failed' ? 'none' : 'block',
+          style={{
+            display: sdkUnavailable ? 'none' : 'block',
             opacity: sdkStatus === 'ready' ? 1 : 0,
           }}
         />
-        
-        {/* Iframe fallback - shown only when SDK definitively fails */}
-        {sdkStatus === 'failed' && (
+
+        {/* Iframe fallback - shown when SDK definitively fails, or never attempts to
+            load (e.g. no Ivion site configured for this building) */}
+        {sdkUnavailable && (
           <iframe
             ref={iframeRef}
             src={ivionUrl}
