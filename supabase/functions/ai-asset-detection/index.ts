@@ -1544,9 +1544,6 @@ async function approveDetection(params: {
     return { success: false, message: `Detection already ${detection.status}` };
   }
   
-  // Generate 128-bit FM GUID
-  const assetFmGuid = crypto.randomUUID();
-  
   // Use form data if provided, otherwise fall back to extracted properties
   const props = (detection.extracted_properties as ExtractedProperties) || {};
   const baseName = detection.detection_templates?.name || detection.object_type;
@@ -1579,139 +1576,39 @@ async function approveDetection(params: {
   if (props.condition) attributes.condition = props.condition;
   if (props.text_visible) attributes.text_visible = props.text_visible;
   
-  // Create asset
+  // Create the asset (and, if this building has an Ivion site, its POI) through the
+  // single write path from Phase 2 of the viewer-coordinator work — this used to insert
+  // into `assets` directly and duplicate its own Ivion POI-creation call here, bypassing
+  // both viewer-annotations and ivion-poi's shared sync-asset logic.
   const symbolId = params.symbolId || detection.detection_templates?.default_symbol_id || null;
-  
-  const { error: assetError } = await supabase
-    .from('assets')
-    .insert({
-      fm_guid: assetFmGuid,
+
+  const { data: upsertResult, error: upsertError } = await supabase.functions.invoke('viewer-annotations', {
+    body: {
+      action: 'upsert-annotation',
+      buildingFmGuid: detection.building_fm_guid,
+      symbolId,
       name: assetName,
-      common_name: commonName,
+      commonName,
+      assetType: assetCategory,
       category: 'Instance',
-      asset_type: assetCategory,
-      building_fm_guid: detection.building_fm_guid,
-      level_fm_guid: levelFmGuid,
-      in_room_fm_guid: params.roomFmGuid || null,
-      coordinate_x: detection.coordinate_x,
-      coordinate_y: detection.coordinate_y,
-      coordinate_z: detection.coordinate_z,
-      symbol_id: symbolId,
-      ivion_site_id: detection.ivion_site_id,
-      ivion_image_id: detection.ivion_image_id,
-      is_local: true,
-      created_in_model: false,
-      annotation_placed: true,
+      levelFmGuid: levelFmGuid || undefined,
+      roomFmGuid: params.roomFmGuid || undefined,
+      position: { x: detection.coordinate_x || 0, y: detection.coordinate_y || 0, z: detection.coordinate_z || 0 },
+      spatialRepresentation: 'spatial-point',
+      locationAccuracy: 'model-derived',
+      ivionImageId: detection.ivion_image_id || undefined,
+      ivionSiteId: detection.ivion_site_id || undefined,
       attributes,
-    });
-  
-  if (assetError) {
-    return { success: false, message: `Failed to create asset: ${assetError.message}` };
+    },
+  });
+
+  if (upsertError || !upsertResult?.success) {
+    return { success: false, message: `Failed to create asset: ${upsertError?.message || upsertResult?.error}` };
   }
-  
-  // Auto-create POI in Ivion
-  let poiId: number | undefined;
-  try {
-    // Get building settings for Ivion site ID
-    const { data: buildingSettings } = await supabase
-      .from('building_settings')
-      .select('ivion_site_id')
-      .eq('fm_guid', detection.building_fm_guid)
-      .maybeSingle();
-    
-    if (buildingSettings?.ivion_site_id) {
-      const siteId = buildingSettings.ivion_site_id;
-      const token = await getIvionToken();
-      const poiTypeId = 1; // Default POI type
-      
-      // Try to get a proper default POI type
-      try {
-        const typesResp = await fetch(`${IVION_API_URL}/api/site/${siteId}/poi_types`, {
-          headers: { 'x-authorization': `Bearer ${token}`, 'Accept': 'application/json' },
-        });
-        if (typesResp.ok) {
-          const types = await typesResp.json();
-          if (types.length > 0) {
-            const generic = types.find((t: any) =>
-              t.name?.toLowerCase().includes('generic') ||
-              t.name?.toLowerCase().includes('default') ||
-              t.name?.toLowerCase().includes('standard')
-            );
-            // Use generic or first type
-            const selectedType = generic || types[0];
-            if (selectedType?.id) {
-              // poiTypeId is const so we use it directly in the POI data below
-            }
-          }
-        }
-      } catch { /* use default */ }
-      
-      const poiData = {
-        titles: { sv: assetName },
-        descriptions: { sv: params.description || detection.ai_description || '' },
-        scsLocation: {
-          type: 'Point',
-          coordinates: [
-            detection.coordinate_x || 0,
-            detection.coordinate_y || 0,
-            detection.coordinate_z || 0,
-          ],
-        },
-        scsOrientation: { x: 0, y: 0, z: 0, w: 1 },
-        poiTypeId,
-        security: { groupRead: 0, groupWrite: 0 },
-        visibilityCheck: false,
-        importance: 1,
-        customData: JSON.stringify({
-          fm_guid: assetFmGuid,
-          asset_type: assetCategory,
-          source: 'geminus-ai-detection',
-        }),
-      };
-      
-      // If we have an image ID, set pointOfView
-      if (detection.ivion_image_id) {
-        (poiData as any).pointOfView = {
-          imageId: detection.ivion_image_id,
-          location: { x: detection.coordinate_x || 0, y: detection.coordinate_y || 0, z: detection.coordinate_z || 0 },
-          orientation: { x: 0, y: 0, z: 0, w: 1 },
-          fov: 90,
-        };
-      }
-      
-      const createResp = await fetch(`${IVION_API_URL}/api/site/${siteId}/pois`, {
-        method: 'POST',
-        headers: {
-          'x-authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify([poiData]),
-      });
-      
-      if (createResp.ok) {
-        const createdPoi = await createResp.json();
-        const poiResult = Array.isArray(createdPoi) ? createdPoi[0] : createdPoi;
-        poiId = poiResult?.id;
-        
-        if (poiId) {
-          // Update asset with POI ID
-          await supabase.from('assets').update({
-            ivion_poi_id: poiId,
-            ivion_synced_at: new Date().toISOString(),
-          }).eq('fm_guid', assetFmGuid);
-          
-          console.log(`[approveDetection] Created POI #${poiId} for asset ${assetFmGuid}`);
-        }
-      } else {
-        const errText = await createResp.text();
-        console.error(`[approveDetection] POI creation failed: ${createResp.status} - ${errText.slice(0, 200)}`);
-      }
-    }
-  } catch (poiError: any) {
-    console.error('[approveDetection] POI creation error (non-blocking):', poiError.message);
-    // Non-blocking - asset is still created successfully
-  }
-  
+
+  const createdAssetFmGuid: string = upsertResult.assetFmGuid;
+  const poiId: number | undefined = upsertResult.poiId;
+
   // Update detection as approved
   await supabase
     .from('pending_detections')
@@ -1719,12 +1616,12 @@ async function approveDetection(params: {
       status: 'approved',
       reviewed_by: params.userId,
       reviewed_at: new Date().toISOString(),
-      created_asset_fm_guid: assetFmGuid,
+      created_asset_fm_guid: createdAssetFmGuid,
       created_ivion_poi_id: poiId || null,
     })
     .eq('id', params.detectionId);
-  
-  return { success: true, assetFmGuid, poiId };
+
+  return { success: true, assetFmGuid: createdAssetFmGuid, poiId };
 }
 
 // Reject a detection

@@ -333,9 +333,10 @@ async function syncAssetToPoi(assetFmGuid: string): Promise<{ success: boolean; 
   // create" fields that updatePoi() merges on top of the POI's EXISTING values via
   // `{...existing, ...updates}`. Including them (even as `undefined`) would be an
   // own-enumerable-property in the spread and would clobber the existing POI's type.
+  const attrs = (asset.attributes as Record<string, any>) || {};
   const poiData: Partial<IvionPoi> = {
     titles: { sv: displayName },
-    descriptions: { sv: (asset.attributes as any)?.description || '' },
+    descriptions: { sv: attrs.description || attrs.ai_description || '' },
     scsLocation: {
       type: 'Point',
       coordinates: [
@@ -351,6 +352,18 @@ async function syncAssetToPoi(assetFmGuid: string): Promise<{ success: boolean; 
       source: 'geminus',
     }),
   };
+
+  // If this asset is pinned to a specific 360° image, carry that through as the POI's
+  // point of view so it opens directly on that panorama (previously only
+  // ai-asset-detection's inline POI-creation code did this — now shared by every caller).
+  if (asset.ivion_image_id) {
+    poiData.pointOfView = {
+      imageId: asset.ivion_image_id,
+      location: { x: asset.coordinate_x || 0, y: asset.coordinate_y || 0, z: asset.coordinate_z || 0 },
+      orientation: { x: 0, y: 0, z: 0, w: 1 },
+      fov: 90,
+    };
+  }
 
   try {
     if (existingPoiId) {

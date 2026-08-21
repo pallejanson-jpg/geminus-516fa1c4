@@ -54,7 +54,12 @@ const listAnnotationsSchema = z.object({ buildingFmGuid: z.string().min(1) });
 const upsertAnnotationSchema = z.object({
   buildingFmGuid: z.string().min(1),
   assetFmGuid: z.string().min(1).optional(),
-  symbolId: z.string().min(1),
+  // Nullable (not just optional-with-a-string): some callers (e.g. ai-asset-detection,
+  // when a detection template has no default symbol configured) legitimately create an
+  // asset before a symbol is chosen. symbol_id IS NOT NULL still governs whether it
+  // renders as an annotation anywhere else — this endpoint just doesn't force that
+  // choice to happen at creation time.
+  symbolId: z.string().min(1).nullable(),
   name: z.string().optional(),
   commonName: z.string().optional(),
   assetType: z.string().optional(),
@@ -67,6 +72,7 @@ const upsertAnnotationSchema = z.object({
   transformVersion: z.number().int().optional(),
   attributes: z.record(z.unknown()).optional(),
   ivionImageId: z.number().int().optional(),
+  ivionSiteId: z.string().optional(),
   syncToIvion: z.boolean().optional(),
 });
 
@@ -185,6 +191,7 @@ async function upsertAnnotation(params: z.infer<typeof upsertAnnotationSchema>) 
     if (params.locationAccuracy) updatePayload.location_accuracy = params.locationAccuracy;
     if (params.transformVersion !== undefined) updatePayload.transform_version = params.transformVersion;
     if (params.ivionImageId !== undefined) updatePayload.ivion_image_id = params.ivionImageId;
+    if (params.ivionSiteId !== undefined) updatePayload.ivion_site_id = params.ivionSiteId;
     if (params.attributes) updatePayload.attributes = params.attributes;
 
     const { error } = await supabase.from('assets').update(updatePayload).eq('fm_guid', assetFmGuid);
@@ -207,6 +214,7 @@ async function upsertAnnotation(params: z.infer<typeof upsertAnnotationSchema>) 
       location_accuracy: params.locationAccuracy ?? null,
       transform_version: params.transformVersion ?? null,
       ivion_image_id: params.ivionImageId ?? null,
+      ivion_site_id: params.ivionSiteId ?? null,
       attributes: params.attributes ?? {},
     };
     if (params.position) {
