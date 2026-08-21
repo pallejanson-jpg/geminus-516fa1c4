@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { supabase } from '@/integrations/supabase/client';
 import { useLanguage } from '@/context/LanguageContext';
@@ -45,7 +46,11 @@ const KNOWN_STATUSES: ReadonlySet<string> = new Set(['open', 'in_progress', 'pen
 const KNOWN_PRIORITIES: ReadonlySet<string> = new Set(['low', 'medium', 'high', 'critical']);
 
 interface WorkOrder {
+    /** Display ID (external_id when set, else the row's own id) — NOT necessarily the
+     *  real primary key, so status updates must go through dbId instead. */
     id: string;
+    /** The actual work_orders.id (uuid) — always the real primary key, used for updates. */
+    dbId: string;
     title: string;
     status: WorkOrderStatus;
     priority: WorkOrderPriority;
@@ -82,6 +87,7 @@ function mapWorkOrderRow(row: WorkOrderRow, buildingNameByGuid: Map<string, stri
     const priority = KNOWN_PRIORITIES.has(row.priority || '') ? (row.priority as WorkOrderPriority) : 'medium';
     return {
         id: row.external_id || row.id,
+        dbId: row.id,
         title: row.title || 'Untitled',
         status,
         priority,
@@ -269,7 +275,7 @@ export default function FacilityManagementTab() {
     // Filtered work orders for the list dialog
     const filteredWorkOrders = useMemo(() => {
         return workOrders.filter(wo => {
-            const matchesSearch = searchQuery === '' || 
+            const matchesSearch = searchQuery === '' ||
                 wo.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 wo.buildingName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 wo.id.toLowerCase().includes(searchQuery.toLowerCase());
@@ -277,6 +283,35 @@ export default function FacilityManagementTab() {
             return matchesSearch && matchesStatus;
         });
     }, [workOrders, searchQuery, statusFilter]);
+
+    // Status workflow: previously nothing in the app ever changed a work order away from
+    // its default 'open' status. Optimistically updates local state, then persists —
+    // work_orders' own RLS policy already allows client-side updates (the same policy
+    // CreateWorkOrderDialog's insert already relies on), so no edge function is needed.
+    const [updatingWorkOrderId, setUpdatingWorkOrderId] = useState<string | null>(null);
+    const handleStatusChange = async (dbId: string, newStatus: WorkOrderStatus) => {
+        setUpdatingWorkOrderId(dbId);
+        setWorkOrderRows(prev => prev.map(row => (row.id === dbId ? { ...row, status: newStatus } : row)));
+        try {
+            const { error } = await supabase
+                .from('work_orders')
+                .update({ status: newStatus, completed_at: newStatus === 'completed' ? new Date().toISOString() : null })
+                .eq('id', dbId);
+            if (error) throw error;
+        } catch (e) {
+            console.error('Failed to update work order status:', e);
+            toast.error('Failed to update status', { description: e instanceof Error ? e.message : String(e) });
+            // Re-fetch to undo the optimistic update rather than guessing the prior value.
+            const { data } = await supabase
+                .from('work_orders')
+                .select('id, external_id, title, status, priority, category, building_fm_guid, building_name, reported_at, due_date, assigned_to, created_at')
+                .order('created_at', { ascending: false })
+                .limit(2000);
+            if (data) setWorkOrderRows(data);
+        } finally {
+            setUpdatingWorkOrderId(null);
+        }
+    };
 
     const kpiCards = [
         { 
@@ -573,7 +608,7 @@ export default function FacilityManagementTab() {
                             </TableHeader>
                             <TableBody>
                                 {filteredWorkOrders.map((wo) => (
-                                    <TableRow key={wo.id} className="cursor-pointer hover:bg-muted/50">
+                                    <TableRow key={wo.id} className="hover:bg-muted/50">
                                         <TableCell className="font-mono text-xs">{wo.id}</TableCell>
                                         <TableCell className="font-medium">{wo.title}</TableCell>
                                         <TableCell className="text-sm">{wo.buildingName}</TableCell>
@@ -583,9 +618,24 @@ export default function FacilityManagementTab() {
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
-                                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${statusConfig[wo.status].bgClass} ${statusConfig[wo.status].color}`}>
-                                                {statusConfig[wo.status].label}
-                                            </span>
+                                            <Select
+                                                value={wo.status}
+                                                onValueChange={(value) => handleStatusChange(wo.dbId, value as WorkOrderStatus)}
+                                                disabled={updatingWorkOrderId === wo.dbId}
+                                            >
+                                                <SelectTrigger
+                                                    className={`h-7 w-[130px] text-xs font-medium border-0 ${statusConfig[wo.status].bgClass} ${statusConfig[wo.status].color}`}
+                                                >
+                                                    <SelectValue>{statusConfig[wo.status].label}</SelectValue>
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {(Object.keys(statusConfig) as WorkOrderStatus[]).map((s) => (
+                                                        <SelectItem key={s} value={s} className="text-xs">
+                                                            {statusConfig[s].label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
                                         </TableCell>
                                         <TableCell>
                                             <span className={`text-xs font-medium ${priorityConfig[wo.priority].color}`}>
