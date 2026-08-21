@@ -6,32 +6,37 @@ consolidation, was implemented; see the end of this doc).
 
 ---
 
-## Item 1 — xeokit-sdk commercial license status: no evidence of one, needs an off-repo check
+## Item 1 — xeokit-sdk commercial license status: CONFIRMED — commercial agreement in place
 
-**Nothing in the repository indicates a commercial xeokit-sdk license has been procured.**
-Everything checked points to the plain public AGPLv3 build:
+**Resolved by Pål (2026-08-21): Geminus/SWG holds a commercial xeokit-sdk license.**
+The `public/lib/xeokit/xeokit-sdk.es.js` bundle in this repo was downloaded directly
+from the vendor's (access-gated, commercial-customer) GitHub repository for use in this
+project — it is not the public AGPLv3 distribution. This supersedes the "needs an
+off-repo check" finding below, which is kept for context on what was verifiable from
+the repo alone before this was confirmed.
 
-- `public/lib/xeokit/xeokit-sdk.es.js` (the loaded bundle, v2.6.112) has no license text,
-  no "AGPL" or "commercial" string, and no license-key check anywhere in the file — only
-  a version/build banner at the top. The only license strings inside the 5MB bundle belong
-  to vendored third-party utilities (probe.gl, loaders.gl, pako, meshoptimizer,
-  streaming-iterables, sindresorhus/file-type — all MIT — plus one LGPL notice for a
-  vendored laz-perf module), none of which are xeokit-sdk's own license.
+Everything checked in the repo was consistent with either the AGPLv3 or a commercial
+build (the file itself carries no license banner either way — only a version/build
+banner), so there was no repo-level evidence either confirming or ruling out a
+commercial license:
+- `public/lib/xeokit/xeokit-sdk.es.js` (v2.6.112) has no license text, no "AGPL" or
+  "commercial" string, and no license-key check anywhere in the file. The only license
+  strings inside the 5MB bundle belong to vendored third-party utilities (probe.gl,
+  loaders.gl, pako, meshoptimizer, streaming-iterables, sindresorhus/file-type — all
+  MIT — plus one LGPL notice for a vendored laz-perf module), none of which are
+  xeokit-sdk's own license.
 - `package.json`/lockfiles only reference `@xeokit/xeokit-convert@1.3.1` — a separate,
-  MIT-licensed conversion library, not the AGPL viewer SDK. There is no
-  `@xeokit/xeokit-sdk` entry anywhere.
+  MIT-licensed conversion library, not the viewer SDK. There is no `@xeokit/xeokit-sdk`
+  npm entry anywhere.
 - No `XEOKIT_LICENSE`/`XEOKIT_KEY`/`VITE_XEOKIT_*`-shaped environment variable exists in
   `.env` or anywhere under `supabase/`.
-- `docs/3D_viewer_package.md` never mentions licensing at all.
 
-**This can't be fully resolved from the repo.** Whether Geminus/SWG holds an off-repo
-commercial agreement (a contract or invoice with the xeokit vendor) is a business
-question — someone needs to check outside of code. If no such agreement exists, the
-AGPLv3 network clause is relevant: self-hosting a modified xeokit build and exposing it
-to users can create an obligation to offer the modified source to those users. This
-needs a decision from whoever owns that relationship before more investment goes into
-owning the xeokit integration long-term — I'm not making that call, just surfacing what's
-verifiable.
+**Practical effect of the confirmation:** the AGPLv3 network-clause concern (self-hosting
+a modified build and having to offer source to users) no longer applies — a commercial
+license was procured specifically to avoid that. This doesn't change the technical
+recommendation in Item 2 below (that's a regression-risk question, not a legal one), but
+it does remove the licensing blocker on eventually adopting xeokit-sdk as a proper,
+versioned dependency instead of the current fetch+Blob-URL runtime load.
 
 ## Item 2 — Adopting xeokit-sdk as an npm dependency: feasible for the live path, but not implemented this round
 
