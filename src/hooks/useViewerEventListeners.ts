@@ -699,25 +699,51 @@ export function useViewerEventListeners({
       const viewer = viewerRef.current;
       if (!viewer?.scene || !buildingFmGuid) return;
 
-      // Fetch all work orders for this building via building_cad_key
-      const { data: records } = await supabase
-        .from('faciliate_records')
-        .select('source_guid, title, status, room_cad_key, floor_cad_key')
-        .eq('object_type', 'workorder')
-        .eq('building_cad_key', buildingFmGuid.toLowerCase());
+      // Work orders come from two independent sources that were never cross-referenced
+      // before: faciliate_records (external Faciliate sync, keyed by *_cad_key, assumed
+      // — not verified in code — to be the same GUID scheme as *_fm_guid) and work_orders
+      // (created in-app via CreateWorkOrderDialog/fault-report flows, keyed by the real
+      // *_fm_guid columns). Fetch both and merge into the same per-room marker.
+      const [{ data: records }, { data: localOrders }] = await Promise.all([
+        supabase
+          .from('faciliate_records')
+          .select('source_guid, title, status, room_cad_key, floor_cad_key')
+          .eq('object_type', 'workorder')
+          .eq('building_cad_key', buildingFmGuid.toLowerCase()),
+        supabase
+          .from('work_orders')
+          .select('id, title, status, space_fm_guid, attributes')
+          .eq('building_fm_guid', buildingFmGuid),
+      ]);
 
-      if (!records?.length) return;
+      if (!records?.length && !localOrders?.length) return;
 
-      // Group by room_cad_key, count open vs total
+      // Group by room key, count open vs total
       const rooms = new Map<string, { total: number; open: number; titles: string[]; floor_cad_key: string | null }>();
-      for (const r of records) {
+      const isOpenStatus = (status: string | null) => {
+        const s = (status || '').toLowerCase();
+        return !s.includes('avslut') && !s.includes('closed') && !s.includes('done') && !s.includes('completed') && !s.includes('cancelled');
+      };
+      for (const r of records || []) {
         const key = r.room_cad_key || '__no_room__';
         if (!rooms.has(key)) rooms.set(key, { total: 0, open: 0, titles: [], floor_cad_key: r.floor_cad_key || null });
         const entry = rooms.get(key)!;
         entry.total++;
-        const s = (r.status || '').toLowerCase();
-        if (!s.includes('avslut') && !s.includes('closed') && !s.includes('done')) entry.open++;
+        if (isOpenStatus(r.status)) entry.open++;
         if (entry.titles.length < 3) entry.titles.push(r.title || '');
+      }
+      for (const r of localOrders || []) {
+        const key = (r.space_fm_guid || '__no_room__').toLowerCase();
+        if (!rooms.has(key)) rooms.set(key, { total: 0, open: 0, titles: [], floor_cad_key: null });
+        const entry = rooms.get(key)!;
+        entry.total++;
+        if (isOpenStatus(r.status)) entry.open++;
+        if (entry.titles.length < 3) entry.titles.push(r.title || '');
+        // work_orders has no dedicated floor column — CreateWorkOrderDialog stashes it in
+        // attributes.level_fm_guid when known. Only fill in floor_cad_key if this room
+        // doesn't already have one from faciliate_records (which does have a real column).
+        const levelFmGuid = (r.attributes as { level_fm_guid?: string } | null)?.level_fm_guid;
+        if (!entry.floor_cad_key && levelFmGuid) entry.floor_cad_key = levelFmGuid;
       }
 
       const canvas = viewer.scene.canvas?.canvas;

@@ -27,23 +27,28 @@ import { useLanguage } from '@/context/LanguageContext';
 import { toast } from 'sonner';
 
 
-// Helper for deterministic pseudo-random based on string
+// Helper for deterministic pseudo-random based on string — still used for the metrics
+// below that have no real data source anywhere in the app (planned maintenance count,
+// SLA compliance, monthly cost: not columns on work_orders or any other table).
 const hashString = (str: string) => {
     return str.split('').reduce((a, c) => a + c.charCodeAt(0), 0);
 };
 
 // Truncate name for chart display
-const truncateName = (name: string, maxLen = 12) => 
+const truncateName = (name: string, maxLen = 12) =>
     name.length > maxLen ? name.substring(0, maxLen) + '...' : name;
 
-// Work order status types
+// Work order status/priority types
 type WorkOrderStatus = 'open' | 'in_progress' | 'pending' | 'completed' | 'cancelled';
+type WorkOrderPriority = 'low' | 'medium' | 'high' | 'critical';
+const KNOWN_STATUSES: ReadonlySet<string> = new Set(['open', 'in_progress', 'pending', 'completed', 'cancelled']);
+const KNOWN_PRIORITIES: ReadonlySet<string> = new Set(['low', 'medium', 'high', 'critical']);
 
-interface MockWorkOrder {
+interface WorkOrder {
     id: string;
     title: string;
     status: WorkOrderStatus;
-    priority: 'low' | 'medium' | 'high' | 'critical';
+    priority: WorkOrderPriority;
     category: string;
     buildingName: string;
     buildingFmGuid: string;
@@ -52,50 +57,42 @@ interface MockWorkOrder {
     assignedTo: string;
 }
 
-// Generate mock work orders for demo
-const generateMockWorkOrders = (buildings: any[]): MockWorkOrder[] => {
-    const categories = ['HVAC', 'Electrical', 'Elevator', 'Doors/Locks', 'Ventilation', 'Cleaning', 'Other'];
-    const statuses: WorkOrderStatus[] = ['open', 'in_progress', 'pending', 'completed', 'cancelled'];
-    const priorities: MockWorkOrder['priority'][] = ['low', 'medium', 'high', 'critical'];
-    const assignees = ['Johan A.', 'Maria B.', 'Erik C.', 'Anna D.', 'Olof E.'];
-    const titles = [
-        'Roof leak', 'Broken door', 'Elevator malfunction', 'Heating issue',
-        'Lights out', 'Ventilation noise', 'Lock problem', 'Faucet leak',
-        'Floor wear', 'Moisture damage', 'Window broken', 'Electrical fault', 'AC not working'
-    ];
+interface WorkOrderRow {
+    id: string;
+    external_id: string | null;
+    title: string | null;
+    status: string | null;
+    priority: string | null;
+    category: string | null;
+    building_fm_guid: string | null;
+    building_name: string | null;
+    reported_at: string | null;
+    due_date: string | null;
+    assigned_to: string | null;
+    created_at: string;
+}
 
-    const orders: MockWorkOrder[] = [];
-    
-    buildings.forEach(building => {
-        const hash = hashString(building.fmGuid || building.name || '');
-        const orderCount = 2 + (hash % 6);
-        
-        for (let i = 0; i < orderCount; i++) {
-            const seed = hash + i * 17;
-            const daysAgo = seed % 30;
-            const reportedDate = new Date();
-            reportedDate.setDate(reportedDate.getDate() - daysAgo);
-            
-            const dueDate = new Date(reportedDate);
-            dueDate.setDate(dueDate.getDate() + 7 + (seed % 14));
-            
-            orders.push({
-                id: `WO-${1000 + orders.length}`,
-                title: titles[seed % titles.length],
-                status: statuses[seed % statuses.length],
-                priority: priorities[(seed + i) % priorities.length],
-                category: categories[seed % categories.length],
-                buildingName: building.commonName || building.name || 'Unknown building',
-                buildingFmGuid: building.fmGuid,
-                reportedAt: reportedDate.toISOString().split('T')[0],
-                dueDate: dueDate.toISOString().split('T')[0],
-                assignedTo: assignees[seed % assignees.length],
-            });
-        }
-    });
-    
-    return orders;
-};
+/** Map a raw work_orders row to the shape the charts/table below consume. Falls back
+ *  sensibly for fields real rows don't always have set (e.g. every row created via
+ *  CreateWorkOrderDialog today has status='open' — there's no in-app workflow yet to
+ *  transition it, so anything unrecognized still needs a safe default rather than
+ *  crashing statusConfig/priorityConfig lookups). */
+function mapWorkOrderRow(row: WorkOrderRow, buildingNameByGuid: Map<string, string>): WorkOrder {
+    const status = KNOWN_STATUSES.has(row.status || '') ? (row.status as WorkOrderStatus) : 'open';
+    const priority = KNOWN_PRIORITIES.has(row.priority || '') ? (row.priority as WorkOrderPriority) : 'medium';
+    return {
+        id: row.external_id || row.id,
+        title: row.title || 'Untitled',
+        status,
+        priority,
+        category: row.category || 'Other',
+        buildingName: row.building_name || buildingNameByGuid.get(row.building_fm_guid || '') || 'Unknown building',
+        buildingFmGuid: row.building_fm_guid || '',
+        reportedAt: (row.reported_at || row.created_at || '').slice(0, 10),
+        dueDate: row.due_date ? row.due_date.slice(0, 10) : null,
+        assignedTo: row.assigned_to || 'Unassigned',
+    };
+}
 
 // Status colors and labels
 const statusConfig: Record<WorkOrderStatus, { label: string; color: string; bgClass: string }> = {
@@ -106,7 +103,7 @@ const statusConfig: Record<WorkOrderStatus, { label: string; color: string; bgCl
     cancelled: { label: 'Cancelled', color: 'text-gray-500', bgClass: 'bg-gray-100 dark:bg-gray-800' },
 };
 
-const priorityConfig: Record<MockWorkOrder['priority'], { label: string; color: string }> = {
+const priorityConfig: Record<WorkOrderPriority, { label: string; color: string }> = {
     low: { label: 'Low', color: 'text-gray-500' },
     medium: { label: 'Medium', color: 'text-blue-500' },
     high: { label: 'High', color: 'text-orange-500' },
@@ -151,10 +148,38 @@ export default function FacilityManagementTab() {
         fetchAlarmCounts();
     }, []);
 
-    // Generate mock work orders
-    const workOrders = useMemo(() => {
-        return generateMockWorkOrders(navigatorTreeData);
+    // Real work orders (created in-app via CreateWorkOrderDialog / fault-report flows).
+    // Previously this whole tab ran on generateMockWorkOrders() — none of it was real.
+    const [workOrderRows, setWorkOrderRows] = useState<WorkOrderRow[]>([]);
+    useEffect(() => {
+        const fetchWorkOrders = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('work_orders')
+                    .select('id, external_id, title, status, priority, category, building_fm_guid, building_name, reported_at, due_date, assigned_to, created_at')
+                    .order('created_at', { ascending: false })
+                    .limit(2000);
+                if (error) throw error;
+                setWorkOrderRows(data || []);
+            } catch (e) {
+                console.error('Failed to fetch work orders:', e);
+                toast.error('Failed to load work orders', { description: e instanceof Error ? e.message : String(e) });
+            }
+        };
+        fetchWorkOrders();
+    }, []);
+
+    const buildingNameByGuid = useMemo(() => {
+        const map = new Map<string, string>();
+        navigatorTreeData.forEach((b) => {
+            if (b.fmGuid) map.set(b.fmGuid, b.commonName || b.name || 'Unknown building');
+        });
+        return map;
     }, [navigatorTreeData]);
+
+    const workOrders = useMemo(() => {
+        return workOrderRows.map(row => mapWorkOrderRow(row, buildingNameByGuid));
+    }, [workOrderRows, buildingNameByGuid]);
 
     // Work order status distribution for bar chart
     const statusData = useMemo(() => {
@@ -436,7 +461,7 @@ export default function FacilityManagementTab() {
                         <Building2 className="h-4 w-4 text-primary" />
                         Property Overview
                     </CardTitle>
-                    <CardDescription>FM status per building</CardDescription>
+                    <CardDescription>{t('Aktiva/klara från riktiga arbetsordrar — Planerat/SLA/Kostnad är uppskattningar (ingen datakälla ännu)', 'Active/Completed are real work orders — Planned/SLA/Cost are estimates (no data source yet)')}</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="overflow-x-auto">
