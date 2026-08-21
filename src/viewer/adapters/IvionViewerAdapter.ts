@@ -9,7 +9,18 @@
  * limitation — Phase 1 doesn't add iframe-mode adapter support, since the iframe has
  * no programmatic read API to poll).
  *
- * Annotation/selection methods are stubs in Phase 1, same as XeokitViewerAdapter.
+ * showAnnotation/removeAnnotation: Ivion POIs are created/updated server-side (the
+ * viewer-annotations Edge Function calling ivion-poi's sync-asset) — the actual POI
+ * data lives in NavVis, not something this client-side adapter pushes directly. NavVis
+ * IVION's own UI renders POIs it already knows about; what these methods can actually
+ * do is nudge the SDK to reload its POI layer so a just-changed POI shows up
+ * immediately rather than waiting for whatever refresh interval the SDK uses
+ * internally. Del A.3 (docs/plans/viewer-coordinator-spec-and-prompts.md) confirms
+ * `getPoiLayer()` exists on the IVION Frontend API but doesn't document a reload
+ * method on it — the method names tried below (`reload`/`refresh`/`update`) are a
+ * best-effort GUESS, each attempted and swallowed independently, since the actual
+ * NavVis IVION SDK documentation doesn't specify one. If none exist, this is a no-op
+ * and the POI still appears whenever the SDK's own refresh cycle picks it up.
  */
 
 import type {
@@ -29,9 +40,11 @@ import {
   type PoseTransform,
 } from '../SpatialReferenceService';
 import { findNearestCandidate, type SpatialCandidate } from '../nearestImage';
+import { subscribeToBuildingAnnotations } from '../annotationsRealtime';
 import { logger } from '@/lib/logger';
 
 const POLL_INTERVAL_MS = 200;
+const POI_LAYER_RELOAD_METHODS = ['reload', 'refresh', 'update'] as const;
 
 export interface IvionViewerAdapterOptions {
   buildingFmGuid: string;
@@ -51,6 +64,7 @@ export class IvionViewerAdapter implements SpatialViewerAdapter {
   private povUnsubscribe: (() => void) | void | undefined;
   private lastImageId: number | null = null;
   private lastLon: number | null = null;
+  private unsubscribeRealtime: (() => void) | null = null;
 
   constructor(options: IvionViewerAdapterOptions) {
     this.opts = options;
@@ -66,6 +80,28 @@ export class IvionViewerAdapter implements SpatialViewerAdapter {
       }
     } catch {
       // pov.onChange not available on this SDK build — polling alone still works.
+    }
+
+    this.unsubscribeRealtime = subscribeToBuildingAnnotations(this.opts.buildingFmGuid, () => {
+      this.reloadPoiLayer();
+    });
+  }
+
+  /** Best-effort nudge — see the class-level doc comment for why this is a guess. */
+  private reloadPoiLayer(): void {
+    const api = this.opts.getApi();
+    const poiLayer = (api as unknown as { getPoiLayer?: () => Record<string, unknown> } | null)?.getPoiLayer?.();
+    if (!poiLayer) return;
+    for (const method of POI_LAYER_RELOAD_METHODS) {
+      const fn = poiLayer[method];
+      if (typeof fn === 'function') {
+        try {
+          (fn as () => void).call(poiLayer);
+          return;
+        } catch (e) {
+          logger.debug(`[IvionViewerAdapter] getPoiLayer().${method}() failed:`, e);
+        }
+      }
     }
   }
 
@@ -165,15 +201,18 @@ export class IvionViewerAdapter implements SpatialViewerAdapter {
   }
 
   async selectEntity(_selection: ViewerSelection): Promise<void> {
-    logger.debug('[IvionViewerAdapter] selectEntity not implemented until Phase 2');
+    logger.debug('[IvionViewerAdapter] selectEntity not implemented — out of scope for Phase 2');
   }
 
   async showAnnotation(_annotation: ViewerAnnotation): Promise<void> {
-    logger.debug('[IvionViewerAdapter] showAnnotation not implemented until Phase 2');
+    // The POI itself is created/updated server-side before this is ever called
+    // (viewer-annotations -> ivion-poi sync-asset) — this just asks the SDK to
+    // re-fetch its POI layer so it shows up without waiting for the SDK's own cycle.
+    this.reloadPoiLayer();
   }
 
   async removeAnnotation(_assetFmGuid: string): Promise<void> {
-    logger.debug('[IvionViewerAdapter] removeAnnotation not implemented until Phase 2');
+    this.reloadPoiLayer();
   }
 
   onPoseChanged(cb: (pose: SpatialPose) => void): () => void {
@@ -197,5 +236,10 @@ export class IvionViewerAdapter implements SpatialViewerAdapter {
     if (typeof this.povUnsubscribe === 'function') this.povUnsubscribe();
     this.povUnsubscribe = undefined;
     this.poseListeners.clear();
+
+    if (this.unsubscribeRealtime) {
+      this.unsubscribeRealtime();
+      this.unsubscribeRealtime = null;
+    }
   }
 }
