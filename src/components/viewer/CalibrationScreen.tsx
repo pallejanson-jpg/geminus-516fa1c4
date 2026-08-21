@@ -7,10 +7,12 @@
  * shared so both components use identical ray math) but collects 2+ point pairs
  * instead of one, fits a similarity transform (rotation + uniform scale + XYZ
  * translation) via src/viewer/calibration.ts, shows the RMS residual in mm before
- * saving, and — unlike AlignmentPanel's manual sliders, which still write directly to
- * building_settings — saves as a NEW versioned row in spatial_transforms via the
- * viewer-annotations Edge Function's save-spatial-transform action. It never
- * overwrites an existing version.
+ * saving, and — like AlignmentPanel's manual sliders — saves as a NEW versioned row
+ * in spatial_transforms via the viewer-annotations Edge Function's
+ * save-spatial-transform action. It never overwrites an existing version.
+ *
+ * Split mode only: VT mode has no second clickable viewport to pick point pairs in
+ * (see AlignmentPanel.tsx's doc comment), so it uses the manual sliders exclusively.
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';

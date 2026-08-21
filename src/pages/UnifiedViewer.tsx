@@ -940,13 +940,19 @@ const UnifiedViewerContent: React.FC<{
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost" size="icon"
-                  className={`text-white hover:bg-white/20 h-8 w-8 ${showAlignment ? 'bg-white/20' : ''}`}
-                  onClick={() => setShowAlignment(!showAlignment)}
+                  className={`text-white hover:bg-white/20 h-8 w-8 ${(showAlignment || showCalibrationScreen) ? 'bg-white/20' : ''}`}
+                  onClick={() => {
+                    // Split mode has a real dual-viewport for multi-point picking;
+                    // VT mode overlays a single combined view with nothing else to
+                    // click into, so it only ever gets the manual sliders.
+                    if (isSplitMode) setShowCalibrationScreen((v) => !v);
+                    else setShowAlignment((v) => !v);
+                  }}
                 >
                   <Move3D className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Alignment calibration</TooltipContent>
+              <TooltipContent>{isSplitMode ? 'Multi-point calibration' : 'Alignment calibration'}</TooltipContent>
             </Tooltip>
           )}
 
@@ -1120,15 +1126,20 @@ const UnifiedViewerContent: React.FC<{
               size="sm"
               variant="outline"
               className="h-6 text-2xs shrink-0"
-              onClick={() => setShowCalibrationScreen(true)}
+              onClick={() => (isSplitMode ? setShowCalibrationScreen(true) : setShowAlignment(true))}
             >
               Calibrate
             </Button>
           </div>
         )}
 
-        {/* Alignment panel overlay */}
-        {showAlignment && (
+        {/* Manual alignment panel — VT mode only. Split mode has the multi-point
+            CalibrationScreen below instead, which is strictly more capable (2+ points,
+            real residual error, actually persists as a new spatial_transforms version)
+            wherever a second, clickable viewport exists to make multi-point picking
+            possible. VT mode overlays a single combined view with no such second
+            viewport, so manual sliders are the only alignment tool it can have. */}
+        {showAlignment && !isSplitMode && (
           <div className="absolute top-2 left-4 z-50 space-y-2">
             <AlignmentPanel
               transform={transform}
@@ -1137,19 +1148,7 @@ const UnifiedViewerContent: React.FC<{
               onSaved={() => setShowAlignment(false)}
               showCrosshair={showCrosshair}
               onToggleCrosshair={setShowCrosshair}
-              ivApiRef={isSplitMode ? ivApiRef : undefined}
-              canPointPick={isSplitMode && sdkStatus === 'ready'}
             />
-            {isSplitMode && sdkStatus === 'ready' && !showCalibrationScreen && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full h-7 text-xs"
-                onClick={() => setShowCalibrationScreen(true)}
-              >
-                Advanced: multi-point calibration
-              </Button>
-            )}
           </div>
         )}
 

@@ -1,13 +1,21 @@
 /**
- * Alignment calibration panel for Virtual Twin mode.
- * 
- * Provides coarse + fine sliders for real-time adjustment of the Ivion-to-BIM
- * transform (offset X/Y/Z and rotation). Changes are applied live and can be
- * saved to the database per building.
+ * Manual alignment panel — Virtual Twin mode ONLY.
+ *
+ * VT mode overlays the 3D model directly on the 360° panorama as one combined view
+ * (see UnifiedViewer.tsx) — there's no second, clickable viewport to pick corresponding
+ * points in, so it can't use the multi-point CalibrationScreen the way Split mode does.
+ * These coarse + fine sliders (live preview via onChange, applied immediately to the
+ * shared transform) are the only alignment tool VT mode has.
+ *
+ * Save/Reset both push a NEW version to spatial_transforms (never overwrite an existing
+ * one, same rule CalibrationScreen follows) — this used to write to
+ * building_settings.ivion_bim_offset_x/y/z/rotation directly, which stopped being read
+ * once every building got a spatial_transforms row (Phase 2's migration), so it silently
+ * stopped persisting anything. This fixes that.
  */
 
 import React, { useState, useCallback } from 'react';
-import { Save, RotateCcw, Move3D, ChevronDown, ChevronUp, Minus, Plus, Info, Crosshair, Trash2 } from 'lucide-react';
+import { Save, RotateCcw, Move3D, ChevronDown, ChevronUp, Minus, Plus, Info, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
@@ -17,7 +25,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import type { IvionBimTransform } from '@/lib/ivion-bim-transform';
-import AlignmentPointPicker from './AlignmentPointPicker';
+import { buildOffsetRotationTransform } from '@/viewer/SpatialReferenceService';
 
 interface AlignmentPanelProps {
   /** Current transform values */
@@ -32,10 +40,6 @@ interface AlignmentPanelProps {
   showCrosshair?: boolean;
   /** Toggle crosshair overlay */
   onToggleCrosshair?: (show: boolean) => void;
-  /** Ivion API ref for point-picking (optional, only in split mode) */
-  ivApiRef?: React.MutableRefObject<any>;
-  /** Whether point-picking is available (split mode with SDK ready) */
-  canPointPick?: boolean;
 }
 
 const COARSE_OFFSET_RANGE = 100; // ±100m
@@ -45,6 +49,21 @@ const FINE_OFFSET_STEP = 0.01;
 const NUDGE_OFFSET = 0.05;      // m
 const NUDGE_ROTATION = 0.5;     // °
 
+async function saveTransformVersion(buildingFmGuid: string, transform: IvionBimTransform): Promise<void> {
+  const matrix4x4 = buildOffsetRotationTransform(
+    transform.offsetX,
+    transform.offsetY,
+    transform.offsetZ,
+    transform.rotation,
+  ).toMatrix();
+  const { data, error } = await supabase.functions.invoke('viewer-annotations', {
+    body: { action: 'save-spatial-transform', buildingFmGuid, matrix4x4 },
+  });
+  if (error || !data?.success) {
+    throw new Error(data?.error || error?.message || 'Unknown error');
+  }
+}
+
 const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
   transform,
   onChange,
@@ -52,14 +71,10 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
   onSaved,
   showCrosshair,
   onToggleCrosshair,
-  ivApiRef,
-  canPointPick,
 }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [fineOpen, setFineOpen] = useState(false);
-  const [manualOpen, setManualOpen] = useState(false);
-  const [showPointPicker, setShowPointPicker] = useState(false);
 
   const updateField = useCallback(
     (field: keyof IvionBimTransform, value: number) => {
@@ -80,27 +95,11 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
     onChange({ offsetX: 0, offsetY: 0, offsetZ: 0, rotation: 0 });
   }, [onChange]);
 
-  const handlePointPickOffsets = useCallback((offsets: { offsetX: number; offsetY: number; offsetZ: number }) => {
-    onChange({ ...transform, ...offsets });
-    setShowPointPicker(false);
-  }, [transform, onChange]);
-
   const handleSave = useCallback(async () => {
     setIsSaving(true);
     try {
-      const { error } = await supabase
-        .from('building_settings')
-        .update({
-          ivion_bim_offset_x: transform.offsetX,
-          ivion_bim_offset_y: transform.offsetY,
-          ivion_bim_offset_z: transform.offsetZ,
-          ivion_bim_rotation: transform.rotation,
-        })
-        .eq('fm_guid', buildingFmGuid);
-
-      if (error) throw error;
-
-      toast.success('Alignment saved');
+      await saveTransformVersion(buildingFmGuid, transform);
+      toast.success('Alignment saved', { description: 'Reload the view to use the new calibration.' });
       onSaved?.();
     } catch (err: any) {
       console.error('Failed to save alignment:', err);
@@ -113,23 +112,14 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
   const handleDelete = useCallback(async () => {
     setIsDeleting(true);
     try {
-      const { error } = await supabase
-        .from('building_settings')
-        .update({
-          ivion_bim_offset_x: 0,
-          ivion_bim_offset_y: 0,
-          ivion_bim_offset_z: 0,
-          ivion_bim_rotation: 0,
-        })
-        .eq('fm_guid', buildingFmGuid);
-
-      if (error) throw error;
-
+      // spatial_transforms is versioned and append-only — "removing" an alignment means
+      // saving a new identity-matrix version, not deleting history.
+      await saveTransformVersion(buildingFmGuid, { offsetX: 0, offsetY: 0, offsetZ: 0, rotation: 0 });
       onChange({ offsetX: 0, offsetY: 0, offsetZ: 0, rotation: 0 });
-      toast.success('Alignment removed');
+      toast.success('Alignment removed', { description: 'Reload the view to apply.' });
       onSaved?.();
     } catch (err: any) {
-      console.error('Failed to delete alignment:', err);
+      console.error('Failed to remove alignment:', err);
       toast.error('Could not remove alignment', { description: err.message });
     } finally {
       setIsDeleting(false);
@@ -155,7 +145,7 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
               <AlertDialogHeader>
                  <AlertDialogTitle>Remove alignment?</AlertDialogTitle>
                  <AlertDialogDescription>
-                   Existing calibration will be deleted from the database. You can then perform a new point calibration.
+                   This saves a new identity-transform version, resetting offset and rotation to zero. Earlier versions stay in history.
                  </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
@@ -184,53 +174,12 @@ const AlignmentPanel: React.FC<AlignmentPanelProps> = ({
       <div className="flex gap-2 bg-muted/50 rounded-md p-2.5">
         <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0 mt-0.5" />
         <p className="text-2xs text-muted-foreground leading-relaxed">
-          Use point calibration to match 360° and 3D. Click the same point in both views.
+          Manual sliders — nudge offset/rotation until the model lines up with the panorama.
         </p>
       </div>
 
-      {/* Point-pick button (split mode only) */}
-      {canPointPick && ivApiRef && !showPointPicker && (
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full h-7 text-xs gap-1.5"
-          onClick={() => setShowPointPicker(true)}
-        >
-          <Crosshair className="h-3 w-3" />
-          Point calibration (360° → 3D)
-        </Button>
-      )}
-
-      {/* Point picker UI */}
-      {showPointPicker && ivApiRef && (
-        <AlignmentPointPicker
-          transform={transform}
-          ivApiRef={ivApiRef}
-          onOffsetsCalculated={handlePointPickOffsets}
-          onClose={() => setShowPointPicker(false)}
-        />
-      )}
-
-      {/* Manual controls — collapsed by default when point-pick is available */}
-      {canPointPick ? (
-        <Collapsible open={manualOpen} onOpenChange={setManualOpen}>
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="sm" className="w-full justify-between h-7 text-xs text-muted-foreground hover:text-foreground px-1">
-              Avancerat / Manuella reglage
-              {manualOpen ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-2.5 pt-2">
-            <CoarseSliders transform={transform} updateField={updateField} nudge={nudge} />
-            <FineSection transform={transform} updateField={updateField} nudge={nudge} fineOpen={fineOpen} setFineOpen={setFineOpen} />
-          </CollapsibleContent>
-        </Collapsible>
-      ) : (
-        <>
-          <CoarseSliders transform={transform} updateField={updateField} nudge={nudge} />
-          <FineSection transform={transform} updateField={updateField} nudge={nudge} fineOpen={fineOpen} setFineOpen={setFineOpen} />
-        </>
-      )}
+      <CoarseSliders transform={transform} updateField={updateField} nudge={nudge} />
+      <FineSection transform={transform} updateField={updateField} nudge={nudge} fineOpen={fineOpen} setFineOpen={setFineOpen} />
 
       {/* Crosshair toggle */}
       {onToggleCrosshair && (
