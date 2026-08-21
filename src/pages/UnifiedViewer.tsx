@@ -27,7 +27,7 @@ import GeminusBase2DPanel from '@/components/viewer/GeminusBase2DPanel';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { ViewerSyncProvider, useViewerSync, type LocalCoords } from '@/context/ViewerSyncContext';
+import { ViewerSyncProvider, useViewerSync, type LocalCoords } from '@/viewer/ViewerCoordinatorSyncContext';
 import NativeViewerShell from '@/components/viewer/NativeViewerShell';
 
 const GeminusPlusViewer = React.lazy(() => import('@/components/viewer/GeminusPlusViewer'));
@@ -618,6 +618,7 @@ const UnifiedViewerContent: React.FC<{
     ivionSiteId: buildingData?.ivionSiteId || '',
     buildingFmGuid: buildingData?.fmGuid,
     buildingTransform: transform,
+    currentFloorFmGuid: floorFmGuid,
   });
 
   const [sync3DPosition, setSync3DPosition] = useState<LocalCoords | null>(null);

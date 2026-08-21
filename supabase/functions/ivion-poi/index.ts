@@ -323,24 +323,19 @@ async function syncAssetToPoi(assetFmGuid: string): Promise<{ success: boolean; 
   }
   
   const siteId = buildingSettings.ivion_site_id;
-  
-  // If asset already has a POI ID, we'd update instead of create
-  // For now, just create new POIs
-  if (asset.ivion_poi_id) {
-    return { success: true, poiId: asset.ivion_poi_id, message: 'Asset already synced' };
-  }
-  
-  // Get default POI type for this site
-  const poiTypeId = await getDefaultPoiTypeId(siteId);
-  
+  const existingPoiId: number | null = asset.ivion_poi_id ?? null;
+
   // Get display name with intelligent fallbacks
   const displayName = asset.name || asset.common_name || formatAssetTypeName(asset.asset_type) || 'Unnamed';
-  
-  // Build POI data with all required Ivion fields
+
+  // Fields shared by both create and update. Deliberately does NOT include
+  // poiTypeId/security/visibilityCheck/importance here — those are "required on
+  // create" fields that updatePoi() merges on top of the POI's EXISTING values via
+  // `{...existing, ...updates}`. Including them (even as `undefined`) would be an
+  // own-enumerable-property in the spread and would clobber the existing POI's type.
   const poiData: Partial<IvionPoi> = {
     titles: { sv: displayName },
     descriptions: { sv: (asset.attributes as any)?.description || '' },
-    // Required: scsLocation as GeoJSON Point
     scsLocation: {
       type: 'Point',
       coordinates: [
@@ -349,29 +344,33 @@ async function syncAssetToPoi(assetFmGuid: string): Promise<{ success: boolean; 
         asset.coordinate_z || 0,
       ],
     },
-    // Required: scsOrientation quaternion
     scsOrientation: { x: 0, y: 0, z: 0, w: 1 },
-    // Required: poiTypeId
-    poiTypeId,
-    // Required: security permissions (0 = public/all users)
-    security: {
-      groupRead: 0,
-      groupWrite: 0,
-    },
-    // Required: visibilityCheck
-    visibilityCheck: false,
-    importance: 1,
     customData: JSON.stringify({
       fm_guid: asset.fm_guid,
       asset_type: asset.asset_type,
       source: 'geminus',
     }),
   };
-  
+
   try {
-    const createdPoi = await createPoi(siteId, poiData);
-    
-    // Update asset with POI ID
+    if (existingPoiId) {
+      const updatedPoi = await updatePoi(siteId, existingPoiId, poiData);
+      await supabase
+        .from('assets')
+        .update({ ivion_synced_at: new Date().toISOString() })
+        .eq('fm_guid', assetFmGuid);
+      return { success: true, poiId: updatedPoi.id ?? existingPoiId };
+    }
+
+    const poiTypeId = await getDefaultPoiTypeId(siteId);
+    const createdPoi = await createPoi(siteId, {
+      ...poiData,
+      poiTypeId,
+      security: { groupRead: 0, groupWrite: 0 },
+      visibilityCheck: false,
+      importance: 1,
+    });
+
     await supabase
       .from('assets')
       .update({
@@ -380,7 +379,7 @@ async function syncAssetToPoi(assetFmGuid: string): Promise<{ success: boolean; 
         ivion_synced_at: new Date().toISOString(),
       })
       .eq('fm_guid', assetFmGuid);
-    
+
     return { success: true, poiId: createdPoi.id };
   } catch (error: any) {
     return { success: false, message: error.message };

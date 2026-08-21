@@ -5,7 +5,6 @@ import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { emit } from '@/lib/event-bus';
 import { useLanguage } from '@/context/LanguageContext';
-import { logger } from '@/lib/logger';
 
 interface AnnotationCategory {
   category: string;       // Internal key (asset_type)
@@ -16,12 +15,10 @@ interface AnnotationCategory {
 }
 
 interface AnnotationCategoryListProps {
-  viewerRef: React.MutableRefObject<any>;
   buildingFmGuid?: string;
 }
 
 const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
-  viewerRef,
   buildingFmGuid,
 }) => {
   const { t } = useLanguage();
@@ -36,7 +33,7 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
         .from('assets')
         .select('asset_type, symbol_id')
         .eq('building_fm_guid', buildingFmGuid)
-        .or('annotation_placed.eq.true,asset_type.eq.IfcAlarm');
+        .not('symbol_id', 'is', null);
 
       const { data: symbols } = await supabase
         .from('annotation_symbols')
@@ -75,6 +72,12 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
     fetchCategories();
   }, [buildingFmGuid]);
 
+  // Actual marker rendering/visibility lives in useViewerEventListeners.ts's
+  // TOGGLE_ANNOTATIONS handler (DOM-positioned markers on the live NativeXeokitViewer) —
+  // this component only decides which categories should be visible and emits that.
+  // A previous version of this file also reached into a `localAnnotationsPlugin` on
+  // the viewer ref, but that plugin is never actually attached to the live viewer
+  // (see docs/viewer-current-state-verified.md); that dead code has been removed.
   const handleToggleCategory = useCallback((category: string) => {
     setCategories(prev => {
       const updated = prev.map(c => {
@@ -83,37 +86,20 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
         }
         return c;
       });
-      
+
       const visibleCats = updated.filter(c => c.visible).map(c => c.category);
       emit('TOGGLE_ANNOTATIONS', {
         show: visibleCats.length > 0, visibleCategories: visibleCats,
       });
-      
-      try {
-        const localPlugin = viewerRef.current?.localAnnotationsPlugin;
-        if (localPlugin?.annotations) {
-          const targetCat = updated.find(c => c.category === category);
-          Object.values(localPlugin.annotations).forEach((annotation: any) => {
-            if (annotation.category === category) {
-              annotation.markerShown = targetCat?.visible ?? true;
-              if (annotation.markerElement) {
-                annotation.markerElement.style.display = (targetCat?.visible ?? true) ? 'flex' : 'none';
-              }
-            }
-          });
-        }
-      } catch (e) {
-        logger.debug('Could not toggle local annotations:', e);
-      }
 
       return updated;
     });
-  }, [viewerRef]);
+  }, []);
 
   const handleToggleAll = useCallback(() => {
     const newVisible = !allVisible;
     setAllVisible(newVisible);
-    
+
     setCategories(prev => {
       const updated = prev.map(c => ({ ...c, visible: newVisible }));
       const visibleCats = newVisible ? updated.map(c => c.category) : [];
@@ -122,21 +108,7 @@ const AnnotationCategoryList: React.FC<AnnotationCategoryListProps> = ({
       });
       return updated;
     });
-    
-    try {
-      const localPlugin = viewerRef.current?.localAnnotationsPlugin;
-      if (localPlugin?.annotations) {
-        Object.values(localPlugin.annotations).forEach((annotation: any) => {
-          annotation.markerShown = newVisible;
-          if (annotation.markerElement) {
-            annotation.markerElement.style.display = newVisible ? 'flex' : 'none';
-          }
-        });
-      }
-    } catch (e) {
-      logger.debug('Could not toggle all local annotations:', e);
-    }
-  }, [allVisible, viewerRef]);
+  }, [allVisible]);
 
   if (categories.length === 0) {
     return (

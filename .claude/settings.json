@@ -26,7 +26,17 @@
       "mcp__geminus__get_room_sensor_data",
       "mcp__geminus__list_attribute_keys",
       "mcp__geminus__query_faciliate",
-      "Bash(where *)"
+      "Bash(where *)",
+      "Bash(npm run build)",
+      "mcp__Claude_Browser__read_page",
+      "mcp__Claude_Browser__read_console_messages",
+      "mcp__Claude_Browser__get_page_text",
+      "mcp__Claude_Browser__read_network_requests",
+      "mcp__Claude_Browser__preview_logs",
+      "mcp__Claude_Browser__preview_list",
+      "mcp__Claude_Browser__tabs_context",
+      "mcp__claude-in-chrome__read_console_messages",
+      "mcp__claude-in-chrome__list_connected_browsers"
     ]
   },
   "hooks": {

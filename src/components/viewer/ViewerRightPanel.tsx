@@ -645,7 +645,7 @@ const ViewerRightPanel: React.FC<ViewerRightPanelProps> = ({
                       </div>
                       <CollapsibleContent>
                         <div className="pl-8 pt-1">
-                          <AnnotationCategoryList viewerRef={viewerRef} buildingFmGuid={buildingFmGuid} />
+                          <AnnotationCategoryList buildingFmGuid={buildingFmGuid} />
                         </div>
                       </CollapsibleContent>
                     </Collapsible>

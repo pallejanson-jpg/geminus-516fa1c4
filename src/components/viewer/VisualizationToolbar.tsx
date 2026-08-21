@@ -1388,7 +1388,6 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
             parentWidth={panelWidth}
           >
             <AnnotationCategoryList
-              viewerRef={viewerRef}
               buildingFmGuid={buildingFmGuid}
             />
           </SidePopPanel>
@@ -1474,7 +1473,7 @@ const VisualizationToolbar: React.FC<VisualizationToolbarProps> = (props) => {
               parentPosition={position}
               parentWidth={panelWidth}
             >
-              <AnnotationCategoryList viewerRef={viewerRef} buildingFmGuid={buildingFmGuid} />
+              <AnnotationCategoryList buildingFmGuid={buildingFmGuid} />
             </SidePopPanel>
 
 

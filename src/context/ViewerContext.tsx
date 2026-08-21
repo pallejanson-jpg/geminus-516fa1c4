@@ -1,4 +1,6 @@
 import React, { createContext, useState, useCallback, useContext, ReactNode } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 // Asset registration context for the 3D-assisted registration flow
 export interface AssetRegistrationContext {
@@ -174,9 +176,46 @@ export const ViewerProvider: React.FC<ViewerProviderProps> = ({ children, active
     setActiveApp('native_viewer');
   }, [activeApp, setActiveApp]);
 
-  const completeAnnotationPlacement = useCallback((_coordinates: { x: number; y: number; z: number }) => {
+  const completeAnnotationPlacement = useCallback((coordinates: { x: number; y: number; z: number }) => {
+    const context = annotationPlacementContext;
     setAnnotationPlacementContext(null);
-  }, []);
+    if (!context) return;
+
+    const { asset, buildingFmGuid } = context;
+    const assetFmGuid = asset?.fm_guid;
+    const symbolId = asset?.symbol_id;
+    if (!assetFmGuid) {
+      logger.warn('[ViewerContext] completeAnnotationPlacement: asset has no fm_guid, cannot save position');
+      return;
+    }
+    if (!symbolId) {
+      // symbol_id IS NOT NULL is the single source of truth for "shown as an
+      // annotation" (Phase 2) — an asset with no symbol yet can't become one just
+      // by placing a point. This flow doesn't have a symbol picker; it can only
+      // place assets that are already classified.
+      logger.warn('[ViewerContext] completeAnnotationPlacement: asset has no symbol_id, skipping save', assetFmGuid);
+      return;
+    }
+
+    supabase.functions
+      .invoke('viewer-annotations', {
+        body: {
+          action: 'upsert-annotation',
+          buildingFmGuid,
+          assetFmGuid,
+          symbolId,
+          position: coordinates,
+          spatialRepresentation: 'spatial-point',
+          locationAccuracy: 'manually-placed',
+        },
+      })
+      .then(({ data, error }) => {
+        if (error || !data?.success) {
+          logger.warn('[ViewerContext] Failed to save annotation placement:', error || data?.error);
+        }
+      })
+      .catch((e) => logger.warn('[ViewerContext] Failed to save annotation placement:', e));
+  }, [annotationPlacementContext]);
 
   const cancelAnnotationPlacement = useCallback(() => {
     setAnnotationPlacementContext(null);

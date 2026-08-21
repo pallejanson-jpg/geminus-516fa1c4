@@ -12,18 +12,22 @@
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { useViewerSync, LocalCoords } from '@/context/ViewerSyncContext';
+import { useViewerSync, LocalCoords } from '@/viewer/ViewerCoordinatorSyncContext';
 import { supabase } from '@/integrations/supabase/client';
 import type { BuildingOrigin } from '@/lib/coordinate-transform';
 import type { IvionApi, IvionImage as SdkIvionImage } from '@/lib/ivion-sdk';
 import { resolveMainView, resolveMoveTo } from '@/lib/ivion-sdk';
 import { ivionToBim, bimToIvion, ivionHeadingToBim, bimHeadingToIvion, IDENTITY_TRANSFORM, isIdentityTransform, type IvionBimTransform } from '@/lib/ivion-bim-transform';
+import { findNearestCandidate } from '@/viewer/nearestImage';
 import { logger } from '@/lib/logger';
 
 export interface IvionImage {
   id: number;
   location: { x: number; y: number; z: number };
   datasetId: number;
+  /** Not populated by the current get-images-for-site response — reserved for when
+   *  the API starts tagging images with a floor (see docs/viewer-current-state-verified.md). */
+  floorFmGuid?: string | null;
 }
 
 interface UseIvionCameraSyncOptions {
@@ -41,6 +45,8 @@ interface UseIvionCameraSyncOptions {
   buildingFmGuid?: string;
   /** Ivion-to-BIM coordinate transform (defaults to identity) */
   buildingTransform?: IvionBimTransform;
+  /** Current floor, used to filter nearest-image candidates when images carry a floor tag. */
+  currentFloorFmGuid?: string | null;
 }
 
 interface UseIvionCameraSyncResult {
@@ -80,6 +86,7 @@ export function useIvionCameraSync({
   ivionSiteId,
   buildingFmGuid,
   buildingTransform,
+  currentFloorFmGuid,
 }: UseIvionCameraSyncOptions): UseIvionCameraSyncResult {
   const transform = buildingTransform ?? IDENTITY_TRANSFORM;
   const { syncLocked, syncState, updateFromIvion } = useViewerSync();
@@ -148,24 +155,8 @@ export function useIvionCameraSync({
   
   const findNearestImage = useCallback((pos: LocalCoords): IvionImage | null => {
     if (imageCache.length === 0) return null;
-    
-    let nearestImage: IvionImage | null = null;
-    let nearestDist = Infinity;
-    
-    for (const img of imageCache) {
-      const dx = img.location.x - pos.x;
-      const dy = img.location.y - pos.y;
-      const dz = img.location.z - pos.z;
-      const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-      
-      if (dist < nearestDist) {
-        nearestDist = dist;
-        nearestImage = img;
-      }
-    }
-    
-    return nearestDist < 50 ? nearestImage : null;
-  }, [imageCache]);
+    return findNearestCandidate(pos, imageCache, { floorFmGuid: currentFloorFmGuid });
+  }, [imageCache, currentFloorFmGuid]);
 
   // ─── SDK MODE: Bi-directional real-time sync ──────────────────────
 

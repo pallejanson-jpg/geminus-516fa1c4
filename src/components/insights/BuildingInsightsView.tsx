@@ -300,12 +300,16 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
     const fetchAlarmData = useCallback(async () => {
         try {
             setAlarmDataError(false);
+            // Only show IoT/BMS-generated alarms (parentCommonName = 'Orphan'),
+            // not BIM-imported fire-detection geometry objects which share asset_type = 'IfcAlarm'.
+
             // Count
             const { count } = await supabase
                 .from('assets')
                 .select('*', { count: 'exact', head: true })
                 .eq('building_fm_guid', facility.fmGuid)
-                .eq('asset_type', 'IfcAlarm');
+                .eq('asset_type', 'IfcAlarm')
+                .eq('attributes->>parentCommonName' as any, 'Orphan');
             setAlarmCount(count || 0);
 
             // Per-level aggregation
@@ -327,7 +331,8 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                 .select('level_fm_guid')
                 .eq('building_fm_guid', facility.fmGuid)
                 .eq('asset_type', 'IfcAlarm')
-                .limit(5000);
+                .eq('attributes->>parentCommonName' as any, 'Orphan')
+                .limit(500);
 
             if (alarmLevels) {
                 const lvlCounts: Record<string, number> = {};
@@ -352,8 +357,9 @@ export default function BuildingInsightsView({ facility, onBack, drawerMode }: B
                 .select('id, fm_guid, level_fm_guid, in_room_fm_guid, updated_at, coordinate_x, coordinate_y, coordinate_z, name, common_name, attributes')
                 .eq('building_fm_guid', facility.fmGuid)
                 .eq('asset_type', 'IfcAlarm')
+                .eq('attributes->>parentCommonName' as any, 'Orphan')
                 .order('updated_at', { ascending: false })
-                .limit(50);
+                .limit(200);
             setAlarmList(recent || []);
         } catch (e) {
             console.error('Error fetching alarm data:', e);

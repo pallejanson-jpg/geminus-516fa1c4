@@ -13,6 +13,7 @@ import { applyArchitectColors } from '@/lib/architect-colors';
 import { toast } from 'sonner';
 import { emit, on } from '@/lib/event-bus';
 import { logger } from '@/lib/logger';
+import { subscribeToBuildingAnnotations } from '@/viewer/annotationsRealtime';
 import {
   INSIGHTS_COLOR_UPDATE_EVENT,
   INSIGHTS_COLOR_RESET_EVENT,
@@ -531,6 +532,14 @@ export function useViewerEventListeners({
     let cameraUnsubs: Array<() => void> = [];
     let currentFloorFilter: string | null = null;
     let markerAnnotationMap: Map<HTMLDivElement, { level_fm_guid: string | null }> = new Map();
+    // Last show/visibleCategories the handler was run with, so a Realtime-triggered
+    // refresh (an annotation created/changed in another viewer or tab) can re-render
+    // with the same visibility the user last chose, instead of needing a manual toggle.
+    // Starts at show:false because that's this panel's actual default (see
+    // ViewerRightPanel.tsx's localShowAnnotations) — TOGGLE_ANNOTATIONS is normally
+    // only ever emitted after the user opts in, so a Realtime tick before that should
+    // stay a no-op rather than surprise-enabling markers.
+    let lastDetail: { show?: boolean; visibleCategories?: string[] } = { show: false };
 
     const applyFloorFilter = () => {
       markerAnnotationMap.forEach((ann, marker) => {
@@ -561,6 +570,7 @@ export function useViewerEventListeners({
     const offFloorHandler = on('FLOOR_SELECTION_CHANGED', floorHandler);
 
     const handler = async (detail: any) => {
+      lastDetail = { show: detail?.show ?? true, visibleCategories: detail?.visibleCategories };
       const show = detail?.show ?? true;
       const visibleCategories: string[] | undefined = detail?.visibleCategories;
       const viewer = viewerRef.current;
@@ -575,7 +585,7 @@ export function useViewerEventListeners({
           .from('assets')
           .select('fm_guid, common_name, name, asset_type, coordinate_x, coordinate_y, coordinate_z, symbol_id, in_room_fm_guid, level_fm_guid')
           .eq('building_fm_guid', buildingFmGuid)
-          .or('annotation_placed.eq.true,created_in_model.eq.false');
+          .not('symbol_id', 'is', null);
 
         if (!annotations?.length) return;
         const catSet = visibleCategories?.length ? new Set(visibleCategories) : null;
@@ -648,9 +658,18 @@ export function useViewerEventListeners({
     };
 
     const offHandler = on('TOGGLE_ANNOTATIONS', handler);
+
+    // Re-run with the last-known visibility whenever an asset in this building changes —
+    // this is what makes an annotation created/moved in one viewer (or by another user)
+    // show up in this one without a panel being open or a manual toggle.
+    const offRealtime = buildingFmGuid
+      ? subscribeToBuildingAnnotations(buildingFmGuid, () => handler(lastDetail))
+      : () => {};
+
     return () => {
       offHandler();
       offFloorHandler();
+      offRealtime();
       cameraUnsubs.forEach(fn => fn());
       markerContainer?.remove();
     };

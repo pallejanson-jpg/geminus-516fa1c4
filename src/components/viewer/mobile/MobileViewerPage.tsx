@@ -1077,7 +1077,7 @@ const MobileViewerPage: React.FC<MobileViewerPageProps> = ({
                   </div>
                   {annotationsExpanded && (
                     <div className="pl-8 pt-2">
-                      <AnnotationCategoryList viewerRef={viewerInstanceRef} buildingFmGuid={buildingData.fmGuid} />
+                      <AnnotationCategoryList buildingFmGuid={buildingData.fmGuid} />
                     </div>
                   )}
                 </div>

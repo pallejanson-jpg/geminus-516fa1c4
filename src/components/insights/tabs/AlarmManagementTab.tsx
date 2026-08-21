@@ -67,7 +67,6 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showDeleteSelected, setShowDeleteSelected] = useState(false);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
-  const [showDeleteRandom, setShowDeleteRandom] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [selectedAlarm, setSelectedAlarm] = useState<AlarmAsset | null>(null);
   const [alarmToDelete, setAlarmToDelete] = useState<AlarmAsset | null>(null);
@@ -203,26 +202,6 @@ export default function AlarmManagementTab({ buildingFmGuid, buildingName, onAla
     }
   };
 
-  const handleDeleteRandom90 = async () => {
-    setIsDeleting(true);
-    try {
-      const { data: deletedCount, error } = await supabase.rpc('delete_random_alarms', {
-        p_building_fm_guid: buildingFmGuid,
-        p_keep_fraction: 0.1,
-      });
-      if (error) throw error;
-      toast({ title: `${deletedCount} alarms deleted (~90%)` });
-      setShowDeleteRandom(false);
-      setPage(0);
-      fetchAlarms();
-      onAlarmsDeleted?.();
-    } catch (e: any) {
-      toast({ title: 'Error deleting', description: e.message, variant: 'destructive' });
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
   const handleDeleteSingle = async () => {
     if (!alarmToDelete) return;
     setIsDeleting(true);
@@ -341,16 +320,6 @@ ${attrs}
               Delete selected ({selectedIds.size})
             </Button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowDeleteRandom(true)}
-            disabled={isDeleting}
-            className="text-destructive border-destructive/30 hover:bg-destructive/10"
-          >
-            <Trash2 className="h-4 w-4 mr-1" />
-            Delete 90%
-          </Button>
           <Button
             variant="destructive"
             size="sm"
@@ -640,33 +609,6 @@ ${attrs}
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Delete 90% Dialog */}
-      <AlertDialog open={showDeleteRandom} onOpenChange={setShowDeleteRandom}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-destructive" />
-              Delete 90% of alarms randomly
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              This will randomly select and delete approximately 90% of the {totalCount.toLocaleString()} alarms
-              for {buildingName || 'the building'}, keeping only ~{Math.ceil(totalCount * 0.1)} alarms.
-              This action CANNOT be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={handleDeleteRandom90}
-              disabled={isDeleting}
-            >
-              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-              Yes, delete 90%
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
       {/* Delete Single Alarm Dialog */}
       <AlertDialog open={!!alarmToDelete} onOpenChange={(open) => { if (!open) setAlarmToDelete(null); }}>
         <AlertDialogContent>

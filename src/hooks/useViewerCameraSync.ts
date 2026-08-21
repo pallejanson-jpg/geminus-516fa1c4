@@ -4,7 +4,7 @@
  */
 
 import { useEffect, useRef, useCallback } from 'react';
-import { useViewerSync, LocalCoords } from '@/context/ViewerSyncContext';
+import { useViewerSync, LocalCoords } from '@/viewer/ViewerCoordinatorSyncContext';
 import {
   calculateHeadingFromCamera,
   calculatePitchFromCamera,
