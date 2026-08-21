@@ -19,16 +19,10 @@ import type { IvionApi, IvionImage as SdkIvionImage } from '@/lib/ivion-sdk';
 import { resolveMainView, resolveMoveTo } from '@/lib/ivion-sdk';
 import { ivionToBim, bimToIvion, ivionHeadingToBim, bimHeadingToIvion, IDENTITY_TRANSFORM, isIdentityTransform, type IvionBimTransform } from '@/lib/ivion-bim-transform';
 import { findNearestCandidate } from '@/viewer/nearestImage';
+import { useIvionImageCache, type IvionImage } from '@/hooks/useIvionImageCache';
 import { logger } from '@/lib/logger';
 
-export interface IvionImage {
-  id: number;
-  location: { x: number; y: number; z: number };
-  datasetId: number;
-  /** Not populated by the current get-images-for-site response — reserved for when
-   *  the API starts tagging images with a floor (see docs/viewer-current-state-verified.md). */
-  floorFmGuid?: string | null;
-}
+export type { IvionImage };
 
 interface UseIvionCameraSyncOptions {
   /** Reference to the iframe element (for fallback mode) */
@@ -90,66 +84,19 @@ export function useIvionCameraSync({
 }: UseIvionCameraSyncOptions): UseIvionCameraSyncResult {
   const transform = buildingTransform ?? IDENTITY_TRANSFORM;
   const { syncLocked, syncState, updateFromIvion } = useViewerSync();
-  
-  const [imageCache, setImageCache] = useState<IvionImage[]>([]);
-  const [isLoadingImages, setIsLoadingImages] = useState(false);
-  const [hasImageLoadError, setHasImageLoadError] = useState(false);
+
+  const { imageCache, isLoadingImages, hasImageLoadError, retryLoadImages } = useIvionImageCache(
+    ivionSiteId,
+    buildingFmGuid,
+    enabled,
+  );
   const [currentImageId, setCurrentImageId] = useState<number | null>(null);
   const [lastSyncSource, setLastSyncSource] = useState<'ivion' | '3d' | null>(null);
   const [sdkSyncActive, setSdkSyncActive] = useState(false);
-  
+
   const lastSyncedImageIdRef = useRef<number | null>(null);
   const isSyncingRef = useRef(false);
   const syncThrottleRef = useRef<number>(0);
-
-  // ─── Image cache loading (shared by both modes) ───────────────────
-  
-  const loadImages = useCallback(async () => {
-    if (!ivionSiteId) return;
-    
-    setIsLoadingImages(true);
-    setHasImageLoadError(false);
-    
-    try {
-      const { data, error } = await supabase.functions.invoke('ivion-poi', {
-        body: { 
-          action: 'get-images-for-site', 
-          siteId: ivionSiteId,
-          buildingFmGuid,
-        },
-      });
-      
-      if (error) {
-        console.error('[Ivion Sync] Failed to load images:', error);
-        setHasImageLoadError(true);
-        return;
-      }
-      
-      if (data?.success && data?.images?.length > 0) {
-        setImageCache(data.images);
-        setHasImageLoadError(false);
-        logger.log(`[Ivion Sync] Loaded ${data.images.length} images for site`);
-      } else {
-        logger.warn('[Ivion Sync] No images returned:', data?.error || 'Unknown');
-        setHasImageLoadError(true);
-      }
-    } catch (e) {
-      console.error('[Ivion Sync] Failed to load images:', e);
-      setHasImageLoadError(true);
-    } finally {
-      setIsLoadingImages(false);
-    }
-  }, [ivionSiteId, buildingFmGuid]);
-
-  const retryLoadImages = useCallback(async () => {
-    await loadImages();
-  }, [loadImages]);
-
-  // Load images on mount
-  useEffect(() => {
-    if (!enabled || !ivionSiteId) return;
-    loadImages();
-  }, [enabled, ivionSiteId, loadImages]);
 
   // ─── Nearest image finder (shared) ────────────────────────────────
   

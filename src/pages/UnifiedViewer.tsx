@@ -39,8 +39,7 @@ import InsightsDrawerPanel from '@/components/viewer/InsightsDrawerPanel';
 import { useBuildingViewerData } from '@/hooks/useBuildingViewerData';
 import { useIvionSdk } from '@/hooks/useIvionSdk';
 import { useVirtualTwinSync } from '@/hooks/useVirtualTwinSync';
-import { useIvionCameraSync } from '@/hooks/useIvionCameraSync';
-import { useViewerCameraSync } from '@/hooks/useViewerCameraSync';
+import { useViewerCoordinatorSplitSync } from '@/hooks/useViewerCoordinatorSplitSync';
 import { IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
 import { VIEWER_TOOL_CHANGED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, type ViewerToolChangedDetail, type ViewMode2DToggledDetail, type LoadSavedViewDetail } from '@/lib/viewer-events';
 import SplitPlanView from '@/components/viewer/SplitPlanView';
@@ -605,22 +604,19 @@ const UnifiedViewerContent: React.FC<{
   }, [syncLocked, updateFrom3D, viewMode]);
 
   // ─── Ivion camera sync for split mode ─────────
-  const dummyIframeRef = useRef<HTMLIFrameElement>(null);
   const isSplitMode = viewMode === 'split';
 
-  useViewerCameraSync({
-    viewerRef: viewerInstanceRef,
-    enabled: isSplitMode && syncLocked && viewerReady,
-  });
-
-  useIvionCameraSync({
-    iframeRef: dummyIframeRef,
-    ivApiRef,
-    enabled: isSplitMode && sdkStatus === 'ready',
-    ivionSiteId: buildingData?.ivionSiteId || '',
+  // Split-view camera sync now runs through ViewerCoordinator + XeokitViewerAdapter/
+  // IvionViewerAdapter instead of useViewerCameraSync/useIvionCameraSync's own polling —
+  // see useViewerCoordinatorSplitSync.ts for the exact scope/tradeoffs of this swap
+  // (annotations untouched, VT mode untouched, no iframe-mode camera-sync fallback).
+  useViewerCoordinatorSplitSync({
+    enabled: isSplitMode && syncLocked && viewerReady && sdkStatus === 'ready',
     buildingFmGuid: buildingData?.fmGuid,
-    buildingTransform: transform,
-    currentFloorFmGuid: floorFmGuid,
+    ivionSiteId: buildingData?.ivionSiteId || '',
+    ivApiRef,
+    transform,
+    getFloorFmGuid: () => floorFmGuid || undefined,
   });
 
   const [sync3DPosition, setSync3DPosition] = useState<LocalCoords | null>(null);

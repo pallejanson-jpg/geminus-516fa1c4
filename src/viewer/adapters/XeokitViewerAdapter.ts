@@ -85,11 +85,21 @@ export interface XeokitViewerAdapterOptions {
   buildingFmGuid: string;
   /** Returns the currently-active floor, if any — read live so it can change after construction. */
   getFloorFmGuid?: () => string | undefined;
+  /**
+   * Whether this adapter loads/renders/subscribes to annotations at all. Defaults to
+   * true. Set false when registering this adapter purely for camera-pose sync in a
+   * context where annotations are already rendered by something else (e.g.
+   * useViewerEventListeners.ts's TOGGLE_ANNOTATIONS handler, which additionally has
+   * floor/category filtering and symbol colors this adapter's renderer doesn't) —
+   * running both would draw two independent, competing sets of markers.
+   */
+  manageAnnotations?: boolean;
 }
 
 export class XeokitViewerAdapter implements SpatialViewerAdapter {
   private buildingFmGuid: string;
   private getFloorFmGuid: () => string | undefined;
+  private manageAnnotations: boolean;
   private poseListeners = new Set<(pose: SpatialPose) => void>();
   private viewMatrixSubscriptionId: number | string | null = null;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -101,6 +111,7 @@ export class XeokitViewerAdapter implements SpatialViewerAdapter {
   constructor(options: XeokitViewerAdapterOptions) {
     this.buildingFmGuid = options.buildingFmGuid;
     this.getFloorFmGuid = options.getFloorFmGuid ?? (() => undefined);
+    this.manageAnnotations = options.manageAnnotations ?? true;
   }
 
   async initialize(): Promise<void> {
@@ -119,6 +130,8 @@ export class XeokitViewerAdapter implements SpatialViewerAdapter {
         }
       }, VIEWER_POLL_INTERVAL_MS);
     }
+
+    if (!this.manageAnnotations) return;
 
     await this.refreshAnnotationsFromServer();
     this.unsubscribeRealtime = subscribeToBuildingAnnotations(this.buildingFmGuid, () => {

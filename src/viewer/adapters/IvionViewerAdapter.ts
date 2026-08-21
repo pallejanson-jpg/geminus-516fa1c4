@@ -55,10 +55,13 @@ export interface IvionViewerAdapterOptions {
   getImageCandidates: () => SpatialCandidate[];
   /** Live accessor — the ivion<->BIM transform can change if recalibrated. */
   getTransform: () => PoseTransform;
+  /** Same purpose/default as XeokitViewerAdapterOptions.manageAnnotations — see there. */
+  manageAnnotations?: boolean;
 }
 
 export class IvionViewerAdapter implements SpatialViewerAdapter {
   private opts: IvionViewerAdapterOptions;
+  private manageAnnotations: boolean;
   private poseListeners = new Set<(pose: SpatialPose) => void>();
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private povUnsubscribe: (() => void) | void | undefined;
@@ -68,6 +71,7 @@ export class IvionViewerAdapter implements SpatialViewerAdapter {
 
   constructor(options: IvionViewerAdapterOptions) {
     this.opts = options;
+    this.manageAnnotations = options.manageAnnotations ?? true;
   }
 
   async initialize(): Promise<void> {
@@ -81,6 +85,8 @@ export class IvionViewerAdapter implements SpatialViewerAdapter {
     } catch {
       // pov.onChange not available on this SDK build — polling alone still works.
     }
+
+    if (!this.manageAnnotations) return;
 
     this.unsubscribeRealtime = subscribeToBuildingAnnotations(this.opts.buildingFmGuid, () => {
       this.reloadPoiLayer();
