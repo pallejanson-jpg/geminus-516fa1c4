@@ -229,7 +229,14 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
         } catch (e) {
           logger.warn('[BuildingViewerData] Failed to load spatial_transforms, using legacy building_settings columns:', e);
         }
-        const isCalibrated = transformVersion !== null || !isIdentityTransform(transform);
+        // NOT `transformVersion !== null` — Phase 2's migration backfilled a version-1
+        // spatial_transforms row for EVERY building, including ones that had no custom
+        // building_settings offset/rotation (i.e. an identity matrix). That backfilled
+        // row's mere existence isn't evidence of a real calibration, so checking it would
+        // make isCalibrated true for virtually every building and the "not calibrated"
+        // banner would never show, calibrated or not. Whether `transform` is non-identity
+        // is the only thing that actually means "someone has calibrated this."
+        const isCalibrated = !isIdentityTransform(transform);
 
         // Fetch start view data if start_view_id is set
         let startView: StartViewData | null = null;
