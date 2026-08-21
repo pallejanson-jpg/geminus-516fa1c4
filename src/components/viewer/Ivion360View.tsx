@@ -63,9 +63,6 @@ export default function Ivion360View({
 
   const sdkContainerRef = useRef<HTMLDivElement>(null);
 
-  // Rendering mode: 'sdk' if SDK loaded successfully, 'iframe' as fallback
-  const renderMode = sdkStatus === 'ready' ? 'sdk' : 'iframe';
-
   // Panel states
   const [registrationPanelOpen, setRegistrationPanelOpen] = useState(false);
   const [unplacedPanelOpen, setUnplacedPanelOpen] = useState(false);
@@ -83,31 +80,6 @@ export default function Ivion360View({
   const buildingFmGuid = propBuildingFmGuid || ivion360Context?.buildingFmGuid;
   const buildingName = ivion360Context?.buildingName;
   const ivionSiteId = ivionSiteIdProp || ivion360Context?.ivionSiteId;
-
-  // Camera sync hook - supports both SDK and iframe modes
-  const { 
-    imageCache, 
-    isLoadingImages, 
-    currentImageId, 
-    syncToIvion, 
-    syncFrom360Url,
-    sendSubscribeCommand,
-    lastSyncSource,
-    postMessageActive,
-    hasImageLoadError,
-    retryLoadImages,
-  } = useIvionCameraSync({
-    iframeRef,
-    ivApiRef,
-    enabled: syncEnabled,
-    buildingOrigin,
-    ivionSiteId: ivionSiteId || '',
-    buildingFmGuid,
-    buildingTransform: ivionBimTransform,
-  });
-
-  // Token renewal state
-  const [isRenewingToken, setIsRenewingToken] = useState(false);
 
   // ─── SDK Loading ──────────────────────────────────────────────────
   // Loading, auto-auth, token refresh, and <ivion> element lifecycle are all owned by
@@ -133,15 +105,43 @@ export default function Ivion360View({
     enabled: !!ivionUrl,
   });
 
-  useEffect(() => {
-    if (sdkStatus === 'ready') setIsLoading(false);
-  }, [sdkStatus]);
+  // Rendering mode: 'sdk' if SDK loaded successfully, 'iframe' as fallback
+  const renderMode = sdkStatus === 'ready' ? 'sdk' : 'iframe';
 
-  // Once ivionUrl is confirmed present (we're past the early-return guard above),
+  // Once ivionUrl is confirmed present (we're past the early-return guard below),
   // 'idle' can no longer mean "haven't started yet" — useIvionSdk only stays idle when
   // enabled/baseUrl/siteId aren't all set (e.g. a malformed URL, or no site configured),
   // which needs the same iframe fallback as an outright load failure.
   const sdkUnavailable = sdkStatus === 'failed' || sdkStatus === 'idle';
+
+  // Camera sync hook - supports both SDK and iframe modes
+  const {
+    imageCache,
+    isLoadingImages,
+    currentImageId,
+    syncToIvion,
+    syncFrom360Url,
+    sendSubscribeCommand,
+    lastSyncSource,
+    postMessageActive,
+    hasImageLoadError,
+    retryLoadImages,
+  } = useIvionCameraSync({
+    iframeRef,
+    ivApiRef,
+    enabled: syncEnabled,
+    buildingOrigin,
+    ivionSiteId: ivionSiteId || '',
+    buildingFmGuid,
+    buildingTransform: ivionBimTransform,
+  });
+
+  // Token renewal state
+  const [isRenewingToken, setIsRenewingToken] = useState(false);
+
+  useEffect(() => {
+    if (sdkStatus === 'ready') setIsLoading(false);
+  }, [sdkStatus]);
 
   // Toast once per successful connect (not on every re-render while status stays 'ready').
   const hasShownReadyToastRef = useRef(false);
