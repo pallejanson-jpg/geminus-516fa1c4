@@ -55,13 +55,24 @@ const TOOLS = [
   },
   {
     name: "get_building_summary",
-    description: "Comprehensive building overview: number of floors, rooms, assets, total area, open issues, top asset types.",
+    description: "Comprehensive building overview: number of floors, rooms, assets, total area, open issues, top asset types. NOTE: these counts are aggregated across ALL BIM models synced for the building — this tool does NOT tell you how many separate BIM models exist. Use list_bim_models for that.",
     inputSchema: {
       type: "object",
       properties: {
         fm_guid: { type: "string", description: "The building's fm_guid" },
       },
       required: ["fm_guid"],
+    },
+  },
+  {
+    name: "list_bim_models",
+    description: "List the individual synced XKT/BIM models for a building (name + model_id per model). Use this — NOT get_building_summary — for 'which/how many BIM models exist' questions. A building can have several separate models (e.g. architecture, electrical, ventilation each as their own model).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        building_guid: { type: "string", description: "The building's fm_guid" },
+      },
+      required: ["building_guid"],
     },
   },
   {
@@ -284,6 +295,23 @@ async function toolBuildingSummary(args) {
   };
 }
 
+async function toolListBimModels(args) {
+  const fmGuid = args.building_guid;
+  const { data, error } = await supabase
+    .from("xkt_models")
+    .select("model_id, model_name, file_name")
+    .eq("building_fm_guid", fmGuid)
+    .eq("is_chunk", false)
+    .order("model_name");
+  if (error) throw error;
+  const models = data || [];
+  return {
+    building_fm_guid: fmGuid,
+    model_count: models.length,
+    models: models.map(m => ({ model_id: m.model_id, name: m.model_name || m.file_name })),
+  };
+}
+
 async function toolSearchAssets(args) {
   const { data, error } = await supabase.rpc("search_assets_rpc", {
     search: args.search,
@@ -464,6 +492,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       case "list_buildings":            result = await toolListBuildings(); break;
       case "resolve_building_by_name":  result = await toolResolveBuildingByName(args); break;
       case "get_building_summary":      result = await toolBuildingSummary(args); break;
+      case "list_bim_models":           result = await toolListBimModels(args); break;
       case "search_assets":             result = await toolSearchAssets(args); break;
       case "get_assets_by_system":      result = await toolGetAssetsBySystem(args); break;
       case "get_assets_in_room":        result = await toolGetAssetsInRoom(args); break;

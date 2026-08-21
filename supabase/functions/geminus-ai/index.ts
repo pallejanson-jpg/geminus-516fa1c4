@@ -168,13 +168,28 @@ const tools = [
     type: "function",
     function: {
       name: "get_building_summary",
-      description: "Comprehensive building overview: floors, rooms, assets, area, issues.",
+      description: "Comprehensive building overview: floors, rooms, assets, area, issues. NOTE: floors/rooms/assets are aggregated across ALL BIM models synced for the building — this tool does NOT tell you how many separate BIM models exist. Use list_bim_models for that.",
       parameters: {
         type: "object",
         properties: {
           fm_guid: { type: "string", description: "The building's fm_guid" },
         },
         required: ["fm_guid"],
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_bim_models",
+      description: "List the individual synced XKT/BIM models for a building (name + model_id per model). Use this — NOT get_building_summary — whenever the user asks 'which/how many BIM models exist' ('vilka/hur många BIM-modeller finns'). A building can have several separate models (e.g. architecture, electrical, ventilation each as their own model).",
+      parameters: {
+        type: "object",
+        properties: {
+          building_guid: { type: "string", description: "The building's fm_guid" },
+        },
+        required: ["building_guid"],
         additionalProperties: false,
       },
     },
@@ -496,6 +511,8 @@ async function executeTool(supabase: any, name: string, args: any) {
       return execListBuildings(supabase, args);
     case "get_building_summary":
       return execBuildingSummary(supabase, args);
+    case "list_bim_models":
+      return execListBimModels(supabase, args);
     case "get_sensors_in_room": {
       const { data, error } = await supabase.rpc("get_sensors_in_room", {
         sensor_type: args.sensor_type,
@@ -690,6 +707,23 @@ async function execBuildingSummary(supabase: any, args: any) {
     issues_by_status: issuesByStatus,
     total_issues: (issues.data || []).length,
     top_asset_types: topAssetTypes,
+  };
+}
+
+async function execListBimModels(supabase: any, args: any) {
+  const fmGuid = args.building_guid;
+  const { data, error } = await supabase
+    .from("xkt_models")
+    .select("model_id, model_name, file_name")
+    .eq("building_fm_guid", fmGuid)
+    .eq("is_chunk", false)
+    .order("model_name");
+  if (error) throw error;
+  const models = data || [];
+  return {
+    building_fm_guid: fmGuid,
+    model_count: models.length,
+    models: models.map((m: any) => ({ model_id: m.model_id, name: m.model_name || m.file_name })),
   };
 }
 
@@ -2304,7 +2338,8 @@ RULES:
 6. Max 2-3 sentences in the final answer.
 7. Never use IFC class names (IfcXxx) in the final answer — always use Swedish terms.
 8. When currentBuilding is null but the user's request or recent conversation names a building (e.g. "Visa ventilation" after asking about "Småviken's temperature"), call resolve_building_by_name FIRST with that building name, then proceed. NEVER respond with "Ingen byggnad är vald" when the building is implied by context — always infer and resolve.
-9. After sensor/temperature data answers (e.g. "varmaste rummen", ranking by temperature/CO₂), always include a "Visa i 3D" button in present_results with action="colorize" so the user can jump directly to the color visualization.`;
+9. After sensor/temperature data answers (e.g. "varmaste rummen", ranking by temperature/CO₂), always include a "Visa i 3D" button in present_results with action="colorize" so the user can jump directly to the color visualization.
+10. For "vilka/hur många BIM-modeller finns" questions, ALWAYS call list_bim_models — NEVER answer from get_building_summary's floor/room/asset counts, and never assume there is only one model. A building is commonly made up of several separate models (architecture, el, ventilation, etc.) synced from Geminus Plus.`;
 
 async function buildDynamicContext(supabase: any, context: any, userProfile: any, previousConversation: any) {
   let modelsCtx = "";
