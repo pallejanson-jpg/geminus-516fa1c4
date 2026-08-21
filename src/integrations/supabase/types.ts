@@ -506,6 +506,7 @@ export type Database = {
           ivion_site_id: string | null
           ivion_synced_at: string | null
           level_fm_guid: string | null
+          location_accuracy: string | null
           modification_date: string | null
           modification_status: string | null
           moved_offset_x: number | null
@@ -514,8 +515,10 @@ export type Database = {
           name: string | null
           original_room_fm_guid: string | null
           source_updated_at: string | null
+          spatial_representation: string | null
           symbol_id: string | null
           synced_at: string
+          transform_version: number | null
           updated_at: string
         }
         Insert: {
@@ -542,6 +545,7 @@ export type Database = {
           ivion_site_id?: string | null
           ivion_synced_at?: string | null
           level_fm_guid?: string | null
+          location_accuracy?: string | null
           modification_date?: string | null
           modification_status?: string | null
           moved_offset_x?: number | null
@@ -550,8 +554,10 @@ export type Database = {
           name?: string | null
           original_room_fm_guid?: string | null
           source_updated_at?: string | null
+          spatial_representation?: string | null
           symbol_id?: string | null
           synced_at?: string
+          transform_version?: number | null
           updated_at?: string
         }
         Update: {
@@ -578,6 +584,7 @@ export type Database = {
           ivion_site_id?: string | null
           ivion_synced_at?: string | null
           level_fm_guid?: string | null
+          location_accuracy?: string | null
           modification_date?: string | null
           modification_status?: string | null
           moved_offset_x?: number | null
@@ -586,8 +593,10 @@ export type Database = {
           name?: string | null
           original_room_fm_guid?: string | null
           source_updated_at?: string | null
+          spatial_representation?: string | null
           symbol_id?: string | null
           synced_at?: string
+          transform_version?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -2232,6 +2241,48 @@ export type Database = {
             referencedColumns: ["user_id"]
           },
         ]
+      }
+      spatial_transforms: {
+        Row: {
+          building_fm_guid: string
+          calibration_points: Json | null
+          created_at: string
+          created_by: string | null
+          id: string
+          matrix4x4: number[]
+          navvis_site_id: string | null
+          residual_error_mm: number | null
+          source_system: string
+          target_system: string
+          version: number
+        }
+        Insert: {
+          building_fm_guid: string
+          calibration_points?: Json | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          matrix4x4: number[]
+          navvis_site_id?: string | null
+          residual_error_mm?: number | null
+          source_system?: string
+          target_system?: string
+          version: number
+        }
+        Update: {
+          building_fm_guid?: string
+          calibration_points?: Json | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          matrix4x4?: number[]
+          navvis_site_id?: string | null
+          residual_error_mm?: number | null
+          source_system?: string
+          target_system?: string
+          version?: number
+        }
+        Relationships: []
       }
       support_case_comments: {
         Row: {
