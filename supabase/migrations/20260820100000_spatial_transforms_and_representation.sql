@@ -34,8 +34,8 @@ COMMENT ON COLUMN public.assets.transform_version IS
 CREATE TABLE IF NOT EXISTS public.spatial_transforms (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   building_fm_guid text NOT NULL,
-  source_system text NOT NULL DEFAULT 'xeokit',
-  target_system text NOT NULL DEFAULT 'navvis',
+  source_system text NOT NULL DEFAULT 'navvis',
+  target_system text NOT NULL DEFAULT 'xeokit',
   matrix4x4 numeric[16] NOT NULL,
   navvis_site_id text,
   version integer NOT NULL,
@@ -81,8 +81,8 @@ INSERT INTO public.spatial_transforms
   (building_fm_guid, source_system, target_system, matrix4x4, navvis_site_id, version)
 SELECT
   bs.fm_guid,
-  'xeokit',
   'navvis',
+  'xeokit',
   ARRAY[
     cos(radians(coalesce(bs.ivion_bim_rotation, 0))), 0, -sin(radians(coalesce(bs.ivion_bim_rotation, 0))), coalesce(bs.ivion_bim_offset_x, 0),
     0, 1, 0, coalesce(bs.ivion_bim_offset_y, 0),

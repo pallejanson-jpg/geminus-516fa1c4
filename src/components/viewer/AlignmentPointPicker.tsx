@@ -15,6 +15,7 @@ import { Slider } from '@/components/ui/slider';
 import { toast } from 'sonner';
 import { ivionToBim, type IvionBimTransform, type Vec3 } from '@/lib/ivion-bim-transform';
 import { resolveMainView } from '@/lib/ivion-sdk';
+import { estimateSurfacePoint } from '@/viewer/estimateSurfacePoint';
 import { useLanguage } from '@/context/LanguageContext';
 import { logger } from '@/lib/logger';
 
@@ -25,26 +26,6 @@ interface AlignmentPointPickerProps {
   ivApiRef: React.MutableRefObject<any>;
   onOffsetsCalculated: (offsets: { offsetX: number; offsetY: number; offsetZ: number }) => void;
   onClose: () => void;
-}
-
-/**
- * Estimate surface point from panorama position + viewing direction.
- * Projects a ray from the tripod location along the current camera direction
- * at the given distance (meters).
- */
-function estimateSurfacePoint(
-  tripodPos: Vec3,
-  viewDir: { lon: number; lat: number },
-  distance: number,
-): Vec3 {
-  // lon = yaw (rotation around Y), lat = pitch (up/down)
-  // In Ivion: lon=0 faces north (-Z), increases clockwise
-  const cosLat = Math.cos(viewDir.lat);
-  return {
-    x: tripodPos.x + Math.sin(viewDir.lon) * cosLat * distance,
-    y: tripodPos.y + Math.sin(viewDir.lat) * distance,
-    z: tripodPos.z - Math.cos(viewDir.lon) * cosLat * distance,
-  };
 }
 
 const AlignmentPointPicker: React.FC<AlignmentPointPickerProps> = ({

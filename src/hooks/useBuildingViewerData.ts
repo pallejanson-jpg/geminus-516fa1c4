@@ -8,9 +8,10 @@
 import { useContext, useEffect, useState } from 'react';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
-import { buildTransformFromSettings, IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
+import { buildTransformFromSettings, IDENTITY_TRANSFORM, isIdentityTransform, type IvionBimTransform } from '@/lib/ivion-bim-transform';
 import { IVION_DEFAULT_BASE_URL } from '@/lib/constants';
 import type { BuildingOrigin } from '@/lib/coordinate-transform';
+import { decomposeToLegacyTransform } from '@/viewer/calibration';
 import { logger } from '@/lib/logger';
 
 export interface StartViewData {
@@ -37,6 +38,11 @@ export interface BuildingViewerData {
   ivionBaseUrl: string;
   /** Ivion-to-BIM coordinate transform */
   transform: IvionBimTransform;
+  /** Whether `transform` came from an actual calibration (spatial_transforms row, or
+   *  non-zero legacy building_settings columns) rather than the identity default. */
+  isCalibrated: boolean;
+  /** spatial_transforms.version this transform was loaded from, if any (Phase 3). */
+  transformVersion: number | null;
   /** Building geographic origin for coordinate transformation */
   origin: BuildingOrigin | null;
   /** Start view coordinates */
@@ -193,7 +199,37 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
               }
             : null;
 
-        const transform = settings ? buildTransformFromSettings(settings) : IDENTITY_TRANSFORM;
+        // Phase 3: spatial_transforms (versioned, created by the calibration screen) is
+        // now the authoritative source when present. Fall back to the legacy
+        // building_settings offset/rotation columns for buildings that haven't been
+        // (re-)calibrated since Phase 2's one-time migration, or if this row somehow
+        // doesn't exist. Scale is dropped when bridging into the legacy shape — see
+        // decomposeToLegacyTransform()'s doc comment.
+        let transform: IvionBimTransform = settings ? buildTransformFromSettings(settings) : IDENTITY_TRANSFORM;
+        let transformVersion: number | null = null;
+        try {
+          const { data: latestTransform } = await supabase
+            .from('spatial_transforms')
+            .select('version, matrix4x4')
+            .eq('building_fm_guid', buildingFmGuid)
+            .order('version', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (latestTransform?.matrix4x4) {
+            const legacy = decomposeToLegacyTransform(latestTransform.matrix4x4 as number[]);
+            if (Math.abs(legacy.scale - 1) > 0.01) {
+              logger.warn(
+                `[BuildingViewerData] spatial_transforms v${latestTransform.version} has scale ${legacy.scale.toFixed(4)} — ` +
+                  'dropped when bridging into the legacy offset/rotation sync hooks (Phase 4+ would need to consume the matrix directly to preserve it).',
+              );
+            }
+            transform = { offsetX: legacy.offsetX, offsetY: legacy.offsetY, offsetZ: legacy.offsetZ, rotation: legacy.rotation };
+            transformVersion = latestTransform.version;
+          }
+        } catch (e) {
+          logger.warn('[BuildingViewerData] Failed to load spatial_transforms, using legacy building_settings columns:', e);
+        }
+        const isCalibrated = transformVersion !== null || !isIdentityTransform(transform);
 
         // Fetch start view data if start_view_id is set
         let startView: StartViewData | null = null;
@@ -227,6 +263,8 @@ export function useBuildingViewerData(buildingFmGuid: string | null): UseBuildin
           ivionUrl,
           ivionBaseUrl: baseUrl,
           transform,
+          isCalibrated,
+          transformVersion,
           origin,
           startVlon: settings?.ivion_start_vlon ?? undefined,
           startVlat: settings?.ivion_start_vlat ?? undefined,

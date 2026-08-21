@@ -19,7 +19,7 @@ import {
   ArrowLeft, Layers, Move3D, Maximize2, Minimize2, Eye,
   RefreshCw, View, Box, Combine, SplitSquareHorizontal,
   Loader2, Square, BarChart2, LayoutPanelLeft, GripHorizontal,
-  MoreVertical,
+  MoreVertical, AlertTriangle,
 } from 'lucide-react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { supabase } from '@/integrations/supabase/client';
@@ -32,6 +32,7 @@ import NativeViewerShell from '@/components/viewer/NativeViewerShell';
 
 const GeminusPlusViewer = React.lazy(() => import('@/components/viewer/GeminusPlusViewer'));
 import AlignmentPanel from '@/components/viewer/AlignmentPanel';
+import CalibrationScreen from '@/components/viewer/CalibrationScreen';
 import BuildingSelector from '@/components/viewer/BuildingSelector';
 import Ivion360View from '@/components/viewer/Ivion360View';
 import InsightsDrawerPanel from '@/components/viewer/InsightsDrawerPanel';
@@ -355,6 +356,7 @@ const UnifiedViewerContent: React.FC<{
 
   // ─── UI state ──────────────────────────────────────────────────────
   const [showAlignment, setShowAlignment] = useState(false);
+  const [showCalibrationScreen, setShowCalibrationScreen] = useState(false);
   const [showCrosshair, setShowCrosshair] = useState(true);
   const [ghostOpacity, setGhostOpacity] = useState(30);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -1109,9 +1111,29 @@ const UnifiedViewerContent: React.FC<{
           </div>
         )}
 
+        {/* "Not calibrated" banner — camera sync silently no-ops on an identity transform
+            (see useIvionCameraSync.ts's isIdentityTransform() guards); surface that
+            instead of leaving the user wondering why nothing moves. */}
+        {(isSplitMode || isVTMode) && buildingData && !buildingData.isCalibrated && !showAlignment && !showCalibrationScreen && (
+          <div className="absolute top-2 left-4 z-50 flex items-center gap-2 bg-warning/15 border border-warning/40 text-warning text-xs rounded-lg px-3 py-2 shadow-lg max-w-sm">
+            <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+            <span className="flex-1">
+              Ivion and BIM are not calibrated for this building — 360°/3D sync is disabled.
+            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 text-2xs shrink-0"
+              onClick={() => setShowCalibrationScreen(true)}
+            >
+              Calibrate
+            </Button>
+          </div>
+        )}
+
         {/* Alignment panel overlay */}
         {showAlignment && (
-          <div className="absolute top-2 left-4 z-50">
+          <div className="absolute top-2 left-4 z-50 space-y-2">
             <AlignmentPanel
               transform={transform}
               onChange={setTransform}
@@ -1121,6 +1143,33 @@ const UnifiedViewerContent: React.FC<{
               onToggleCrosshair={setShowCrosshair}
               ivApiRef={isSplitMode ? ivApiRef : undefined}
               canPointPick={isSplitMode && sdkStatus === 'ready'}
+            />
+            {isSplitMode && sdkStatus === 'ready' && !showCalibrationScreen && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full h-7 text-xs"
+                onClick={() => setShowCalibrationScreen(true)}
+              >
+                Advanced: multi-point calibration
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* Multi-point calibration screen (Phase 3) — creates a new spatial_transforms
+            version instead of overwriting building_settings' single offset/rotation. */}
+        {showCalibrationScreen && isSplitMode && sdkStatus === 'ready' && (
+          <div className="absolute top-2 left-4 z-50">
+            <CalibrationScreen
+              buildingFmGuid={buildingData.fmGuid}
+              ivApiRef={ivApiRef}
+              onClose={() => setShowCalibrationScreen(false)}
+              onSaved={() => {
+                setShowCalibrationScreen(false);
+                setShowAlignment(false);
+                toast.info('Reload the view to use the new calibration.');
+              }}
             />
           </div>
         )}
