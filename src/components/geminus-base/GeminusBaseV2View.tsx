@@ -355,16 +355,27 @@ const GeminusBaseV2View: React.FC = () => {
     const geminusBaseGuid = byggnad?.systemGuid || fastighet?.systemGuid || '';
     if (geminusBaseGuid) setViewerGeminusBaseGuid(geminusBaseGuid);
 
-    // Geminus fmGuid — only via a genuine name match. No fallback: a guessed building
-    // either doesn't exist (→ "Building not found") or exists but is the WRONG
-    // building, silently shown as if it were correct. Neither is acceptable.
-    const searchName = (byggnad?.objectName || fastighet?.objectName || '').toLowerCase();
-    const geminusMatch = (navigatorTreeData ?? []).find(n =>
-      searchName && (n.commonName || n.name || '').toLowerCase().includes(searchName)
-    );
-
-    setViewerBuildingGuid(geminusMatch?.fmGuid || '');
-    setHasGeminusMatch(!!geminusMatch?.fmGuid);
+    // Geminus fmGuid: FM Access's systemGuid IS the Geminus fm_guid — every building
+    // was synced from the same source and keeps the same GUID on both sides (verified
+    // directly: e.g. Labradorgatan 18's systemGuid 42495e64-... is exactly the fm_guid
+    // of the Geminus "Labradorgatan 18" Building row). No name-matching needed — just
+    // confirm the GUID actually resolves to a real building before trusting it, so a
+    // building that hasn't been synced into Geminus yet still gets the honest
+    // "not linked" state instead of a hard "Building not found".
+    if (geminusBaseGuid) {
+      const { supabase } = await import('@/integrations/supabase/client');
+      const { data } = await supabase
+        .from('assets')
+        .select('fm_guid')
+        .eq('fm_guid', geminusBaseGuid)
+        .in('category', ['Building', 'IfcBuilding'])
+        .maybeSingle();
+      setViewerBuildingGuid(data?.fm_guid ? geminusBaseGuid : '');
+      setHasGeminusMatch(!!data?.fm_guid);
+    } else {
+      setViewerBuildingGuid('');
+      setHasGeminusMatch(false);
+    }
 
     // Navigate viewer based on node level
     const showCmd = (): void => {
@@ -421,7 +432,7 @@ const GeminusBaseV2View: React.FC = () => {
     } finally {
       setGridLoading(false);
     }
-  }, [getObjectStats, getGridObjects, navigatorTreeData]);
+  }, [getObjectStats, getGridObjects]);
 
   // ── Tab changed → load objects ────────────────────────────────────────────────
   useEffect(() => {
