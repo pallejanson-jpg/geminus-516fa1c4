@@ -2405,18 +2405,36 @@ serve(async (req) => {
           return null;
         }
 
+        const buildingNameLower = String(buildingName).toLowerCase();
+
         for (const model of models) {
           const rawModelId = model.modelId || model.id || model.ModelId || '';
           const bimObjectId = model.bimObjectId || model.BimObjectId || '';
           const modelName = model.name || model.modelName || model.Name || `Model`;
-          const matchedRevisionId = pickLatestPublishedRevision(
-            revisions.filter((rev: any) => {
+          const modelNameLower = String(modelName).toLowerCase();
+
+          // GetAllModelRevisions has no per-building scoping param (see discover3dModelsEndpoint
+          // caller comment above) — it returns revisions for every building in the tenant. So
+          // name-based matching below is ONLY ever done within the same building (entityName
+          // filter), same guard as the sibling resumable sync path uses. Without it, a generic
+          // name like "A-modell" can substring-match a differently-named model belonging to a
+          // completely different building (this is exactly what happened to Byggnad 1, which
+          // picked up Centralstationen's "A-modell mot Vasagatan Källarplan" model).
+          let candidateRevs: any[] = bimObjectId
+            ? revisions.filter((rev: any) => String(rev.bimObjectId || rev.BimObjectId || '') === String(bimObjectId))
+            : [];
+          if (!candidateRevs.length && rawModelId) {
+            candidateRevs = revisions.filter((rev: any) => String(rev.modelId || '') === String(rawModelId));
+          }
+          if (!candidateRevs.length && modelNameLower) {
+            candidateRevs = revisions.filter((rev: any) => {
+              const revEntity = String(rev.entityName || '').toLowerCase();
+              if (!revEntity || revEntity !== buildingNameLower) return false;
               const revName = String(rev.modelName || '').toLowerCase();
-              const modelNameLower = String(modelName).toLowerCase();
-              return (rawModelId && String(rev.modelId || '') === String(rawModelId))
-                || (!!revName && !!modelNameLower && (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName)));
-            })
-          )?.modelId || '';
+              return revName && (revName === modelNameLower || revName.includes(modelNameLower) || modelNameLower.includes(revName));
+            });
+          }
+          const matchedRevisionId = pickLatestPublishedRevision(candidateRevs)?.modelId || '';
           // When modelId is absent from GetAllRelatedModels, use bimObjectId as modelid —
           // some Asset+ environments omit modelId but GetXktData accepts bimObjectId as modelid.
           const modelId = rawModelId || matchedRevisionId || bimObjectId || `model_${Date.now()}`;

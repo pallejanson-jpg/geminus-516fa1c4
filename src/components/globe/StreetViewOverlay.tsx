@@ -167,6 +167,7 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
     if (!containerRef.current) return;
     let cancelled = false;
     let pollId: ReturnType<typeof setInterval> | null = null;
+    let retried = false;
 
     const init = async (container: HTMLDivElement) => {
       try {
@@ -182,14 +183,29 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         viewerRef.current = viewer;
 
         // Cesium can end up with a dead WebGL context (maximumCubeMapSize=0)
-        // if the container was zero-sized at creation time — bail out cleanly
-        // instead of letting the cube-map panorama load throw uncaught.
+        // even when the container measured a real size right before creation —
+        // the container can still be mid-transition (e.g. a parent dialog/popup
+        // animating in) at the exact moment the WebGL context is created. That's
+        // transient, so retry once (fresh container + fresh viewer) before giving
+        // up; only show the permanent error if the retry also fails.
         viewer.scene.renderError.addEventListener((_scene: unknown, err: unknown) => {
           console.error('[StreetViewOverlay] Render error:', err);
-          if (!cancelled) {
-            setError(t('Kunde inte ladda Street View', 'Could not load Street View'));
-            setLoading(false);
+          if (cancelled) return;
+          if (!retried) {
+            retried = true;
+            // Defer teardown — renderError fires from inside the render loop
+            // itself, so destroying the viewer synchronously here re-enters
+            // Cesium's per-frame update mid-pass and throws a second, unrelated
+            // TypeError (reading 'postPassesUpdate') on the next tick.
+            setTimeout(() => {
+              if (viewerRef.current === viewer && !viewer.isDestroyed()) viewer.destroy();
+              if (viewerRef.current === viewer) viewerRef.current = null;
+              if (!cancelled) init(container);
+            }, 300);
+            return;
           }
+          setError(t('Kunde inte ladda Street View', 'Could not load Street View'));
+          setLoading(false);
         });
 
         viewer.scene.globe.show = false;
@@ -535,12 +551,28 @@ const StreetViewOverlay: React.FC<StreetViewOverlayProps> = ({
         </div>
       )}
 
-      {/* Error state */}
+      {/* Error state — always offer Google Maps' own Street View as an escape
+          hatch instead of a dead end, since the in-app Cesium viewer can fail
+          for reasons (WebGL context limits, missing coverage) unrelated to
+          whether Street View actually exists at this location. */}
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-20">
           <div className="text-center space-y-2">
             <p className="text-sm text-muted-foreground">{error}</p>
-            <Button variant="outline" size="sm" onClick={onClose}>{t('Stäng', 'Close')}</Button>
+            <div className="flex items-center justify-center gap-2">
+              <Button variant="outline" size="sm" onClick={onClose}>{t('Stäng', 'Close')}</Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => window.open(
+                  `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${lat},${lng}`,
+                  '_blank',
+                  'noopener,noreferrer'
+                )}
+              >
+                {t('Öppna i Google Maps', 'Open in Google Maps')}
+              </Button>
+            </div>
           </div>
         </div>
       )}

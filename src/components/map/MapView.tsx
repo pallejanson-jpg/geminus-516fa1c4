@@ -1,6 +1,6 @@
 import React, { useState, useContext, useCallback, useEffect, useMemo, useRef } from 'react';
 import Map, { Popup, Marker, NavigationControl, GeolocateControl, Source, Layer } from 'react-map-gl';
-import { MapPin, Maximize2, Layers, Loader2, Palette, ArrowLeft, Navigation, Eye, X } from 'lucide-react';
+import { MapPin, Maximize2, Layers, Loader2, Palette, ArrowLeft, Navigation, Eye, Box, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,7 @@ import BuildingSidebar from './BuildingSidebar';
 import NavigationMapPanel from './NavigationMapPanel';
 import IndoorFloorSwitcher from './IndoorFloorSwitcher';
 import StreetViewOverlay from '@/components/globe/StreetViewOverlay';
+import GoogleStreetViewEmbed from '@/components/map/GoogleStreetViewEmbed';
 import Supercluster from 'supercluster';
 import {
   MapColoringMode,
@@ -132,9 +133,11 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
   const [activeStepIndex, setActiveStepIndex] = useState<number | null>(null);
   const [activeStepCoords, setActiveStepCoords] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Street View overlay state
+  // Street View overlay state — Cesium-based 3D panorama
   const [streetViewTarget, setStreetViewTarget] = useState<{ lat: number; lng: number; name: string; fmGuid: string; has360: boolean } | null>(null);
   const [cesiumToken, setCesiumToken] = useState<string | null>(null);
+  // Google's own embedded Street View — separate, simpler path (see GoogleStreetViewEmbed)
+  const [googleStreetViewTarget, setGoogleStreetViewTarget] = useState<{ lat: number; lng: number; name: string } | null>(null);
 
   // Building origin for indoor mode
   const [buildingOrigin, setBuildingOrigin] = useState<BuildingOrigin | null>(null);
@@ -825,36 +828,55 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
                     <Badge variant="secondary" className="text-[10px] sm:text-xs">{selectedMarker.numberOfLevels} {t('våningar', 'floors')}</Badge>
                     <Badge variant="secondary" className="text-[10px] sm:text-xs">{selectedMarker.area?.toLocaleString()} m²</Badge>
                   </div>
-                  <div className="flex gap-1.5">
-                    <Button size="sm" className="flex-1 text-xs sm:text-sm" onClick={() => handleOpenFacility(selectedMarker)}>
+                  <div className="flex flex-col gap-1.5">
+                    <Button size="sm" className="w-full text-xs sm:text-sm" onClick={() => handleOpenFacility(selectedMarker)}>
                       {t('Visa detaljer', 'View details')}
                     </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="text-xs sm:text-sm gap-1"
-                      onClick={() => {
-                        if (cesiumToken) {
-                          setStreetViewTarget({
+                    <div className="flex gap-1.5">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 text-xs sm:text-sm gap-1"
+                        onClick={() => {
+                          setGoogleStreetViewTarget({
                             lat: selectedMarker.lat,
                             lng: selectedMarker.lng,
                             name: selectedMarker.commonName || selectedMarker.name,
-                            fmGuid: selectedMarker.fmGuid!,
-                            has360: !!selectedMarker.ivionSiteId,
                           });
                           setSelectedMarker(null);
-                        } else {
-                          window.open(
-                            `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${selectedMarker.lat},${selectedMarker.lng}`,
-                            '_blank',
-                            'noopener,noreferrer'
-                          );
-                        }
-                      }}
-                    >
-                      <Eye size={14} />
-                      {t('Gatuvy', 'Street View')}
-                    </Button>
+                        }}
+                      >
+                        <Eye size={14} />
+                        {t('Öppna gatuvy', 'Open Street View')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs sm:text-sm gap-1"
+                        title={t('3D-panorama (Cesium)', '3D panorama (Cesium)')}
+                        onClick={() => {
+                          if (cesiumToken) {
+                            setStreetViewTarget({
+                              lat: selectedMarker.lat,
+                              lng: selectedMarker.lng,
+                              name: selectedMarker.commonName || selectedMarker.name,
+                              fmGuid: selectedMarker.fmGuid!,
+                              has360: !!selectedMarker.ivionSiteId,
+                            });
+                            setSelectedMarker(null);
+                          } else {
+                            window.open(
+                              `https://www.google.com/maps/@?api=1&map_action=pano&viewpoint=${selectedMarker.lat},${selectedMarker.lng}`,
+                              '_blank',
+                              'noopener,noreferrer'
+                            );
+                          }
+                        }}
+                      >
+                        <Box size={14} />
+                        {t('3D', '3D')}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </CardContent>
@@ -863,7 +885,7 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
         )}
       </Map>
 
-      {/* Street View overlay (Cesium-based) */}
+      {/* Street View overlay (Cesium-based 3D panorama) */}
       {streetViewTarget && cesiumToken && (
         <StreetViewOverlay
           lat={streetViewTarget.lat}
@@ -873,6 +895,17 @@ const MapView: React.FC<MapViewProps> = ({ initialColoringMode = 'none', hideSid
           has360={streetViewTarget.has360}
           cesiumToken={cesiumToken}
           onClose={() => setStreetViewTarget(null)}
+        />
+      )}
+
+      {/* Google's own embedded Street View — separate, simpler path */}
+      {googleStreetViewTarget && (
+        <GoogleStreetViewEmbed
+          lat={googleStreetViewTarget.lat}
+          lng={googleStreetViewTarget.lng}
+          buildingName={googleStreetViewTarget.name}
+          open={!!googleStreetViewTarget}
+          onOpenChange={(open) => { if (!open) setGoogleStreetViewTarget(null); }}
         />
       )}
     </div>

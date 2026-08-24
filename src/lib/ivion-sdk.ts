@@ -117,6 +117,13 @@ export interface IvionApi {
   getMenuItems?(): IvionMenuItem[];
   /** Close the sidebar menu */
   closeMenu?(): void;
+  /** View-mode API — switches the panel between panorama and 2D map view */
+  view?: {
+    service?: {
+      getPrimaryView?(): 'map' | 'panorama';
+      setPrimaryView?(view: 'map' | 'panorama'): void;
+    };
+  };
 }
 
 /** Load status for the SDK */
@@ -382,6 +389,13 @@ async function doLoadIvionSdk(
     } catch (e) {
       logger.warn('[Ivion SDK] Failed to auto-load site (user will see site menu):', e);
     }
+  }
+
+  // ── Default to panorama (3D) view, not the SDK's own 2D map default ──
+  try {
+    iv.view?.service?.setPrimaryView?.('panorama');
+  } catch (e) {
+    logger.debug('[Ivion SDK] Could not set primary view to panorama:', e);
   }
 
   // ── Hide sidebar menu items ───────────────────────────────────────

@@ -40,7 +40,8 @@ import { useBuildingViewerData } from '@/hooks/useBuildingViewerData';
 import { useIvionSdk } from '@/hooks/useIvionSdk';
 import { useVirtualTwinSync } from '@/hooks/useVirtualTwinSync';
 import { useViewerCoordinatorSplitSync } from '@/hooks/useViewerCoordinatorSplitSync';
-import { IDENTITY_TRANSFORM, type IvionBimTransform } from '@/lib/ivion-bim-transform';
+import { IDENTITY_TRANSFORM, isIdentityTransform, type IvionBimTransform } from '@/lib/ivion-bim-transform';
+import { decomposeToLegacyTransform } from '@/viewer/calibration';
 import { VIEWER_TOOL_CHANGED_EVENT, VIEW_MODE_2D_TOGGLED_EVENT, VIEW_MODE_REQUESTED_EVENT, LOAD_SAVED_VIEW_EVENT, type ViewerToolChangedDetail, type ViewMode2DToggledDetail, type LoadSavedViewDetail } from '@/lib/viewer-events';
 import SplitPlanView from '@/components/viewer/SplitPlanView';
 import { FLOOR_SELECTION_CHANGED_EVENT } from '@/hooks/useSectionPlaneClipping';
@@ -356,6 +357,12 @@ const UnifiedViewerContent: React.FC<{
   // ─── UI state ──────────────────────────────────────────────────────
   const [showAlignment, setShowAlignment] = useState(false);
   const [showCalibrationScreen, setShowCalibrationScreen] = useState(false);
+  // buildingData.isCalibrated only reflects whatever was loaded on mount — saving a new
+  // calibration doesn't refetch it, so without this the "not calibrated" banner and the
+  // live camera-sync gate would both keep treating the building as uncalibrated until a
+  // full page reload. Sticky true once set (a fresh building switch will replace it via
+  // key/mount anyway), so it survives closing/reopening the calibration screen.
+  const [justCalibrated, setJustCalibrated] = useState(false);
   const [showCrosshair, setShowCrosshair] = useState(true);
   const [ghostOpacity, setGhostOpacity] = useState(30);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -611,7 +618,11 @@ const UnifiedViewerContent: React.FC<{
   // see useViewerCoordinatorSplitSync.ts for the exact scope/tradeoffs of this swap
   // (annotations untouched, VT mode untouched, no iframe-mode camera-sync fallback).
   useViewerCoordinatorSplitSync({
-    enabled: isSplitMode && syncLocked && viewerReady && sdkStatus === 'ready',
+    // Suspended while CalibrationScreen is open — otherwise every point you click while
+    // picking calibration points also reads as a camera move, which gets forwarded
+    // through the coordinator using the CURRENT (about-to-be-replaced, possibly wrong)
+    // transform and snaps the other pane out from under you mid-pick.
+    enabled: isSplitMode && syncLocked && viewerReady && sdkStatus === 'ready' && !showCalibrationScreen,
     buildingFmGuid: buildingData?.fmGuid,
     ivionSiteId: buildingData?.ivionSiteId || '',
     ivApiRef,
@@ -1116,7 +1127,7 @@ const UnifiedViewerContent: React.FC<{
         {/* "Not calibrated" banner — camera sync silently no-ops on an identity transform
             (see useIvionCameraSync.ts's isIdentityTransform() guards); surface that
             instead of leaving the user wondering why nothing moves. */}
-        {(isSplitMode || isVTMode) && buildingData && !buildingData.isCalibrated && !showAlignment && !showCalibrationScreen && (
+        {(isSplitMode || isVTMode) && buildingData && !buildingData.isCalibrated && !justCalibrated && !showAlignment && !showCalibrationScreen && (
           <div className="absolute top-2 left-4 z-50 flex items-center gap-2 bg-warning/15 border border-warning/40 text-warning text-xs rounded-lg px-3 py-2 shadow-lg max-w-sm">
             <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
             <span className="flex-1">
@@ -1145,7 +1156,13 @@ const UnifiedViewerContent: React.FC<{
               transform={transform}
               onChange={setTransform}
               buildingFmGuid={buildingData.fmGuid}
-              onSaved={() => setShowAlignment(false)}
+              onSaved={() => {
+                setShowAlignment(false);
+                // handleDelete already reset `transform` to identity (via onChange) before
+                // calling onSaved, so this correctly reflects a "remove alignment" as still
+                // uncalibrated rather than hiding the banner on a reset-to-nothing.
+                setJustCalibrated(!isIdentityTransform(transform));
+              }}
               showCrosshair={showCrosshair}
               onToggleCrosshair={setShowCrosshair}
             />
@@ -1160,10 +1177,17 @@ const UnifiedViewerContent: React.FC<{
               buildingFmGuid={buildingData.fmGuid}
               ivApiRef={ivApiRef}
               onClose={() => setShowCalibrationScreen(false)}
-              onSaved={() => {
+              onSaved={(fitResult) => {
                 setShowCalibrationScreen(false);
                 setShowAlignment(false);
-                toast.info('Reload the view to use the new calibration.');
+                // Apply the just-fit matrix immediately instead of requiring a full page
+                // reload — CalibrationScreen doesn't feed the running `transform` state the
+                // way AlignmentPanel's sliders do, so without this the banner and the live
+                // camera-sync would both keep using the old (possibly wrong) calibration
+                // until the page was reloaded.
+                const legacy = decomposeToLegacyTransform(fitResult.matrix4x4);
+                setTransform({ offsetX: legacy.offsetX, offsetY: legacy.offsetY, offsetZ: legacy.offsetZ, rotation: legacy.rotation });
+                setJustCalibrated(true);
               }}
             />
           </div>

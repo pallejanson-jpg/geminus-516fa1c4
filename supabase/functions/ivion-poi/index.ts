@@ -687,26 +687,48 @@ serve(async (req) => {
         if (!params.imageId) throw new Error('imageId required');
         try {
           const token = await getIvionToken(params.buildingFmGuid);
-          
-          const imageResp = await fetch(`${IVION_API_URL}/api/images/${params.imageId}`, {
+
+          // /api/images/{imageId} 404s on this server (same "no static resource" issue as
+          // the site image-list endpoint) — /api/site/{siteId}/images/{imageId} is the
+          // working path, matching the /api/site/{siteId}/images?datasetId=... shape
+          // confirmed for get-images-for-site. Resolve siteId from buildingFmGuid since
+          // callers (useIvionCameraSync.ts) only have imageId + buildingFmGuid on hand.
+          const supabaseForSite = createClient(supabaseUrl, supabaseServiceKey);
+          const { data: buildingSettings } = await supabaseForSite
+            .from('building_settings')
+            .select('ivion_site_id')
+            .eq('fm_guid', params.buildingFmGuid)
+            .maybeSingle();
+          if (!buildingSettings?.ivion_site_id) {
+            throw new Error('No Ivion site configured for this building');
+          }
+
+          const imageResp = await fetch(`${IVION_API_URL}/api/site/${buildingSettings.ivion_site_id}/images/${params.imageId}`, {
             headers: {
               'x-authorization': `Bearer ${token}`,
               'Accept': 'application/json',
             },
           });
-          
+
           if (!imageResp.ok) {
             const errorText = await imageResp.text();
             throw new Error(`Image not found: ${imageResp.status} - ${errorText.slice(0, 100)}`);
           }
-          
+
           const image = await imageResp.json();
+          // Response uses snake_case + array tuples, not the {x,y,z} object shape callers
+          // expect. scs_location (Site Coordinate System) is the one comparable across
+          // different datasets in the same site — dataset_location is dataset-relative,
+          // which would silently produce nonsense nearest-image math for a multi-dataset
+          // site like this one. No caller reads orientation from this action's result
+          // (heading/pitch for split-mode sync comes from the SDK's own pov, not this
+          // REST call), so it's dropped rather than exposed half-converted.
+          const [scsX, scsY, scsZ] = image.scs_location || [];
           result = {
             success: true,
             id: image.id,
-            location: image.location, // {x, y, z} in meters (local Ivion coordinates)
-            orientation: image.orientation,
-            datasetId: image.datasetId,
+            location: { x: scsX, y: scsY, z: scsZ },
+            datasetId: image.dataset_id,
           };
         } catch (e: any) {
           result = {
@@ -735,20 +757,37 @@ serve(async (req) => {
           }
           
           const datasets = await datasetsResp.json();
-          
-          // Get images for each dataset (limit to first 2 datasets to avoid timeout)
+
+          // Fetch datasets concurrently (bounded batches) with a wall-clock deadline,
+          // rather than only ever looking at the first 2. A large site (e.g. a train
+          // station) can have 100+ datasets where the first couple are empty/legacy
+          // ones — capping by dataset COUNT silently returned zero images for those
+          // sites even though the site genuinely has panoramas. We now walk the whole
+          // list, in parallel, until either everything's processed, we hit a sane
+          // image cap, or the deadline is reached — whichever comes first.
+          const DATASET_CONCURRENCY = 8;
+          const IMAGE_CAP = 3000;
+          const DEADLINE_MS = 25000;
+          const deadlineAt = Date.now() + DEADLINE_MS;
+
+          // NOTE: /api/dataset/{id}/images (singular "dataset", the path this used to call)
+          // 404s on this server — Spring's "no static resource" response, i.e. the route
+          // plain doesn't exist. /api/site/{siteId}/images?datasetId={id} is the one
+          // confirmed working live. It only returns {id, datasetId} per image though — no
+          // location — so this cache is index-only; positions are resolved per-image via
+          // get-image-position when actually needed.
           const allImages: Array<{ id: number; location: { x: number; y: number; z: number }; datasetId: number }> = [];
-          const datasetsToProcess = datasets.slice(0, 2);
-          
-          for (const ds of datasetsToProcess) {
+          let processedCount = 0;
+          let datasetIndex = 0;
+
+          async function fetchDatasetImages(ds: any): Promise<void> {
             try {
-              const imagesResp = await fetch(`${IVION_API_URL}/api/dataset/${ds.id}/images?limit=500`, {
+              const imagesResp = await fetch(`${IVION_API_URL}/api/site/${params.siteId}/images?datasetId=${ds.id}&limit=500`, {
                 headers: {
                   'x-authorization': `Bearer ${token}`,
                   'Accept': 'application/json',
                 },
               });
-              
               if (imagesResp.ok) {
                 const images = await imagesResp.json();
                 const imageList = Array.isArray(images) ? images : (images.items || []);
@@ -762,12 +801,23 @@ serve(async (req) => {
               console.log(`Failed to load images for dataset ${ds.id}:`, e);
             }
           }
-          
+
+          while (
+            datasetIndex < datasets.length &&
+            allImages.length < IMAGE_CAP &&
+            Date.now() < deadlineAt
+          ) {
+            const batch = datasets.slice(datasetIndex, datasetIndex + DATASET_CONCURRENCY);
+            datasetIndex += batch.length;
+            await Promise.all(batch.map(fetchDatasetImages));
+            processedCount += batch.length;
+          }
+
           result = {
             success: true,
             images: allImages,
             totalDatasets: datasets.length,
-            processedDatasets: datasetsToProcess.length,
+            processedDatasets: processedCount,
           };
         } catch (e: any) {
           result = {

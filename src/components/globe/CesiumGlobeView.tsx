@@ -16,6 +16,7 @@ import { useMapFacilities, MapFacility } from '@/hooks/useMapFacilities';
 import BuildingSidebar from '@/components/map/BuildingSidebar';
 import BuildingInfoCard from '@/components/map/BuildingInfoCard';
 import StreetViewOverlay from '@/components/globe/StreetViewOverlay';
+import GoogleStreetViewEmbed from '@/components/map/GoogleStreetViewEmbed';
 import { useLanguage } from '@/context/LanguageContext';
 
 import { logger } from '@/lib/logger';
@@ -85,7 +86,10 @@ const CesiumGlobeView: React.FC = () => {
   const [bimLoading, setBimLoading] = useState(false);
   const [bimLoadedFmGuid, setBimLoadedFmGuid] = useState<string | null>(null);
   const [streetViewFacility, setStreetViewFacility] = useState<MapFacility | null>(null);
+  const [googleStreetViewFacility, setGoogleStreetViewFacility] = useState<MapFacility | null>(null);
   const [cesiumToken, setCesiumToken] = useState<string | null>(null);
+  const [globeInitError, setGlobeInitError] = useState<string | null>(null);
+  const [retryTick, setRetryTick] = useState(0);
 
   // Sidebar items from shared hook
   const sidebarItems = useMemo(() =>
@@ -117,6 +121,7 @@ const CesiumGlobeView: React.FC = () => {
   // Create Cesium Viewer imperatively
   useEffect(() => {
     if (!containerRef.current || !tokenReady) return;
+    setGlobeInitError(null);
 
     let destroyed = false;
     let pollId: ReturnType<typeof setInterval> | null = null;
@@ -152,6 +157,7 @@ const CesiumGlobeView: React.FC = () => {
         });
       } catch (err) {
         console.error('[CesiumGlobeView] Viewer creation failed:', err);
+        if (!destroyed) setGlobeInitError(t('Kunde inte ladda 3D-jordglob', 'Could not load 3D globe'));
         return;
       }
 
@@ -163,6 +169,7 @@ const CesiumGlobeView: React.FC = () => {
         retryCount++;
         if (retryCount > 3) {
           console.error('[CesiumGlobeView] Giving up after 3 render errors.');
+          setGlobeInitError(t('Kunde inte ladda 3D-jordglob', 'Could not load 3D globe'));
           return;
         }
         destroyViewer();
@@ -239,6 +246,7 @@ const CesiumGlobeView: React.FC = () => {
       }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
       setViewerReady(true);
+      setGlobeInitError(null);
     };
 
     const el = containerRef.current;
@@ -253,6 +261,11 @@ const CesiumGlobeView: React.FC = () => {
           initViewer(el);
         } else if (attempts >= 20) {
           if (pollId !== null) { clearInterval(pollId); pollId = null; }
+          // Previously gave up completely silently here — the user saw a
+          // permanently blank globe with no error and no way to recover
+          // short of a full page reload. Surface it and offer a retry.
+          console.error('[CesiumGlobeView] Container never got a real size (still 0x0 after 2s).');
+          if (!destroyed) setGlobeInitError(t('Kunde inte ladda 3D-jordglob', 'Could not load 3D globe'));
         }
       }, 100);
     } else {
@@ -260,7 +273,7 @@ const CesiumGlobeView: React.FC = () => {
     }
 
     return teardown;
-  }, [tokenReady]);
+  }, [tokenReady, retryTick, t]);
 
   // Save camera state helper
   const saveCameraState = useCallback(() => {
@@ -538,6 +551,17 @@ const CesiumGlobeView: React.FC = () => {
     <div className="flex-1 flex flex-col h-full relative overflow-hidden">
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
 
+      {globeInitError && (
+        <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-30">
+          <div className="text-center space-y-2">
+            <p className="text-sm text-muted-foreground">{globeInitError}</p>
+            <Button variant="outline" size="sm" onClick={() => setRetryTick(n => n + 1)}>
+              {t('Försök igen', 'Retry')}
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Shared sidebar */}
       <BuildingSidebar
         facilities={sidebarItems}
@@ -599,11 +623,21 @@ const CesiumGlobeView: React.FC = () => {
                 </button>
                 <button
                   className="w-full flex items-center justify-between px-1.5 py-1.5 text-[10px] sm:text-[11px] font-medium text-foreground hover:bg-primary/10 rounded transition-colors"
-                  onClick={() => { setStreetViewFacility(selectedBuilding.facility); setSelectedBuilding(null); }}
+                  onClick={() => { setGoogleStreetViewFacility(selectedBuilding.facility); setSelectedBuilding(null); }}
                 >
                   <span className="flex items-center gap-1.5">
                     <MapPin size={11} className="text-primary" />
-                    Street View
+                    {t('Öppna gatuvy', 'Open Street View')}
+                  </span>
+                  <ArrowRight size={10} className="text-muted-foreground" />
+                </button>
+                <button
+                  className="w-full flex items-center justify-between px-1.5 py-1.5 text-[10px] sm:text-[11px] font-medium text-foreground hover:bg-primary/10 rounded transition-colors"
+                  onClick={() => { setStreetViewFacility(selectedBuilding.facility); setSelectedBuilding(null); }}
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Box size={11} className="text-primary" />
+                    {t('3D-panorama (Cesium)', '3D panorama (Cesium)')}
                   </span>
                   <ArrowRight size={10} className="text-muted-foreground" />
                 </button>
@@ -613,7 +647,7 @@ const CesiumGlobeView: React.FC = () => {
         </div>
       )}
 
-      {/* Street View overlay */}
+      {/* Street View overlay (Cesium-based 3D panorama) */}
       {streetViewFacility && cesiumToken && (
         <StreetViewOverlay
           lat={streetViewFacility.lat}
@@ -623,6 +657,17 @@ const CesiumGlobeView: React.FC = () => {
           has360={streetViewFacility.has360}
           cesiumToken={cesiumToken}
           onClose={() => setStreetViewFacility(null)}
+        />
+      )}
+
+      {/* Google's own embedded Street View — separate, simpler path */}
+      {googleStreetViewFacility && (
+        <GoogleStreetViewEmbed
+          lat={googleStreetViewFacility.lat}
+          lng={googleStreetViewFacility.lng}
+          buildingName={googleStreetViewFacility.displayName}
+          open={!!googleStreetViewFacility}
+          onOpenChange={(open) => { if (!open) setGoogleStreetViewFacility(null); }}
         />
       )}
 
