@@ -243,11 +243,16 @@ const GeminusBaseV2ViewerPanel = forwardRef<GeminusBaseV2ViewerHandle, GeminusBa
         </div>
       )}
       {iframeSrc && (
+        // No CSS transition here: a `transition: opacity` that toggles in the same
+        // render as the initial mount can get stuck at its start value if the
+        // browser skips a frame before the change (observed live: computed opacity
+        // stayed 0 indefinitely despite the inline style already reading 1). An
+        // instant, untransitioned flip has no such race.
         <iframe
           ref={iframeRef}
           src={iframeSrc}
           className="w-full h-full border-0"
-          style={{ opacity: phase === 'ready' ? 1 : 0, transition: 'opacity 0.3s' }}
+          style={{ opacity: phase === 'ready' ? 1 : 0 }}
           title="Geminus Base Viewer"
           allow="fullscreen"
         />
