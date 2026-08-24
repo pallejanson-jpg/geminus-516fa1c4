@@ -135,6 +135,19 @@ const GeminusBaseV2ViewerPanel = forwardRef<GeminusBaseV2ViewerHandle, GeminusBa
       if (event.origin !== new URL(cfg.apiUrl).origin) return;
     } catch { return; }
 
+    // The viewer's ready signal comes in one of two shapes depending on the
+    // deployed Tessel client version: the documented `{ type: 'HDC_APP_SYSTEM_READY' }`,
+    // or (observed live on swg-demo.bim.cloud, confirmed by manual postMessage probing)
+    // an `{ operation: 'event', event: 'ui.system.messageapi.ready' }` envelope from a
+    // newer client build. Recognize both so an unannounced vendor protocol bump doesn't
+    // strand the handshake forever with a valid, authenticated session we never reveal.
+    if (event.data?.operation === 'event' && event.data?.event === 'ui.system.messageapi.ready') {
+      readyRef.current = true;
+      setPhase('ready');
+      onReady?.();
+      return;
+    }
+
     const type = event.data?.type ?? event.data;
 
     switch (type) {

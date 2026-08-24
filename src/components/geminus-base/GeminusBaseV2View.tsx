@@ -40,33 +40,41 @@ const MODE_DEFS: Array<{ mode: ViewMode; label: string; Icon: React.ComponentTyp
 interface ViewerToolbarProps {
   viewMode: ViewMode;
   onViewMode: (m: ViewMode) => void;
-  enabled: boolean;
+  /** 2D-FMA only needs the FM Access side (no Geminus building link required) */
+  fmaEnabled: boolean;
+  /** All other modes embed the Geminus viewer, which needs a real building match */
+  geminusEnabled: boolean;
   insightsOpen: boolean;
   onToggleInsights: () => void;
 }
 
-const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewMode, onViewMode, enabled, insightsOpen, onToggleInsights }) => (
+const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewMode, onViewMode, fmaEnabled, geminusEnabled, insightsOpen, onToggleInsights }) => (
   <div className="flex items-center gap-1 px-3 py-1 border-b border-border bg-card shrink-0">
-    {MODE_DEFS.map(({ mode, label, Icon }) => (
-      <button
-        key={mode}
-        disabled={!enabled}
-        onClick={() => onViewMode(mode)}
-        className={cn(
-          'flex items-center gap-1.5 px-3 py-0.5 text-xs rounded font-medium transition-colors',
-          viewMode === mode
-            ? 'bg-primary text-primary-foreground'
-            : 'text-muted-foreground hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed',
-        )}
-      >
-        <Icon size={13} />
-        {label}
-      </button>
-    ))}
+    {MODE_DEFS.map(({ mode, label, Icon }) => {
+      const enabled = mode === '2d-fma' ? fmaEnabled : geminusEnabled;
+      return (
+        <button
+          key={mode}
+          disabled={!enabled}
+          onClick={() => onViewMode(mode)}
+          title={!enabled ? 'This FM Access building isn\'t linked to a Geminus 3D model yet' : undefined}
+          className={cn(
+            'flex items-center gap-1.5 px-3 py-0.5 text-xs rounded font-medium transition-colors',
+            viewMode === mode
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:bg-accent disabled:opacity-40 disabled:cursor-not-allowed',
+          )}
+        >
+          <Icon size={13} />
+          {label}
+        </button>
+      );
+    })}
     <div className="flex-1" />
     <button
-      disabled={!enabled}
+      disabled={!geminusEnabled}
       onClick={onToggleInsights}
+      title={!geminusEnabled ? 'This FM Access building isn\'t linked to a Geminus 3D model yet' : undefined}
       className={cn(
         'flex items-center gap-1.5 px-3 py-0.5 text-xs rounded font-medium transition-colors',
         insightsOpen
@@ -119,10 +127,18 @@ const GeminusBaseV2View: React.FC = () => {
   const [gridCollapsed, setGridCollapsed] = useState(false);
 
   // ── Viewer ────────────────────────────────────────────────────────────────────
-  // viewerBuildingGuid: Geminus fmGuid (for get-embed-config auth)
-  // viewerGeminusBaseGuid: Geminus Base building systemGuid (to resolve correct drawing)
+  // viewerBuildingGuid: Geminus fmGuid — only set when the FM Access building has a
+  // genuine name match in the Geminus portfolio; drives the embedded Geminus viewer
+  // (2D/2D-3D/3D/VT/360/Insights). Demo tenants often have zero real matches, so this
+  // must NOT fall back to guessing some other building — that produced "Building not
+  // found" (a guessed fmGuid with no matching row) or, worse, silently showed the
+  // wrong building's 3D model.
+  // viewerGeminusBaseGuid: Geminus Base building systemGuid — the FM Access side, all
+  // that 2D-FMA needs (get-embed-config resolves the drawing from this, not from a
+  // Geminus fmGuid at all).
   const [viewerBuildingGuid, setViewerBuildingGuid] = useState('');
   const [viewerGeminusBaseGuid, setViewerGeminusBaseGuid] = useState('');
+  const [hasGeminusMatch, setHasGeminusMatch] = useState(false);
 
   // Persist last-used view mode in localStorage (v2 key — the old key used
   // '2d'/'split'/'3d' with different semantics)
@@ -339,14 +355,16 @@ const GeminusBaseV2View: React.FC = () => {
     const geminusBaseGuid = byggnad?.systemGuid || fastighet?.systemGuid || '';
     if (geminusBaseGuid) setViewerGeminusBaseGuid(geminusBaseGuid);
 
-    // Geminus fmGuid — try name match first, fall back to first available building
+    // Geminus fmGuid — only via a genuine name match. No fallback: a guessed building
+    // either doesn't exist (→ "Building not found") or exists but is the WRONG
+    // building, silently shown as if it were correct. Neither is acceptable.
     const searchName = (byggnad?.objectName || fastighet?.objectName || '').toLowerCase();
     const geminusMatch = (navigatorTreeData ?? []).find(n =>
       searchName && (n.commonName || n.name || '').toLowerCase().includes(searchName)
-    ) ?? navigatorTreeData?.[0];
+    );
 
-    if (geminusMatch?.fmGuid) setViewerBuildingGuid(geminusMatch.fmGuid);
-    else if (navigatorTreeData?.[0]?.fmGuid) setViewerBuildingGuid(navigatorTreeData[0].fmGuid);
+    setViewerBuildingGuid(geminusMatch?.fmGuid || '');
+    setHasGeminusMatch(!!geminusMatch?.fmGuid);
 
     // Navigate viewer based on node level
     const showCmd = (): void => {
@@ -479,8 +497,8 @@ const GeminusBaseV2View: React.FC = () => {
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel defaultSize={60}>
-            {viewerBuildingGuid
-              ? <GeminusBaseV2ViewerPanel ref={viewerRef} buildingFmGuid={viewerBuildingGuid}
+            {viewerGeminusBaseGuid
+              ? <GeminusBaseV2ViewerPanel ref={viewerRef} buildingFmGuid={viewerBuildingGuid || viewerGeminusBaseGuid}
                   geminusBaseBuildingGuid={viewerGeminusBaseGuid || undefined}
                   onObjectSelected={handleViewerSelection} onReady={handleViewerReady} className="h-full" />
               : <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
@@ -541,7 +559,8 @@ const GeminusBaseV2View: React.FC = () => {
             <ViewerToolbar
               viewMode={viewMode}
               onViewMode={setViewMode}
-              enabled={!!viewerBuildingGuid}
+              fmaEnabled={!!viewerGeminusBaseGuid}
+              geminusEnabled={hasGeminusMatch}
               insightsOpen={insightsOpen}
               onToggleInsights={handleToggleInsights}
             />
@@ -613,7 +632,7 @@ const GeminusBaseV2View: React.FC = () => {
 
             {/* Viewer — both viewers stay mounted; visibility toggles with mode */}
             <div className="flex-1 overflow-hidden relative">
-              {!viewerBuildingGuid ? (
+              {!viewerGeminusBaseGuid ? (
                 <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
                   Select a building or floor to load the viewer
                 </div>
@@ -621,7 +640,7 @@ const GeminusBaseV2View: React.FC = () => {
                 <>
                   <div className={cn('absolute inset-0 flex', viewMode === '2d-fma' ? 'flex' : 'hidden')}>
                     <div className="flex-1 overflow-hidden">
-                      <GeminusBaseV2ViewerPanel ref={viewerRef} buildingFmGuid={viewerBuildingGuid}
+                      <GeminusBaseV2ViewerPanel ref={viewerRef} buildingFmGuid={viewerBuildingGuid || viewerGeminusBaseGuid}
                         geminusBaseBuildingGuid={viewerGeminusBaseGuid || undefined}
                         onObjectSelected={handleViewerSelection} onReady={handleViewerReady} className="h-full" />
                     </div>
@@ -633,7 +652,18 @@ const GeminusBaseV2View: React.FC = () => {
                       className="w-64 border-l border-border bg-card shrink-0"
                     />
                   </div>
-                  {iframeMounted && iframeSrc && (
+                  {/* Geminus-embedded modes need a real building match — the FM Access
+                      demo tenant usually has none, so show an honest message instead of
+                      a guessed building (silently wrong) or a hard "Building not found". */}
+                  {viewMode !== '2d-fma' && !hasGeminusMatch && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-background">
+                      <p className="text-xs text-muted-foreground max-w-xs text-center px-4">
+                        This FM Access building isn't linked to a Geminus 3D model yet.
+                        Only the 2D-FMA (native drawing) view is available for it.
+                      </p>
+                    </div>
+                  )}
+                  {hasGeminusMatch && iframeMounted && iframeSrc && (
                     <iframe ref={iframeRef} src={iframeSrc} onLoad={handleIframeLoad}
                       className={cn('absolute inset-0 w-full h-full border-0', viewMode !== '2d-fma' ? 'block' : 'hidden')}
                       title="Geminus Viewer" />
