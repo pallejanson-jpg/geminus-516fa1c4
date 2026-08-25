@@ -281,17 +281,18 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     };
   }, []);
 
-  // Listen for VIEWER_ZOOM_TO_OBJECT from portfolio "Open in 3D"
+  // Listen for VIEWER_ZOOM_TO_OBJECT from portfolio "Open in 3D" (and FMA 2.0's
+  // grid selection)
   useEffect(() => {
     const handler = (e: Event) => {
-      const { fmGuid } = (e as CustomEvent).detail || {};
+      const { fmGuid, fallbackName } = (e as CustomEvent).detail || {};
       if (!fmGuid) return;
       const viewer = (window as any).__nativeXeokitViewer;
       if (!viewer?.scene || !viewer?.cameraFlight) return;
-      
+
       const norm = (s: string) => s.toLowerCase().replace(/-/g, '');
       const target = norm(fmGuid);
-      
+
       const metaObjects = viewer.metaScene?.metaObjects || {};
       let entityId: string | null = null;
       for (const [id, mo] of Object.entries(metaObjects)) {
@@ -301,7 +302,24 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
           break;
         }
       }
-      
+
+      // Fallback: some records (e.g. FM Access-sourced rooms) were never linked to
+      // this model's own IFC entity ids — geometry_entity_map has no usable mapping
+      // for them. Match by name instead, scoped to whatever is currently visible
+      // (a floor isolation from FLOOR_SELECTION_CHANGED narrows this to one storey)
+      // so a common room name like "KÖK" doesn't jump to a different floor.
+      if (!entityId && fallbackName) {
+        const normName = fallbackName.trim().toLowerCase();
+        const visible = new Set(viewer.scene.visibleObjectIds || []);
+        for (const [id, mo] of Object.entries(metaObjects)) {
+          if (visible.size > 0 && !visible.has(id)) continue;
+          if (((mo as any).name || '').trim().toLowerCase() === normName) {
+            entityId = id;
+            break;
+          }
+        }
+      }
+
       if (entityId) {
         const entity = viewer.scene.objects[entityId];
         if (entity) {

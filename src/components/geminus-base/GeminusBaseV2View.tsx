@@ -487,9 +487,13 @@ const GeminusBaseV2View: React.FC = () => {
     }
     // ...and the embedded Geminus viewer too, regardless of which mode is active —
     // its systemGuid is the room/object's Geminus fm_guid (same equivalence as
-    // buildings and floors).
+    // buildings and floors). fallbackName covers rooms whose fm_guid hasn't been
+    // reconciled to the model's own IFC entity id yet (a known sync gap for
+    // FM Access-sourced rooms — see geometry_entity_map).
     if (guid && hasGeminusMatch) {
-      sendGeminusNav({ type: 'geminus-viewer-zoom-to-entity', fmGuid: guid });
+      const meta = (node as any).metadata || {};
+      const fallbackName = meta.space_fullname || meta.equip_fullname || node.objectName;
+      sendGeminusNav({ type: 'geminus-viewer-zoom-to-entity', fmGuid: guid, fallbackName });
     }
   }, [hasGeminusMatch, sendGeminusNav]);
 

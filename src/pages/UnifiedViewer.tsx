@@ -376,8 +376,10 @@ const UnifiedViewerContent: React.FC<{
       } else if (d?.type === 'geminus-viewer-insights') {
         setInsightsPanelOpen(v => (typeof d.open === 'boolean' ? d.open : !v));
       } else if (d?.type === 'geminus-viewer-zoom-to-entity' && d.fmGuid) {
-        // Same channel NativeViewerShell already listens to for portfolio's "Open in 3D"
-        emit('VIEWER_ZOOM_TO_OBJECT', { fmGuid: d.fmGuid });
+        // Same channel NativeViewerShell already listens to for portfolio's "Open in 3D".
+        // fallbackName covers FM Access-sourced rooms whose fm_guid was never
+        // reconciled to this model's own IFC entity ids.
+        emit('VIEWER_ZOOM_TO_OBJECT', { fmGuid: d.fmGuid, fallbackName: d.fallbackName });
       } else if (d?.type === 'geminus-viewer-floor' && d.fmGuid) {
         emit('FLOOR_SELECTION_CHANGED', {
           floorId: null, floorName: d.floorName || null, bounds: null,

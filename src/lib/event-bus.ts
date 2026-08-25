@@ -213,7 +213,10 @@ export interface EventMap {
   ROOM_LABELS_CONFIG: any;
 
   // Zoom
-  VIEWER_ZOOM_TO_OBJECT: { fmGuid: string };
+  // fallbackName: used when no entity in the loaded model carries fmGuid as its
+  // native IFC id (e.g. FM Access-sourced room records that were never linked to
+  // the model's own geometry) — falls back to a name match within the visible set.
+  VIEWER_ZOOM_TO_OBJECT: { fmGuid: string; fallbackName?: string };
   VIEWER_FLY_TO: { fmGuid: string };
 
   // Visualization quick select
