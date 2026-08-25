@@ -29,6 +29,7 @@ import {
   Undo2,
   Redo2,
   Expand,
+  TreeDeciduous,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -100,6 +101,7 @@ const ALL_TOOLS: ToolDef[] = [
   { id: 'geminiAi', label: 'Geminus AI', icon: <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
   { id: 'screenshot', label: 'Screenshot', icon: <Camera className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
   { id: 'explode', label: 'Explode', icon: <Expand className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
+  { id: 'modelTree', label: 'Modellträd', icon: <TreeDeciduous className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
 ];
 
 const DEFAULT_ENABLED = ['orbit', 'firstPerson', 'fitView', 'resetView', 'select', 'measure', 'section', 'viewMode', 'geminiAi'];
@@ -173,14 +175,27 @@ function apply2DDoorSwings(viewer: any, scene: any, metaObjects: any, floorBaseY
     const dx = maxX - minX;
     const dz = maxZ - minZ;
 
+    // IFC places the door origin at the hinge point. entity.worldMatrix column 3
+    // = world translation = [m[12], m[13], m[14]]. Comparing the origin to the
+    // AABB extremes tells us which end holds the hinge without parsing IFC geometry.
+    const wm: Float32Array | null = entity.worldMatrix ?? null;
+
     if (dx >= dz) {
-      // Door panel lies along X; hinge at left/minX end, swing toward +Z
       const midZ = (minZ + maxZ) / 2;
-      addArc(minX, midZ, dx, 0, 90);
+      const hingeAtMax = wm !== null && Math.abs(wm[12] - maxX) < Math.abs(wm[12] - minX);
+      if (hingeAtMax) {
+        addArc(maxX, midZ, dx, 180, -90); // hinge at maxX, opens toward +Z
+      } else {
+        addArc(minX, midZ, dx, 0, 90);   // hinge at minX, opens toward +Z
+      }
     } else {
-      // Door panel lies along Z; hinge at bottom/minZ end, swing toward +X
       const midX = (minX + maxX) / 2;
-      addArc(midX, minZ, dz, 90, -90);
+      const hingeAtMax = wm !== null && Math.abs(wm[14] - maxZ) < Math.abs(wm[14] - minZ);
+      if (hingeAtMax) {
+        addArc(midX, maxZ, dz, -90, 90); // hinge at maxZ, opens toward +X
+      } else {
+        addArc(midX, minZ, dz, 90, -90); // hinge at minZ, opens toward +X
+      }
     }
   }
 
@@ -1753,6 +1768,14 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
                     }
                   }}
                   active={false}
+                  disabled={!isReady}
+                />
+              )}
+              {tool.id === 'modelTree' && (
+                <ToolButton
+                  icon={tool.icon}
+                  label={tool.label}
+                  onClick={() => window.dispatchEvent(new CustomEvent('TOGGLE_MODEL_TREE'))}
                   disabled={!isReady}
                 />
               )}

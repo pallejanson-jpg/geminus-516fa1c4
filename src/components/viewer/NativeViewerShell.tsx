@@ -19,6 +19,7 @@ import InventoryPanel from './InventoryPanel';
 import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
 import VisualizationLegendOverlay from './VisualizationLegendOverlay';
 import IfcColorLegend from './IfcColorLegend';
+import ViewerTreePanel from './ViewerTreePanel';
 import SensorDataOverlay from './SensorDataOverlay';
 import IndoorRoute3DRenderer from './IndoorRoute3DRenderer';
 import IndoorWayfindingPanel from './IndoorWayfindingPanel';
@@ -257,6 +258,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   const [showVisualizationMenu, setShowVisualizationMenu] = useState(false);
   const [showRoomVisualization, setShowRoomVisualization] = useState(false);
   const [showAssetPanel, setShowAssetPanel] = useState(false);
+  const [showModelTree, setShowModelTree] = useState(false);
 
   // ── Inventory pick-position mode ──────────────────────────────────────
   const [isPickingPosition, setIsPickingPosition] = useState(false);
@@ -268,6 +270,13 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
     const handler = () => setShowAssetPanel(p => !p);
     window.addEventListener('TOGGLE_ASSET_PANEL', handler);
     return () => window.removeEventListener('TOGGLE_ASSET_PANEL', handler);
+  }, []);
+
+  // Listen for model tree toggle events (from ViewerToolbar modelTree button)
+  useEffect(() => {
+    const handler = () => setShowModelTree(p => !p);
+    window.addEventListener('TOGGLE_MODEL_TREE', handler);
+    return () => window.removeEventListener('TOGGLE_MODEL_TREE', handler);
   }, []);
 
   // Listen for external toggle events (from MobileViewerPage header)
@@ -1227,6 +1236,16 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
       {/* IFC type color legend — collapsible, top-right */}
       {isViewerReady && <IfcColorLegend />}
+
+      {/* Model tree — floating draggable panel, toggled from ViewerToolbar */}
+      {isViewerReady && (
+        <ViewerTreePanel
+          viewerRef={viewerShimRef}
+          isVisible={showModelTree}
+          onClose={() => setShowModelTree(false)}
+          buildingFmGuid={buildingFmGuid}
+        />
+      )}
 
       {/* Asset panel — independent from visualization menu */}
       {isViewerReady && buildingFmGuid && (
