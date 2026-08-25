@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { GripVertical, X, Loader2, Search, MapPin, Check, AlertCircle, Move3D } from 'lucide-react';
+import { GripVertical, X, Loader2, Search, MapPin, Check, AlertCircle, Move3D, DoorOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -294,6 +296,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
     }
 
     // Now that every asset has coordinates saved, create the actual POIs.
+    const failureReasons: string[] = [];
     for (const asset of [...roomPlaced, ...needsCluster]) {
       try {
         const { data, error } = await supabase.functions.invoke('ivion-poi', {
@@ -304,13 +307,16 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
         });
 
         if (error || !data?.success) {
-          console.error('Failed to sync asset:', asset.fm_guid, data?.message || error);
+          const reason = data?.message || error?.message || 'Unknown error';
+          console.error('Failed to sync asset:', asset.fm_guid, reason);
+          failureReasons.push(`${asset.name}: ${reason}`);
           failCount++;
         } else {
           successCount++;
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error syncing asset:', asset.fm_guid, err);
+        failureReasons.push(`${asset.name}: ${err?.message || 'Unknown error'}`);
         failCount++;
       }
     }
@@ -331,7 +337,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
 
     if (failCount > 0) {
       toast.error(`${failCount} failed`, {
-        description: 'Check Ivion connection',
+        description: failureReasons.slice(0, 3).join(' · ') || 'Check Ivion connection',
       });
     }
   };
@@ -435,28 +441,58 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
                   </Button>
                 </div>
               </div>
+              <p className="px-2 pb-1.5 text-[10px] text-muted-foreground">
+                <DoorOpen className="inline h-3 w-3 mb-px" /> Room = placed at the linked room's center ·{' '}
+                <Move3D className="inline h-3 w-3 mb-px" /> Cluster = grouped near a shared point, needs review after creation
+              </p>
 
-              {filteredAssets.map((asset) => (
-                <div
-                  key={asset.fm_guid}
-                  className={cn(
-                    'flex items-center gap-3 p-2 rounded-lg cursor-pointer hover:bg-muted/50 transition-colors',
-                    selectedAssets.has(asset.fm_guid) && 'bg-primary/10'
-                  )}
-                  onClick={() => toggleAsset(asset.fm_guid)}
-                >
-                  <Checkbox
-                    checked={selectedAssets.has(asset.fm_guid)}
-                    onCheckedChange={() => toggleAsset(asset.fm_guid)}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">{asset.name}</div>
-                    {asset.asset_type && (
-                      <div className="text-xs text-muted-foreground truncate">{asset.asset_type}</div>
-                    )}
-                  </div>
-                </div>
-              ))}
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="w-8 px-2 py-1.5" />
+                    <TableHead className="px-2 py-1.5 text-xs">Asset</TableHead>
+                    <TableHead className="px-2 py-1.5 text-xs text-right">Placement</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredAssets.map((asset) => (
+                    <TableRow
+                      key={asset.fm_guid}
+                      className={cn(
+                        'cursor-pointer hover:bg-muted/50',
+                        selectedAssets.has(asset.fm_guid) && 'bg-primary/10 hover:bg-primary/10'
+                      )}
+                      onClick={() => toggleAsset(asset.fm_guid)}
+                    >
+                      <TableCell className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedAssets.has(asset.fm_guid)}
+                          onCheckedChange={() => toggleAsset(asset.fm_guid)}
+                        />
+                      </TableCell>
+                      <TableCell className="px-2 py-2 min-w-0">
+                        <div className="text-sm font-medium truncate text-foreground">{asset.name}</div>
+                        {asset.asset_type && (
+                          <div className="text-xs text-muted-foreground truncate">{asset.asset_type}</div>
+                        )}
+                      </TableCell>
+                      <TableCell className="px-2 py-2 text-right">
+                        {asset.in_room_fm_guid ? (
+                          <Badge variant="outline" className="gap-1 text-[10px] whitespace-nowrap">
+                            <DoorOpen className="h-3 w-3" />
+                            Room
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="gap-1 text-[10px] whitespace-nowrap text-amber-600 border-amber-500/40">
+                            <Move3D className="h-3 w-3" />
+                            Cluster
+                          </Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </>
           )}
         </div>
@@ -473,7 +509,7 @@ const UnplacedAssetsPanel: React.FC<UnplacedAssetsPanelProps> = ({
             <div className="px-2 pb-2 space-y-1">
               {pendingReview.map((asset) => (
                 <div key={asset.fm_guid} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg hover:bg-muted/50">
-                  <span className="text-sm truncate">{asset.name}</span>
+                  <span className="text-sm truncate text-foreground">{asset.name}</span>
                   <Button
                     variant="outline"
                     size="sm"
