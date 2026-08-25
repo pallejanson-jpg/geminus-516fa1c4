@@ -369,19 +369,23 @@ const GeminusBaseV2View: React.FC = () => {
     // Geminus fmGuid: FM Access's systemGuid IS the Geminus fm_guid — every building
     // was synced from the same source and keeps the same GUID on both sides (verified
     // directly: e.g. Labradorgatan 18's systemGuid 42495e64-... is exactly the fm_guid
-    // of the Geminus "Labradorgatan 18" Building row). No name-matching needed — just
-    // confirm the GUID actually resolves to a real building before trusting it, so a
-    // building that hasn't been synced into Geminus yet still gets the honest
-    // "not linked" state instead of a hard "Building not found".
+    // of the Geminus "Labradorgatan 18" Building row). No name-matching needed for the
+    // building GUID itself — just confirm it resolves to something real in Geminus.
+    // That "something real" is NOT always a literal Building/IfcBuilding row: some
+    // buildings (e.g. "31401"/Centralstationen, confirmed live) have no Building row
+    // at all but do have real Building Storey + Space + Instance children — and the
+    // Geminus viewer displays those buildings fine (useBuildingViewerData falls back
+    // to deriving the building from its storeys). Checking storeys too avoids
+    // wrongly showing "not linked" for buildings that actually work.
     if (geminusBaseGuid) {
       const { supabase } = await import('@/integrations/supabase/client');
-      const { data } = await supabase
-        .from('assets')
-        .select('fm_guid')
-        .eq('fm_guid', geminusBaseGuid)
-        .in('category', ['Building', 'IfcBuilding'])
-        .maybeSingle();
-      const matched = !!data?.fm_guid;
+      const [{ data: buildingRow }, { data: storeyRow }] = await Promise.all([
+        supabase.from('assets').select('fm_guid').eq('fm_guid', geminusBaseGuid)
+          .in('category', ['Building', 'IfcBuilding']).maybeSingle(),
+        supabase.from('assets').select('fm_guid').eq('building_fm_guid', geminusBaseGuid)
+          .in('category', ['Building Storey', 'IfcBuildingStorey']).limit(1).maybeSingle(),
+      ]);
+      const matched = !!buildingRow?.fm_guid || !!storeyRow?.fm_guid;
       setViewerBuildingGuid(matched ? geminusBaseGuid : '');
       setHasGeminusMatch(matched);
 

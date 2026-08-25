@@ -392,7 +392,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
    * This handles the case where UnifiedViewer dispatches with only visibleFloorFmGuids
    * (Geminus Plus GUIDs) and empty visibleMetaFloorIds.
    */
-  const resolveMetaFloorIds = useCallback((fmGuids: string[]): string[] => {
+  const resolveMetaFloorIds = useCallback((fmGuids: string[], fallbackName?: string | null): string[] => {
     const viewer = (window as any).__nativeXeokitViewer;
     if (!viewer?.metaScene?.metaObjects) return [];
     const normalizedGuids = new Set(fmGuids.map(g => g.toLowerCase().replace(/-/g, '')));
@@ -404,6 +404,17 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         result.push(mo.id);
       }
     });
+    // Same GUID-first, name-fallback pattern as ViewerFilterPanel's space/storey
+    // matching: many storeys were never reconciled to this model's own IFC ids,
+    // so an exact GUID match often finds nothing even though a same-named storey
+    // exists in the model.
+    if (result.length === 0 && fallbackName) {
+      const normName = fallbackName.trim().toLowerCase();
+      Object.values(viewer.metaScene.metaObjects).forEach((mo: any) => {
+        if (mo.type?.toLowerCase() !== 'ifcbuildingstorey') return;
+        if ((mo.name || '').trim().toLowerCase() === normName) result.push(mo.id);
+      });
+    }
     return result;
   }, []);
 
@@ -421,7 +432,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
   // Wire floor selection → section plane clipping (3D ceiling clip only)
   useEffect(() => {
     const off = on('FLOOR_SELECTION_CHANGED', (detail: FloorSelectionEventDetail) => {
-      const { floorId, visibleMetaFloorIds, visibleFloorFmGuids, isAllFloorsVisible, skipClipping, isSoloFloor } = detail;
+      const { floorId, visibleMetaFloorIds, visibleFloorFmGuids, isAllFloorsVisible, skipClipping, isSoloFloor, floorName } = detail;
       if (skipClipping) return;
 
       // In 2D mode the section plane is managed by ViewerToolbar — don't interfere
@@ -439,7 +450,7 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
         metaIds = [floorId, ...metaIds.filter(id => id !== floorId)];
       }
       if (!metaIds.length && visibleFloorFmGuids?.length) {
-        metaIds = resolveMetaFloorIds(visibleFloorFmGuids);
+        metaIds = resolveMetaFloorIds(visibleFloorFmGuids, floorName);
       }
 
       const soloMetaId = isSoloFloor ? metaIds[0] : null;
