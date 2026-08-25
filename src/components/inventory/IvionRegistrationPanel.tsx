@@ -190,13 +190,20 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
          toast.success('Latest POI fetched!', {
            description: `Position: (${data.location.x.toFixed(2)}, ${data.location.y.toFixed(2)}, ${data.location.z.toFixed(2)})`,
          });
+      } else if (error) {
+        logger.warn('POI fetch failed:', error);
+        toast.error('Could not fetch POI position', { description: error.message });
       } else if (data?.error) {
-        // Show error but don't block the form
         logger.warn('POI fetch warning:', data.error);
+        toast.error('Could not fetch POI position', { description: data.hint || data.error });
+      } else {
+        toast.error('No POI found in this Ivion site yet', {
+          description: 'Place a POI natively in the 360° view first, then Fetch latest.',
+        });
       }
-    } catch (err) {
-      // Silent fail - auto-fetch is a bonus feature
+    } catch (err: any) {
       logger.log('Auto-fetch POI failed:', err);
+      toast.error('Could not fetch POI position', { description: err?.message });
     } finally {
       setIsFetchingPoi(false);
     }
@@ -572,7 +579,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
             placeholder="POI-ID eller Ivion-URL..."
             value={poiInput}
             onChange={(e) => setPoiInput(e.target.value)}
-            className="h-9 text-sm"
+            className="h-9 text-sm !text-foreground"
           />
           <Button
             variant="outline"
@@ -621,7 +628,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
                 if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: undefined }));
               }}
               placeholder="e.g. Fire Extinguisher BS-001"
-              className="h-10"
+              className="h-10 !text-foreground"
               maxLength={100}
             />
             {fieldErrors.name && <p className="text-xs text-destructive">{fieldErrors.name}</p>}
@@ -739,7 +746,7 @@ const IvionRegistrationPanel: React.FC<IvionRegistrationPanelProps> = ({
                onChange={(e) => setDescription(e.target.value)}
                placeholder="Optional description..."
               rows={2}
-              className="resize-none"
+              className="resize-none !text-foreground"
             />
           </div>
         </div>
