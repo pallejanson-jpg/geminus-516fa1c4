@@ -1,4 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { useTandemIsolation, SPACE_TYPES } from '@/hooks/useTandemIsolation';
+import { useViewerHistory } from '@/hooks/useViewerHistory';
+import { RoomIsolationOverlay } from './RoomIsolationOverlay';
 import {
   ZoomIn,
   Focus,
@@ -6,6 +9,7 @@ import {
   Scissors,
   MousePointer2,
   RotateCcw,
+  RotateCw,
   Move,
   Cuboid,
   SquareDashed,
@@ -21,6 +25,10 @@ import {
   Triangle,
   PanelRight,
   GripVertical,
+  Camera,
+  Undo2,
+  Redo2,
+  Expand,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -30,6 +38,7 @@ import { Slider } from '@/components/ui/slider';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { applyArchitectColors } from '@/lib/architect-colors';
+import { isAModelName } from '@/lib/building-utils';
 import GunnarChat, { GunnarContext } from '@/components/chat/GunnarChat';
 import { ARCHITECT_BACKGROUND_CHANGED_EVENT } from '@/hooks/useArchitectViewMode';
 import {
@@ -89,6 +98,8 @@ const ALL_TOOLS: ToolDef[] = [
   { id: 'crosshair', label: 'Crosshair', icon: <Crosshair className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
   { id: 'navigation', label: 'Indoor navigation', icon: <Navigation className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
   { id: 'geminiAi', label: 'Geminus AI', icon: <Bot className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
+  { id: 'screenshot', label: 'Screenshot', icon: <Camera className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
+  { id: 'explode', label: 'Explode', icon: <Expand className="h-3.5 w-3.5 sm:h-4 sm:w-4" />, group: 'extra' },
 ];
 
 const DEFAULT_ENABLED = ['orbit', 'firstPerson', 'fitView', 'resetView', 'select', 'measure', 'section', 'viewMode', 'geminiAi'];
@@ -103,6 +114,98 @@ function getEnabledTools(): string[] {
 
 function saveEnabledTools(tools: string[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(tools));
+}
+
+/**
+ * Adds procedural door-swing arc geometry to the scene at floor level.
+ * Creates a thin SceneModel with quarter-circle arcs (+ door-panel lines) for
+ * every visible IfcDoor entity. The overlay is not clippable so it stays visible
+ * regardless of the horizontal section plane.
+ */
+function apply2DDoorSwings(viewer: any, scene: any, metaObjects: any, floorBaseY: number) {
+  const sdk = (window as any).__xeokitSdk;
+  // Remove any previous overlay
+  try { scene.models?.['__2d_door_swings']?.destroy?.(); } catch {}
+  if (!sdk?.SceneModel) return;
+
+  const ARC_SEGS = 18;
+  const SWING_COLOR = [0.0, 0.55, 0.28]; // FM Access green
+  const arcY = floorBaseY + 0.05; // just above floor
+
+  let idx = 0;
+  const positions: number[] = [];
+  const indices: number[] = [];
+
+  const addArc = (
+    cx: number, cz: number,
+    radius: number,
+    startDeg: number, sweepDeg: number,
+  ) => {
+    const startRad = (startDeg * Math.PI) / 180;
+    const sweepRad = (sweepDeg * Math.PI) / 180;
+    // Door panel line: hinge → free end (closed position)
+    const p0 = positions.length / 3;
+    positions.push(cx, arcY, cz); // hinge
+    positions.push(
+      cx + Math.cos(startRad) * radius, arcY,
+      cz + Math.sin(startRad) * radius,
+    );
+    indices.push(p0, p0 + 1);
+    // Quarter-circle arc
+    const a0 = positions.length / 3;
+    for (let i = 0; i <= ARC_SEGS; i++) {
+      const a = startRad + (i / ARC_SEGS) * sweepRad;
+      positions.push(cx + Math.cos(a) * radius, arcY, cz + Math.sin(a) * radius);
+    }
+    for (let i = 0; i < ARC_SEGS; i++) indices.push(a0 + i, a0 + i + 1);
+    idx++;
+  };
+
+  for (const mo of Object.values(metaObjects) as any[]) {
+    const t = (mo.type || '').toLowerCase();
+    if (t !== 'ifcdoor' && t !== 'ifcdoorstandardcase') continue;
+    const entity = scene.objects?.[mo.id];
+    if (!entity?.visible) continue;
+    const aabb = entity.aabb;
+    if (!aabb) continue;
+
+    const [minX, , minZ, maxX, , maxZ] = aabb;
+    const dx = maxX - minX;
+    const dz = maxZ - minZ;
+
+    if (dx >= dz) {
+      // Door panel lies along X; hinge at left/minX end, swing toward +Z
+      const midZ = (minZ + maxZ) / 2;
+      addArc(minX, midZ, dx, 0, 90);
+    } else {
+      // Door panel lies along Z; hinge at bottom/minZ end, swing toward +X
+      const midX = (minX + maxX) / 2;
+      addArc(midX, minZ, dz, 90, -90);
+    }
+  }
+
+  if (idx === 0) return; // no doors found
+
+  try {
+    const m = new sdk.SceneModel(viewer, {
+      id: '__2d_door_swings',
+      pickable: false,
+      collidable: false,
+      clippable: false,
+      edges: false,
+    });
+    m.createGeometry({
+      id: 'door-geo',
+      primitive: 'lines',
+      positions: new Float32Array(positions),
+      indices: new Uint32Array(indices),
+    });
+    m.createMesh({ id: 'door-mesh', geometryId: 'door-geo', color: SWING_COLOR });
+    m.createEntity({ id: 'door-ent', meshIds: ['door-mesh'], pickable: false });
+    m.finalize();
+  } catch (e) {
+    console.warn('[2D] Door swing overlay failed:', e);
+  }
 }
 
 // ─── ToolButton ───────────────────────────────────────────────────────────────
@@ -163,6 +266,30 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
 
   const [enabledTools, setEnabledTools] = useState<string[]>(getEnabledTools);
   const [showConfig, setShowConfig] = useState(false);
+
+  // ── Explode tool ─────────────────────────────────────────────────────────
+  const [explodeAmount, setExplodeAmount] = useState(0);
+  const [isExplodeActive, setIsExplodeActive] = useState(false);
+  const explodeBaseOffsetsRef = useRef<Map<string, number[]>>(new Map());
+
+  // ── Undo / redo ───────────────────────────────────────────────────────────
+  const getViewerForHistory = useCallback(() => viewer, [viewer]);
+  const { push: historyPush, undo: historyUndo, redo: historyRedo, canUndo, canRedo } = useViewerHistory(getViewerForHistory);
+
+  // Keyboard shortcuts: Ctrl+Z / Ctrl+Y
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!viewer?.scene) return;
+      if (e.ctrlKey && !e.shiftKey && e.key === 'z') { e.preventDefault(); historyUndo(); }
+      if (e.ctrlKey && (e.key === 'y' || (e.shiftKey && e.key === 'z'))) { e.preventDefault(); historyRedo(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [viewer, historyUndo, historyRedo]);
+
+  // ── Tandem-style room isolation ───────────────────────────────────────────
+  const { isolatedSpaceId, isolatedSpaceIdRef, isolatedSpaceName, backdropLabels, isolate, exit: exitIsolation } = useTandemIsolation();
+  const pendingIsolationRef = useRef<string | null>(null);
   const [navSpeed, setNavSpeed] = useState(() => {
     try { return parseInt(localStorage.getItem('viewer-nav-speed') || '100'); } catch { return 100; }
   });
@@ -206,6 +333,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
 
   const viewModeRef = useRef<ViewMode>(viewMode);
   const colorizedFor2dRef = useRef<Map<string, { offset: number[] | null }>>(new Map());
+  // Manual 2D plan rotation (0 = auto-detected, then user can cycle 90° CW per click)
+  const plan2dRotationRef = useRef<number>(0); // degrees, 0/90/180/270
   const [currentFloorId, setCurrentFloorId] = useState<string | null>(null);
   const currentFloorIdRef = useRef<string | null>(null); // sync ref — always up-to-date for rAF callbacks
   const [currentFloorBounds, setCurrentFloorBounds] = useState<{ minY: number; maxY: number } | null>(null);
@@ -215,6 +344,24 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
     if (!viewer) return;
     const assetViewShim = { viewer, viewFit: () => {}, setNavMode: () => {}, useTool: () => {}, clearSlices: () => {} };
     viewerShimRef.current = { $refs: { AssetViewer: { $refs: { assetView: assetViewShim } } }, assetViewer: { $refs: { assetView: assetViewShim } } };
+  }, [viewer]);
+
+  // Cache door metaObjects once after model load — avoids O(N) full scan on every 2D floor switch.
+  // Populated by VIEWER_MODELS_LOADED and reused on subsequent 2D activations.
+  const cachedDoorMetaObjectsRef = useRef<any[] | null>(null);
+  useEffect(() => {
+    const buildDoorCache = () => {
+      const meta = viewer?.metaScene?.metaObjects;
+      if (!meta) return;
+      cachedDoorMetaObjectsRef.current = Object.values(meta).filter((mo: any) => {
+        const t = (mo.type || '').toLowerCase();
+        return t === 'ifcdoor' || t === 'ifcdoorstandardcase';
+      });
+    };
+    const off = on('VIEWER_MODELS_LOADED', buildDoorCache);
+    // Also try immediately in case models are already loaded
+    buildDoorCache();
+    return off;
   }, [viewer]);
 
   useEffect(() => { viewModeRef.current = viewMode; }, [viewMode]);
@@ -249,7 +396,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
     calculateFloorBounds,
     updateFloorCutHeight,
     update3DCeilingOffset,
-  } = useSectionPlaneClipping(viewerShimRef, { enabled: true, clipMode: 'floor', floorCutHeight: 0.5 });
+  } = useSectionPlaneClipping(viewerShimRef, { enabled: true, clipMode: 'floor', floorCutHeight: 1.2 });
 
   // ── Floor selection events ────────────────────────────────────────────────
   useEffect(() => {
@@ -294,9 +441,17 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
       // When skipClipping is set (e.g. from FloatingFloorSwitcher which already
       // handles visibility), don't apply additional section-plane clipping.
       if (skipClipping) {
-        // Still remove stale clipping planes when showing all floors
         if (isAllFloorsVisible) {
           requestAnimationFrame(() => { try { remove3DClipping(); } catch {} });
+        } else if (resolvedFloorId) {
+          // Even when entity visibility is handled externally, still apply clipping:
+          // — 2D mode: re-run full entity styling for the new floor
+          // — 3D mode: apply ceiling clip so objects above the selected floor are cut
+          if (viewModeRef.current === '2d') {
+            requestAnimationFrame(() => { handleViewModeChangeRef.current?.('2d'); });
+          } else {
+            requestAnimationFrame(() => { try { applyCeilingClipping(resolvedFloorId); } catch {} });
+          }
         }
         return;
       }
@@ -459,6 +614,18 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
 
   // ── Navigation handlers — direct xeokit API ──────────────────────────────
 
+  const handleRotate2DPlan = useCallback(() => {
+    if (!viewer?.camera) return;
+    plan2dRotationRef.current = (plan2dRotationRef.current + 90) % 360;
+    const d = plan2dRotationRef.current;
+    const upVec: [number, number, number] =
+      d === 90 ? [1, 0, 0] : d === 180 ? [0, 0, 1] : d === 270 ? [-1, 0, 0] : [0, 0, -1];
+    const cam = viewer.camera;
+    const eye = [...cam.eye];
+    const look = [...cam.look];
+    viewer.cameraFlight?.flyTo({ eye, look, up: upVec, duration: 0.3 });
+  }, [viewer]);
+
   const handleZoomIn = useCallback(() => {
     if (!viewer?.cameraFlight) return;
     const { eye, look } = viewer.camera;
@@ -551,6 +718,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
       }
       // Remove any 3D clipping only in 3D mode
       try { remove3DClipping(); } catch {}
+      // Destroy door swing overlay (2D-only geometry)
+      try { scene.models?.['__2d_door_swings']?.destroy?.(); } catch {}
     }
 
     // Reset x-ray
@@ -754,6 +923,53 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
     return () => off();
   }, [activateMeasure, deactivateMeasure, activateAngleMeasure, deactivateAngleMeasure, activateSection, deactivateSection]);
 
+  // ── Tandem isolation: apply pending isolation when 3D mode is active ───────
+  useEffect(() => {
+    if (viewMode === '3d' && pendingIsolationRef.current && viewer) {
+      const spaceId = pendingIsolationRef.current;
+      pendingIsolationRef.current = null;
+      // Small delay to let 3D color restoration complete before isolation styling
+      const t = setTimeout(() => { isolate(spaceId, viewer); }, 400);
+      return () => clearTimeout(t);
+    }
+  }, [viewMode, viewer, isolate]);
+
+  // ── Tandem isolation: click listener ──────────────────────────────────────
+  useEffect(() => {
+    if (!viewer?.scene?.input) return;
+    const subId = viewer.scene.input.on('mouseclicked', (coords: number[]) => {
+      const vMode = viewModeRef.current;
+      const isIsolated = isolatedSpaceIdRef.current !== null;
+
+      let hit: any = null;
+      try { hit = viewer.scene.pick({ canvasPos: coords, pickSurface: false }); } catch {}
+
+      if (isIsolated) {
+        if (!hit?.entity) {
+          // Click on empty → exit isolation
+          exitIsolation(viewer);
+          return;
+        }
+        const mo = viewer.metaScene?.metaObjects?.[hit.entity.id];
+        const t = (mo?.type || '').toLowerCase();
+        if (SPACE_TYPES.has(t) && hit.entity.id !== isolatedSpaceIdRef.current) {
+          isolate(hit.entity.id, viewer);
+        }
+      } else if (vMode === '2d') {
+        if (!hit?.entity) return;
+        const mo = viewer.metaScene?.metaObjects?.[hit.entity.id];
+        const t = (mo?.type || '').toLowerCase();
+        if (SPACE_TYPES.has(t)) {
+          pendingIsolationRef.current = hit.entity.id;
+          handleViewModeChangeRef.current?.('3d');
+        }
+      }
+    });
+    return () => {
+      try { viewer.scene.input.off(subId); } catch {}
+    };
+  }, [viewer, isolate, exitIsolation]);
+
   const handleClearSlices = useCallback(() => {
     if (!viewer?.scene) return;
     // Destroy all section planes
@@ -765,10 +981,70 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
     }
   }, [viewer]);
 
+  // ── Explode handler ─────────────────────────────────────────────────────
+  const handleExplodeChange = useCallback((amount: number) => {
+    if (!viewer?.scene || viewModeRef.current === '2d') return;
+    const scene = viewer.scene;
+    setExplodeAmount(amount);
+
+    if (amount === 0) {
+      // Restore saved base offsets
+      for (const [id, base] of explodeBaseOffsetsRef.current) {
+        const e = scene.objects?.[id];
+        if (e) try { e.offset = base; } catch {}
+      }
+      explodeBaseOffsetsRef.current.clear();
+      return;
+    }
+
+    const sceneAABB = scene.aabb;
+    if (!sceneAABB) return;
+    const cx = (sceneAABB[0] + sceneAABB[3]) / 2;
+    const cy = (sceneAABB[1] + sceneAABB[4]) / 2;
+    const cz = (sceneAABB[2] + sceneAABB[5]) / 2;
+    const maxDist = amount / 100 * 12; // up to 12 m at full explode
+
+    const objects = scene.objects || {};
+    for (const [id, entity] of Object.entries(objects) as [string, any][]) {
+      if (!entity?.aabb) continue;
+      // Save base offset once
+      if (!explodeBaseOffsetsRef.current.has(id)) {
+        explodeBaseOffsetsRef.current.set(id, entity.offset ? [...entity.offset] : [0, 0, 0]);
+      }
+      const base = explodeBaseOffsetsRef.current.get(id)!;
+      const ex = (entity.aabb[0] + entity.aabb[3]) / 2;
+      const ey = (entity.aabb[1] + entity.aabb[4]) / 2;
+      const ez = (entity.aabb[2] + entity.aabb[5]) / 2;
+      const dx = ex - cx;
+      const dy = ey - cy;
+      const dz = ez - cz;
+      const len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 1;
+      try {
+        entity.offset = [
+          base[0] + (dx / len) * maxDist,
+          base[1] + (dy / len) * maxDist,
+          base[2] + (dz / len) * maxDist,
+        ];
+      } catch {}
+    }
+  }, [viewer]);
+
+  const toggleExplode = useCallback(() => {
+    setIsExplodeActive(prev => {
+      if (prev) {
+        // Deactivate: reset offsets
+        handleExplodeChange(0);
+        setExplodeAmount(0);
+      }
+      return !prev;
+    });
+  }, [handleExplodeChange]);
+
   // ── X-ray toggle ─────────────────────────────────────────────────────────
   const XRAY_BATCH = 100;
   const handleXrayToggle = useCallback(() => {
     if (!viewer?.scene) return;
+    historyPush();
     const scene = viewer.scene;
     const objectIds = scene.objectIds || [];
     const enabling = !isXrayActive;
@@ -827,6 +1103,11 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
     // Prevent overlapping 2D transitions
     if (mode === '2d' && mode2dTransitionRef.current && !isForceReapply) return;
     const scene = viewer.scene;
+
+    // Exit room isolation on any explicit mode change (not when we're switching modes to enter isolation)
+    if (isolatedSpaceIdRef.current && !pendingIsolationRef.current) {
+      exitIsolation(viewer, { restoreCamera: false });
+    }
 
     setViewMode(mode);
     if (mode === '2d') mode2dTransitionRef.current = true;
@@ -931,20 +1212,55 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
         const origEdgeAlpha = edgeMat?.edgeAlpha ?? 0.5;
         const origEdgeWidth = edgeMat?.edgeWidth ?? 1;
 
-        const SLAB_TYPES = new Set(['ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase', 'ifcplate']);
-        const ROOF_TYPES = new Set(['ifcroof']);
-        const COVERING_TYPES = new Set(['ifccovering']);
-        const WALL_TYPES = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall']);
-        const DOOR_WINDOW_TYPES = new Set(['ifcdoor', 'ifcwindow', 'ifcdoorstandardcase', 'ifcwindowstandardcase']);
-        // Furniture + equipment: visible and pickable in 2D (doors/toilets/chairs/etc should be selectable)
-        const FURNITURE_TYPES = new Set([
-          'ifcfurnishingelement', 'ifcfurniture', 'ifcrailing', 'ifcstair', 'ifcstairflight',
-          'ifcsanitaryterminal', 'ifcflowterminal', 'ifcbuildingelementproxy',
-          'ifcelectricappliance', 'ifcswitchingdevice', 'ifcoutlet', 'ifclightfixture',
-        ]);
+        // Pure 2D: architectural floor plan — walls, spaces, doors/windows, stairs, room fixtures.
+        // MEP ducts/pipes/cables stay hidden (clutter with no spatial meaning in plan view).
         const SPACE_TYPES = new Set(['ifcspace']);
-        const HIDE_TYPES = new Set([...SLAB_TYPES, ...ROOF_TYPES, ...COVERING_TYPES]);
+        const WALL_TYPES = new Set(['ifcwall', 'ifcwallstandardcase', 'ifccurtainwall']);
+        const DOOR_WINDOW_TYPES = new Set([
+          'ifcdoor', 'ifcwindow', 'ifcdoorstandardcase', 'ifcwindowstandardcase',
+          'ifcdoorpanel', 'ifcwindowpanel',
+        ]);
+        const STAIR_TYPES = new Set(['ifcstair', 'ifcstairflight', 'ifcrailing']);
+        // Room fixtures: visible and pickable — sanitaryware, furniture, equipment
+        const FIXTURE_TYPES = new Set([
+          'ifcfurnishingelement', 'ifcfurniture', 'ifcsanitaryterminal', 'ifcwasteterminal',
+          'ifcinterceptor', 'ifcflowterminal', 'ifcelectricappliance', 'ifcswitchingdevice',
+          'ifcoutlet', 'ifclightfixture', 'ifcairterminal', 'ifcbuildingelementproxy',
+          'ifcbeam', 'ifcbeamstandardcase', 'ifccolumn', 'ifccolumnstandardcase',
+        ]);
+        const MEP_TYPES = new Set([
+          'ifcpipesegment', 'ifcpipefitting', 'ifcpipeconnection', 'ifcvalve',
+          'ifcductsegment', 'ifcductfitting', 'ifcductsilencer', 'ifcairterminalbox',
+          'ifccablesegment', 'ifccablecarriersegment', 'ifccablecarrierfitting',
+          'ifcpump', 'ifccompressor', 'ifcstoragetank', 'ifcfilter', 'ifcchiller',
+          'ifccoolingtower', 'ifcboiler', 'ifcheatexchanger', 'ifccoil', 'ifchumidifier',
+          'ifcunitaryequipment', 'ifcelectricgenerator', 'ifcelectricmotor',
+          'ifcdistributionboard', 'ifcelectricdistributionboard', 'ifctransformer',
+          'ifcprotectivedevice', 'ifcjunctionbox', 'ifcmotorconnection',
+          'ifccommunicationsappliance', 'ifcaudiovisualappliance',
+          'ifctendon', 'ifctendonanchor', 'ifcreinforcingbar', 'ifcreinforcingmesh',
+          'ifcmember', 'ifcmemberstandardcase',
+          'ifcslab', 'ifcslabstandardcase', 'ifcslabelementedcase',
+          'ifcplate', 'ifcplatestandardcase', 'ifcroof', 'ifccovering',
+        ]);
         const metaObjects = viewer?.metaScene?.metaObjects || scene?.metaScene?.metaObjects || {};
+
+        // Build set of entity IDs that belong to A-models only.
+        // In 2D plan view we show only the architectural model — MEP, fire, structural
+        // secondary models should be completely invisible (they add clutter and wrong geometry).
+        const aModelEntityIds = new Set<string>();
+        const sceneModels = scene.models || {};
+        let hasAnyAModel = false;
+        Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
+          if (isAModelName(modelId)) {
+            hasAnyAModel = true;
+            const objs = model.objects || {};
+            for (const id of Object.keys(objs)) aModelEntityIds.add(id);
+          }
+        });
+        // If no model was identified as A-model (e.g. all models have UUID names),
+        // fall back to showing all models so the plan isn't blank.
+        const enforceAModelFilter = hasAnyAModel;
 
         // On force-reapply (floor switch while already in 2D): restore Y-offsets from
         // the previous 2D pass (spaces were lowered) then do a full batch reset so
@@ -1005,56 +1321,97 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
           logger.log(`[2D] storey.children empty — parent-chain fallback found ${storeyDescendants.size} entities for floor ${targetFloorId}`);
         }
 
-        let visibleCount = 0;
+        // ── Single bucketing pass — O(n) read, then batch GPU writes ─────────
+        // Replacing the old per-entity property-set loop (which caused 20k+ individual
+        // dirty-flag invalidations). We bucket by render role, then call xeokit batch
+        // APIs once per bucket. Only Y-offsets (no batch API in xeokit) still loop,
+        // but only over the small space/fixture subsets.
+        const hideIds: string[] = [];
+        const spaceIdsArr: string[] = [];
+        const wallIdsArr: string[] = [];
+        const doorWinIdsArr: string[] = [];
+        const stairIdsArr: string[] = [];
+        const fixtureIdsArr: string[] = [];
 
-        const saveOrig = (entity: any, id: string) => {
+        const FLOOR_PASS_TYPES = new Set(['ifcbuildingstorey', 'ifcbuilding', 'ifcsite', 'ifcproject']);
+
+        for (const mo of Object.values(metaObjects) as any[]) {
+          const id = mo.id as string;
+          const entity = scene.objects?.[id];
+          if (!entity) continue;
+
+          const typeLower = (mo.type || '').toLowerCase();
           colorized.set(id, { offset: entity.offset ? [...entity.offset] : null });
-        };
 
-        Object.values(metaObjects).forEach((mo: any) => {
-          const typeLower = mo.type?.toLowerCase() || '';
-          const entity = scene.objects?.[mo.id];
-          if (!entity) return;
-
-          // If we have storey descendants, hide entities not belonging to this floor
-          if (storeyDescendants.size > 0 && !storeyDescendants.has(mo.id) && typeLower !== 'ifcbuildingstorey' && typeLower !== 'ifcbuilding' && typeLower !== 'ifcsite' && typeLower !== 'ifcproject') {
-            saveOrig(entity, mo.id);
-            entity.visible = false;
-            entity.pickable = false;
-            return;
+          if (enforceAModelFilter && !aModelEntityIds.has(id)) {
+            hideIds.push(id); continue;
+          }
+          if (storeyDescendants.size > 0 && !storeyDescendants.has(id) && !FLOOR_PASS_TYPES.has(typeLower)) {
+            hideIds.push(id); continue;
           }
 
-          if (HIDE_TYPES.has(typeLower)) {
-            // Hide slabs, roofs, coverings — they occlude the plan from above
-            saveOrig(entity, mo.id);
-            entity.visible = false; entity.pickable = false;
-          } else if (SPACE_TYPES.has(typeLower)) {
-            saveOrig(entity, mo.id);
-            entity.visible = true; entity.pickable = true; entity.opacity = 0.15; entity.colorize = [0.7, 0.85, 0.95]; entity.edges = true;
-            // Lower spaces so equipment wins pick priority in top-down 2D
-            try {
-              const origOffset = entity.offset ? [...entity.offset] : [0, 0, 0];
-              entity.offset = [origOffset[0], origOffset[1] - 0.3, origOffset[2]];
-            } catch (e) { /* DTX _textureData null — safe to ignore */ }
-            visibleCount++;
-          } else if (WALL_TYPES.has(typeLower)) {
-            saveOrig(entity, mo.id);
-            entity.colorize = [0.25, 0.25, 0.25]; entity.opacity = 1; entity.edges = true; entity.pickable = true;
-            visibleCount++;
-          } else if (DOOR_WINDOW_TYPES.has(typeLower)) {
-            saveOrig(entity, mo.id);
-            entity.colorize = [0.12, 0.12, 0.12]; entity.opacity = 1; entity.edges = true; entity.pickable = true;
-            visibleCount++;
-          } else if (FURNITURE_TYPES.has(typeLower)) {
-            saveOrig(entity, mo.id);
-            entity.colorize = [0.60, 0.60, 0.60]; entity.opacity = 0.9; entity.edges = true; entity.pickable = true; entity.visible = true;
-            visibleCount++;
-          } else {
-            saveOrig(entity, mo.id);
-            entity.colorize = [0.35, 0.35, 0.35]; entity.opacity = 0.9; entity.edges = true; entity.pickable = true;
-            visibleCount++;
-          }
-        });
+          if (SPACE_TYPES.has(typeLower)) spaceIdsArr.push(id);
+          else if (WALL_TYPES.has(typeLower)) wallIdsArr.push(id);
+          else if (DOOR_WINDOW_TYPES.has(typeLower)) doorWinIdsArr.push(id);
+          else if (STAIR_TYPES.has(typeLower)) stairIdsArr.push(id);
+          else if (FIXTURE_TYPES.has(typeLower)) fixtureIdsArr.push(id);
+          else hideIds.push(id);
+        }
+
+        const visibleCount = spaceIdsArr.length + wallIdsArr.length + doorWinIdsArr.length + stairIdsArr.length + fixtureIdsArr.length;
+
+        // Batch GPU writes — one call per property per bucket
+        if (hideIds.length > 0) {
+          scene.setObjectsVisible(hideIds, false);
+          scene.setObjectsPickable(hideIds, false);
+        }
+        if (spaceIdsArr.length > 0) {
+          scene.setObjectsVisible(spaceIdsArr, true);
+          scene.setObjectsPickable(spaceIdsArr, true);
+          scene.setObjectsColorized(spaceIdsArr, [0.75, 0.88, 0.97]);
+          scene.setObjectsOpacity(spaceIdsArr, 0.12);
+          scene.setObjectsEdges(spaceIdsArr, false);
+        }
+        if (wallIdsArr.length > 0) {
+          scene.setObjectsVisible(wallIdsArr, true);
+          scene.setObjectsPickable(wallIdsArr, false);
+          scene.setObjectsColorized(wallIdsArr, [0.15, 0.15, 0.15]);
+          scene.setObjectsOpacity(wallIdsArr, 1);
+          scene.setObjectsEdges(wallIdsArr, false);
+        }
+        if (doorWinIdsArr.length > 0) {
+          scene.setObjectsVisible(doorWinIdsArr, true);
+          scene.setObjectsPickable(doorWinIdsArr, true);
+          scene.setObjectsColorized(doorWinIdsArr, [0.1, 0.1, 0.1]);
+          scene.setObjectsOpacity(doorWinIdsArr, 1);
+          scene.setObjectsEdges(doorWinIdsArr, true);
+        }
+        if (stairIdsArr.length > 0) {
+          scene.setObjectsVisible(stairIdsArr, true);
+          scene.setObjectsPickable(stairIdsArr, false);
+          scene.setObjectsColorized(stairIdsArr, [0.35, 0.35, 0.35]);
+          scene.setObjectsOpacity(stairIdsArr, 1);
+          scene.setObjectsEdges(stairIdsArr, true);
+        }
+        if (fixtureIdsArr.length > 0) {
+          scene.setObjectsVisible(fixtureIdsArr, true);
+          scene.setObjectsPickable(fixtureIdsArr, true);
+          scene.setObjectsColorized(fixtureIdsArr, [0.25, 0.25, 0.25]);
+          scene.setObjectsOpacity(fixtureIdsArr, 1);
+          scene.setObjectsEdges(fixtureIdsArr, true);
+        }
+
+        // Y-offset: xeokit has no batch API for offset — loop only small subsets
+        for (const id of spaceIdsArr) {
+          const e = scene.objects?.[id];
+          if (!e) continue;
+          try { const o = e.offset ? [...e.offset] : [0, 0, 0]; e.offset = [o[0], o[1] - 0.5, o[2]]; } catch {}
+        }
+        for (const id of fixtureIdsArr) {
+          const e = scene.objects?.[id];
+          if (!e) continue;
+          try { const o = e.offset ? [...e.offset] : [0, 0, 0]; e.offset = [o[0], o[1] + 0.3, o[2]]; } catch {}
+        }
 
         // Safety: if no objects are visible after 2D styling, rollback by restoring offsets
         // and resetting the scene to its 3D state
@@ -1077,6 +1434,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
 
         if (edgeMat) { edgeMat.edgeColor = [0.15, 0.15, 0.15]; edgeMat.edgeAlpha = 1.0; edgeMat.edgeWidth = 2; }
         colorizedFor2dRef.current = colorized;
+
+        // Door swing arcs — procedural SceneModel geometry at floor level.
+        // Use cached door list (built once at model load) — avoids O(N) full scan each time.
+        const floorBoundsForSwing = targetFloorId ? calculateFloorBounds(targetFloorId) : null;
+        const floorBaseY = floorBoundsForSwing?.minY ?? 0;
+        const doorMeta = cachedDoorMetaObjectsRef.current
+          ? Object.fromEntries(cachedDoorMetaObjectsRef.current.map((mo: any) => [mo.id, mo]))
+          : metaObjects;
+        apply2DDoorSwings(viewer, scene, doorMeta, floorBaseY);
         // Only save edge originals ONCE — on force-reapply the material already holds
         // the 2D values, and overwriting would corrupt the 3D edges on exit
         if (!(viewerShimRef.current as any).__orig2dEdge) {
@@ -1086,17 +1452,52 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
         // Lock camera: orthographic top-down, no rotation allowed
         const camera = viewer.camera;
         if (camera) {
-          const lookX = camera.look[0], lookY = camera.look[1], lookZ = camera.look[2];
-          const dx = camera.eye[0] - lookX, dy = camera.eye[1] - lookY, dz = camera.eye[2] - lookZ;
-          const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
-
           // Cancel previous momentum BEFORE setting 2D camera
           try { viewer.cameraFlight?.cancel?.(); } catch {}
 
+          // Compute the AABB of visible objects to position camera at the floor plan centre
+          let planAabb: number[] | null = null;
+          try {
+            const visIds = (scene.visibleObjectIds || []) as string[];
+            if (visIds.length > 0) planAabb = scene.getAABB({ objectIds: visIds });
+          } catch {}
+          if (!planAabb || planAabb.length < 6) {
+            try { planAabb = scene.aabb; } catch {}
+          }
+
+          let cx = camera.look[0], cz = camera.look[2];
+          let spread = 50;
+
+          // Auto-orient from AABB on first entry; manual rotation overrides
+          const rotUpFromDeg = (deg: number): [number, number, number] => {
+            const d = ((deg % 360) + 360) % 360;
+            if (d === 90)  return [1, 0, 0];
+            if (d === 180) return [0, 0, 1];
+            if (d === 270) return [-1, 0, 0];
+            return [0, 0, -1]; // 0°
+          };
+
+          let autoUpDeg = 0;
+          if (planAabb && planAabb.length >= 6) {
+            cx = (planAabb[0] + planAabb[3]) / 2;
+            cz = (planAabb[2] + planAabb[5]) / 2;
+            const xSpan = planAabb[3] - planAabb[0];
+            const zSpan = planAabb[5] - planAabb[2];
+            spread = Math.max(xSpan, zSpan, 10);
+            if (zSpan > xSpan * 1.15) autoUpDeg = 90; // building longer in Z → rotate 90°
+          }
+
+          // On first entry reset manual rotation to auto-detected value
+          if (!isForceReapply) plan2dRotationRef.current = autoUpDeg;
+          const upVec = rotUpFromDeg(plan2dRotationRef.current);
+
+          const eyeHeight = (planAabb ? planAabb[4] : camera.look[1]) + spread;
+          const lookY = planAabb ? planAabb[1] : camera.look[1];
+
           camera.projection = 'ortho';
-          camera.ortho.scale = dist * 1.2;
-          // Set camera instantly to top-down view
-          viewer.cameraFlight.flyTo({ eye: [lookX, lookY + dist, lookZ], look: [lookX, lookY, lookZ], up: [0, 0, -1], duration: 0 });
+          camera.ortho.scale = spread * 1.1;
+          // Fly instantly to top-down view centred on the floor plan
+          viewer.cameraFlight.flyTo({ eye: [cx, eyeHeight, cz], look: [cx, lookY, cz], up: upVec, duration: 0 });
         }
 
         // Lock navigation: planView mode prevents rotation, only pan + zoom
@@ -1288,13 +1689,23 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
                 </>
               )}
               {tool.id === 'viewMode' && (
-                <ToolButton
-                  icon={viewMode === '3d' ? <SquareDashed className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Cuboid className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
-                  label={viewMode === '3d' ? '2D view' : '3D view'}
-                  onClick={() => handleViewModeChange(viewMode === '3d' ? '2d' : '3d')}
-                  active={viewMode === '2d'}
-                  disabled={!isReady}
-                />
+                <>
+                  <ToolButton
+                    icon={viewMode === '3d' ? <SquareDashed className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Cuboid className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                    label={viewMode === '3d' ? '2D view' : '3D view'}
+                    onClick={() => handleViewModeChange(viewMode === '3d' ? '2d' : '3d')}
+                    active={viewMode === '2d'}
+                    disabled={!isReady}
+                  />
+                  {viewMode === '2d' && (
+                    <ToolButton
+                      icon={<RotateCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+                      label="Rotate plan 90°"
+                      onClick={handleRotate2DPlan}
+                      disabled={!isReady}
+                    />
+                  )}
+                </>
               )}
               {tool.id === 'xray' && (
                 <ToolButton icon={tool.icon} label={tool.label} onClick={handleXrayToggle} active={isXrayActive} disabled={!isReady} />
@@ -1325,9 +1736,52 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
                   disabled={!isReady}
                 />
               )}
+              {tool.id === 'screenshot' && (
+                <ToolButton
+                  icon={tool.icon}
+                  label={tool.label}
+                  onClick={() => {
+                    try {
+                      const snap = viewer?.getSnapshot?.({ format: 'png' });
+                      if (!snap) return;
+                      const a = document.createElement('a');
+                      a.href = snap;
+                      a.download = `geminus-${Date.now()}.png`;
+                      a.click();
+                    } catch (e) {
+                      logger.warn('[ViewerToolbar] Screenshot failed', e);
+                    }
+                  }}
+                  active={false}
+                  disabled={!isReady}
+                />
+              )}
+              {tool.id === 'explode' && viewMode !== '2d' && (
+                <>
+                  <ToolButton icon={tool.icon} label="Explodera modell" onClick={toggleExplode} active={isExplodeActive} disabled={!isReady} />
+                  {isExplodeActive && (
+                    <div className="flex items-center gap-1.5 px-1">
+                      <Slider
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={[explodeAmount]}
+                        onValueChange={([val]) => handleExplodeChange(val)}
+                        className="w-20"
+                      />
+                    </div>
+                  )}
+                </>
+              )}
             </React.Fragment>
           );
         })}
+
+        <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />
+
+        {/* Undo / Redo — always visible */}
+        <ToolButton icon={<Undo2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Ångra (Ctrl+Z)" onClick={historyUndo} disabled={!isReady || !canUndo} />
+        <ToolButton icon={<Redo2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} label="Gör om (Ctrl+Y)" onClick={historyRedo} disabled={!isReady || !canRedo} />
 
         <Separator orientation="vertical" className="h-4 sm:h-6 mx-0.5 sm:mx-1 bg-white/20" />
 
@@ -1369,6 +1823,31 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
               <span className="text-2xs text-muted-foreground w-8 text-right">
                 {navSpeed}%
               </span>
+            </div>
+            <Separator className="my-2" />
+            <p className="text-xs font-medium mb-2 text-muted-foreground">Rendering</p>
+            <div className="space-y-2 mb-3">
+              <div className="flex items-center justify-between py-0.5">
+                <span className="text-sm">Ambient Occlusion (SAO)</span>
+                <Switch
+                  checked={(() => { try { return localStorage.getItem('viewer-sao-enabled') !== 'false'; } catch { return true; } })()}
+                  onCheckedChange={(checked) => {
+                    try { localStorage.setItem('viewer-sao-enabled', checked ? 'true' : 'false'); } catch {}
+                    const sao = viewer?.scene?.sao;
+                    if (sao) sao.enabled = checked;
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-between py-0.5">
+                <span className="text-sm">FastNav (snabb kamera)</span>
+                <Switch
+                  checked={(() => { try { return localStorage.getItem('viewer-fastnav-enabled') !== 'false'; } catch { return true; } })()}
+                  onCheckedChange={(checked) => {
+                    try { localStorage.setItem('viewer-fastnav-enabled', checked ? 'true' : 'false'); } catch {}
+                    // FastNav requires page reload to take effect; notify user
+                  }}
+                />
+              </div>
             </div>
             <Separator className="my-2" />
             <p className="text-xs font-medium mb-2 text-muted-foreground">Toolbar tools (max 10)</p>
@@ -1469,6 +1948,16 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
           </div>
         );
       })()}
+
+      {/* Tandem-style room isolation overlay */}
+      {isolatedSpaceId && viewer && (
+        <RoomIsolationOverlay
+          viewer={viewer}
+          spaceName={isolatedSpaceName}
+          backdropLabels={backdropLabels}
+          onExit={() => exitIsolation(viewer)}
+        />
+      )}
 
     </TooltipProvider>
   );

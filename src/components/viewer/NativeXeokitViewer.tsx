@@ -204,8 +204,6 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
       // 5. Post-load setup
       if (mountedRef.current && viewer.scene) {
-        if (viewer.scene.sao) viewer.scene.sao.enabled = false;
-
         const allIds = viewer.scene.objectIds || [];
         
         // Check for empty scene — if A-model loaded but produced 0 entities,
@@ -236,25 +234,29 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           } catch {}
         }
 
-        // Capture native model colors
-        // Capture native colors BEFORE any palette is applied.
-        // We store `null` (not [1,1,1]) when entity.colorize is not set, so that
-        // restoring with `entity.colorize = null` uses the XKT-embedded material
-        // colour rather than forcing white over it.
-        const nativeColors = new Map<string, { color: number[] | null; opacity: number; edges: boolean }>();
-        if (viewer.scene.objects) {
-          for (const objId of finalIds) {
-            const entity = viewer.scene.objects[objId];
-            if (entity) {
-              nativeColors.set(objId, {
-                color: entity.colorize ? [...entity.colorize] : null,
-                opacity: entity.opacity ?? 1,
-                edges: entity.edges ?? true,
-              });
+        // Capture native colors deferred — this O(n) read doesn't need to block
+        // the main thread; schedule it after the scene is painted for the first time.
+        const captureNativeColors = () => {
+          const nativeColors = new Map<string, { color: number[] | null; opacity: number; edges: boolean }>();
+          if (viewer.scene.objects) {
+            for (const objId of finalIds) {
+              const entity = viewer.scene.objects[objId];
+              if (entity) {
+                nativeColors.set(objId, {
+                  color: entity.colorize ? [...entity.colorize] : null,
+                  opacity: entity.opacity ?? 1,
+                  edges: entity.edges ?? true,
+                });
+              }
             }
           }
+          (window as any).__xeokitNativeColors = nativeColors;
+        };
+        if (typeof requestIdleCallback !== 'undefined') {
+          requestIdleCallback(captureNativeColors, { timeout: 2000 });
+        } else {
+          setTimeout(captureNativeColors, 500);
         }
-        (window as any).__xeokitNativeColors = nativeColors;
 
         // ── Color strategy ────────────────────────────────────────────────────
         // If the user has explicitly chosen "native model colors" (NONE_VALUE in
@@ -270,25 +272,20 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
         if (userWantsNative) {
           logger.log('[NativeViewer] Native colors requested — skipping architect palette');
-          // Clear any colorize overrides that might have been set by a previous
-          // session, so objects use their XKT-embedded material colors.
-          // Objects that xeokit would show as raw red (no XKT material) get a
-          // neutral off-white so the view is readable.
-          const NEUTRAL = [0.933, 0.929, 0.918]; // same as DEFAULT_COLOR in architect-colors.ts
+          // Bucket IDs: raw-red (no XKT material) get a neutral; others clear any override.
+          // Raw red = colorize is null/unset or R≥0.95 G≤0.1 B≤0.1 (xeokit default fallback).
+          const NEUTRAL = [0.933, 0.929, 0.918];
+          const neutralIds: string[] = [];
+          const clearIds: string[] = [];
           for (const id of finalIds) {
             const e = viewer.scene.objects?.[id];
             if (!e) continue;
             const c = e.colorize;
-            const isRawRed = !c || (c[0] >= 0.95 && c[1] <= 0.1 && c[2] <= 0.1);
-            if (isRawRed) {
-              // No XKT material — apply neutral so view is readable
-              e.colorize = NEUTRAL;
-            } else {
-              // Has an actual colorize from a previous architect-colors pass — clear it
-              // so the XKT embedded material colour takes over
-              e.colorize = null;
-            }
+            if (!c || (c[0] >= 0.95 && c[1] <= 0.1 && c[2] <= 0.1)) neutralIds.push(id);
+            else clearIds.push(id);
           }
+          if (neutralIds.length > 0) viewer.scene.setObjectsColorized(neutralIds, NEUTRAL);
+          if (clearIds.length > 0) viewer.scene.setObjectsColorized(clearIds, null);
         } else {
           // Architect palette is the default look. The old red-detection heuristic
           // (sample 500 objects, keep native colors if <5% are red) let models with
@@ -430,10 +427,14 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
                   }
                 }
               }
-              // Apply architect palette to new model entities (raw XKT materials often red)
-              const savedTheme = localStorage.getItem('geminus-viewer-theme-id');
-              if (savedTheme !== 'none' && !(window as any).__colorFilterActive) {
+              // Apply architect palette to new model entities (raw XKT materials can be wrong colors)
+              if (!(window as any).__colorFilterActive) {
                 try { applyArchitectColors(v); } catch {}
+                const savedTheme = localStorage.getItem('geminus-viewer-theme-id');
+                if (savedTheme && savedTheme !== 'none') {
+                  // Re-emit DB theme so it covers the newly loaded model too
+                  setTimeout(() => emit('VIEWER_THEME_REQUESTED', { themeId: savedTheme }), 50);
+                }
               }
             }
           } catch {}
@@ -481,6 +482,21 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [buildingFmGuid, destroy]);
 
+  // Phase → human-readable label
+  const phaseLabel: Record<string, string> = {
+    init:            'Initierar...',
+    loading_sdk:     'Laddar viewer-motor...',
+    creating_viewer: 'Skapar 3D-viewer...',
+    syncing:         'Kontrollerar modellcache...',
+    bootstrapping:   'Hämtar modeller från server...',
+    loading_models:  'Laddar 3D-modell...',
+  };
+
+  const isLoading = phase !== 'ready' && phase !== 'error';
+  const pct = loadProgress.total > 0
+    ? Math.round((loadProgress.loaded / loadProgress.total) * 100)
+    : 0;
+
   return (
     <div className="relative w-full h-full">
       <canvas
@@ -488,6 +504,34 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         className="w-full h-full block"
         style={{ touchAction: 'none' }}
       />
+
+      {/* Loading overlay */}
+      {isLoading && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
+          <div className="bg-black/70 backdrop-blur-sm rounded-xl px-6 py-5 flex flex-col items-center gap-3 min-w-[220px] max-w-[320px]">
+            {/* Spinning ring */}
+            <svg className="animate-spin h-8 w-8 text-white/80" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+            <p className="text-white/90 text-sm font-medium text-center">{phaseLabel[phase] || 'Laddar...'}</p>
+            {/* Progress bar — only shown when XKT bytes are reported */}
+            {phase === 'loading_models' && loadProgress.total > 0 && (
+              <div className="w-full">
+                <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-white/80 h-full rounded-full transition-all duration-300"
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+                <p className="text-white/50 text-xs mt-1 text-center">
+                  {loadProgress.currentModel ? loadProgress.currentModel : `${pct}%`}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Error state */}
       {phase === 'error' && (

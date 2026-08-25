@@ -18,6 +18,7 @@ import RoomVisualizationPanel from './RoomVisualizationPanel';
 import InventoryPanel from './InventoryPanel';
 import InventoryFormSheet from '@/components/inventory/InventoryFormSheet';
 import VisualizationLegendOverlay from './VisualizationLegendOverlay';
+import IfcColorLegend from './IfcColorLegend';
 import SensorDataOverlay from './SensorDataOverlay';
 import IndoorRoute3DRenderer from './IndoorRoute3DRenderer';
 import IndoorWayfindingPanel from './IndoorWayfindingPanel';
@@ -1223,6 +1224,9 @@ const NativeViewerShell: React.FC<NativeViewerShellProps> = ({ buildingFmGuid, o
 
       {/* Left-side visualization legend overlay */}
       {isViewerReady && <VisualizationLegendOverlay />}
+
+      {/* IFC type color legend — collapsible, top-right */}
+      {isViewerReady && <IfcColorLegend />}
 
       {/* Asset panel — independent from visualization menu */}
       {isViewerReady && buildingFmGuid && (

@@ -41,39 +41,55 @@ export function useXeokitInstance({ canvasRef, buildingFmGuid, onContextLost }: 
     if ((window as any).__xeokitSdk) {
       sdk = (window as any).__xeokitSdk;
     } else {
-      const sdkResponse = await fetch(XEOKIT_CDN);
-      const sdkText = await sdkResponse.text();
-      const sdkBlob = new Blob([sdkText], { type: 'application/javascript' });
-      const sdkBlobUrl = URL.createObjectURL(sdkBlob);
-      sdk = await import(/* @vite-ignore */ sdkBlobUrl);
-      URL.revokeObjectURL(sdkBlobUrl);
+      // Direct ESM import from the static /public path — allows browser HTTP caching.
+      // Use a version-stamped query param so stale bundles get busted on SDK upgrades.
+      sdk = await import(/* @vite-ignore */ `${XEOKIT_CDN}?v=3`);
       (window as any).__xeokitSdk = sdk;
     }
 
     // 2. Create viewer
+    // devicePixelRatio is CRITICAL for sharp rendering on HiDPI/Retina displays.
+    // Without it xeokit defaults to DPR=1, rendering at half (or third) physical
+    // resolution and upscaling via CSS — the primary cause of blur.
     const viewer = new sdk.Viewer({
       canvasElement: canvasRef.current,
-      transparent: true,
-      saoEnabled: false,
+      transparent: false,          // opaque canvas = no alpha compositing overhead, sharper edges
+      backgroundColor: [0.176, 0.176, 0.176], // match NativeViewerShell gradient mid-point (#2D2D2D)
+      saoEnabled: true,
       entityOffsetsEnabled: true,
       dtxEnabled: true,
       pbrEnabled: false,
+      devicePixelRatio: Math.min(window.devicePixelRatio || 1, 2), // cap at 2× to protect GPU on 3× screens
     });
 
-    // Tune edge rendering to avoid rastered/striped appearance on dense geometry
+    // Edge material — visible, crisp architectural edges
     if (viewer.scene?.edgeMaterial) {
-      viewer.scene.edgeMaterial.edgeAlpha = 0.25;
+      viewer.scene.edgeMaterial.edgeColor = [0.20, 0.20, 0.20];
+      viewer.scene.edgeMaterial.edgeAlpha = 0.6;
       viewer.scene.edgeMaterial.edgeWidth = 1;
-      viewer.scene.edgeMaterial.edgeColor = [0.3, 0.3, 0.3];
     }
 
-    // WebGL context loss handling
+    // SAO (Scalable Ambient Obscurance) — depth perception in dense models.
+    // FastNav disables SAO during camera movement and re-enables at stop.
+    // User can toggle via localStorage['viewer-sao-enabled'] = 'false'.
+    const saoDisabled = (() => {
+      try { return localStorage.getItem('viewer-sao-enabled') === 'false'; } catch { return false; }
+    })();
+    if (viewer.scene?.sao) {
+      viewer.scene.sao.enabled = !saoDisabled;
+      viewer.scene.sao.numSamples = 16;
+      viewer.scene.sao.kernelRadius = 100;
+      viewer.scene.sao.intensity = 0.18;
+      viewer.scene.sao.bias = 0.5;
+      viewer.scene.sao.scale = 1000;
+      viewer.scene.sao.blurEnabled = true;
+      viewer.scene.sao.blurRadius = 8;
+      viewer.scene.sao.blurStdDev = 4;
+    }
+
+    // Suppress context menu on the canvas (right-click should orbit, not show browser menu).
+    // NativeXeokitViewer owns webglcontextlost recovery — no duplicate listener here.
     const canvas = canvasRef.current;
-    canvas.addEventListener('webglcontextlost', (e: Event) => {
-      e.preventDefault();
-      console.error('[useXeokitInstance] ⚠️ WebGL context lost');
-      onContextLost?.();
-    });
     canvas.addEventListener('contextmenu', (e: Event) => e.preventDefault());
 
     // Expose SectionPlane class globally
@@ -139,8 +155,14 @@ export function useXeokitInstance({ canvasRef, buildingFmGuid, onContextLost }: 
       cc.on('doublePickedNothing', () => { /* no-op */ });
     }
 
-    // 5. NavCube
+    // 5. NavCube + SectionPlanes overview canvas (sibling canvases in the viewer container)
     {
+      // Section planes overview — hidden by default, SectionPlanesPlugin manages visibility
+      const spOverviewCanvas = document.createElement('canvas');
+      spOverviewCanvas.id = `native-sectionplanes-overview-${buildingFmGuid.substring(0, 8)}`;
+      spOverviewCanvas.style.cssText = 'position:absolute;bottom:220px;right:10px;width:120px;height:120px;pointer-events:none;display:none;';
+      canvasRef.current?.parentElement?.appendChild(spOverviewCanvas);
+
       const navCubeCanvas = document.createElement('canvas');
       navCubeCanvas.id = `native-navcube-${buildingFmGuid.substring(0, 8)}`;
       navCubeCanvas.style.cssText = 'position:absolute;bottom:60px;right:10px;width:150px;height:150px;pointer-events:auto;';
@@ -165,33 +187,47 @@ export function useXeokitInstance({ canvasRef, buildingFmGuid, onContextLost }: 
       }
     }
 
-    // 6. FastNav
-    const fastNavEnabled = (() => {
-      try {
-        const stored = localStorage.getItem('viewer-fastnav-enabled');
-        return stored === 'true';
-      } catch { return false; }
+    // 6. FastNav — on by default; users can opt out via localStorage
+    // Drops canvas resolution during camera movement for smooth interaction,
+    // then restores full quality when the camera stops.
+    const fastNavDisabled = (() => {
+      try { return localStorage.getItem('viewer-fastnav-enabled') === 'false'; } catch { return false; }
     })();
-    if (sdk.FastNavPlugin && fastNavEnabled) {
+    if (sdk.FastNavPlugin && !fastNavDisabled) {
       new sdk.FastNavPlugin(viewer, {
         scaleCanvasResolution: true,
-        scaleCanvasResolutionFactor: 0.6,
+        scaleCanvasResolutionFactor: isMobileRef.current ? 0.5 : 0.6,
         hideEdges: true,
         hideSAO: true,
         delayBeforeRestore: true,
-        delayBeforeRestoreSeconds: isMobileRef.current ? 0.5 : 0.3,
+        delayBeforeRestoreSeconds: isMobileRef.current ? 0.5 : 0.25,
       });
     }
 
-    // 6b. ViewCullPlugin — kd-tree frustum culling, reduces GPU draw calls on large models
+    // 6b. ViewCullPlugin — kd-tree frustum culling, reduces GPU draw calls on large models.
+    // maxTreeDepth=8 (2^8=256 leaf nodes) is safe up to ~150k entities and avoids the
+    // memory/build-time blowup that maxTreeDepth=20 (1M nodes) causes on large models.
     if (sdk.ViewCullPlugin) {
-      new sdk.ViewCullPlugin(viewer, { maxTreeDepth: 20 });
+      new sdk.ViewCullPlugin(viewer, { maxTreeDepth: 8 });
     }
 
     // 6c. BCFViewpointsPlugin — save/restore camera + section planes + object states in BCF format
     if (sdk.BCFViewpointsPlugin) {
       const bcf = new sdk.BCFViewpointsPlugin(viewer, {});
       (window as any).__xeokitBCF = bcf;
+    }
+
+    // 6d. SectionPlanesPlugin — interactive drag-gizmos for section planes.
+    // Exposes via window so useSectionPlaneClipping can create/destroy planes through it.
+    if (sdk.SectionPlanesPlugin) {
+      const sectionPlanesPlugin = new sdk.SectionPlanesPlugin(viewer, {
+        overviewCanvasId: `native-sectionplanes-overview-${buildingFmGuid.substring(0, 8)}`,
+      });
+      (window as any).__xeokitSectionPlanesPlugin = sectionPlanesPlugin;
+    }
+    // Keep bare SectionPlane class available as fallback (used by useSectionPlaneClipping)
+    if (sdk.SectionPlane) {
+      (window as any).__xeokitSectionPlaneClass = sdk.SectionPlane;
     }
 
     // 7. Loaders
@@ -201,16 +237,49 @@ export function useXeokitInstance({ canvasRef, buildingFmGuid, onContextLost }: 
       gltfLoader = new sdk.GLTFLoaderPlugin(viewer);
     }
 
+    // LASLoaderPlugin — pointcloud support (LAS/LAZ files)
+    if (sdk.LASLoaderPlugin) {
+      const lasLoader = new sdk.LASLoaderPlugin(viewer, {});
+      (window as any).__xeokitLASLoader = lasLoader;
+    }
+
+    // DPR resize: re-size canvas when moving between screens with different pixel ratios.
+    // window.matchMedia('(resolution: Xdpi)') fires when the DPR changes (e.g. drag to
+    // external monitor). Update the viewer's devicePixelRatio so it stays sharp.
+    const dprMediaQuery = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    const handleDprChange = () => {
+      const newDpr = Math.min(window.devicePixelRatio || 1, 2);
+      try {
+        if (viewer.scene?.canvas?.canvas) {
+          viewer.scene.canvas.canvas.setAttribute('data-dpr', String(newDpr));
+        }
+        if (typeof viewer.scene?.setDevicePixelRatio === 'function') {
+          viewer.scene.setDevicePixelRatio(newDpr);
+        } else if (viewer.scene?.canvas) {
+          // Fallback: trigger canvas resize which picks up new CSS px dimensions
+          viewer.scene.canvas._needsUpdate = true;
+          viewer.scene._needsUpdate = true;
+        }
+      } catch { /* ignore if scene is already destroyed */ }
+    };
+    dprMediaQuery.addEventListener('change', handleDprChange);
+    // Attach cleanup to canvas contextmenu (already listened on) for teardown consistency
+    const origCanvasRef = canvasRef.current;
+
     viewerRef.current = viewer;
     sdkRef.current = sdk;
     xktLoaderRef.current = xktLoader;
     gltfLoaderRef.current = gltfLoader;
+
+    // Store dprMediaQuery cleanup on the viewer object so destroy() can remove it
+    viewer.__dprCleanup = () => dprMediaQuery.removeEventListener('change', handleDprChange);
 
     return { viewer, sdk, xktLoader, gltfLoader };
   }, [buildingFmGuid, canvasRef, onContextLost]);
 
   const destroy = useCallback(() => {
     if (viewerRef.current) {
+      try { viewerRef.current.__dprCleanup?.(); } catch {}
       try { viewerRef.current.destroy(); } catch (e) {
         logger.debug('[useXeokitInstance] Viewer destroy error:', e);
       }

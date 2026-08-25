@@ -552,7 +552,10 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
             ) : assets.length === 0 ? (
               /* Fallback: show BIM metadata from xeokit metaScene */
               (() => {
-                const xeokitViewer = viewerRef?.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+                // Try Vue-style path first, then native xeokit viewer
+                const xeokitViewer = viewerRef?.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer
+                  || (viewerRef?.current?.scene ? viewerRef.current : null)
+                  || (window as any).__nativeXeokitViewer;
                 const guid = selectedFmGuids[0];
                 // Try to find by originalSystemId or by entity ID
                 let metaObj: any = null;
@@ -571,15 +574,17 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                   }
                 }
                 if (metaObj) {
-                  // Gather property sets from metaObject
                   const propertySets = metaObj.propertySets || [];
+                  // metaProperties: flat key/value pairs embedded directly in XKT metadata
+                  const metaProps: Record<string, any> = metaObj.metaProperties || {};
+                  const metaPropEntries = Object.entries(metaProps).filter(([, v]) => v != null && String(v) !== '');
                   return (
                     <div className="space-y-3">
                       <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
-                        BIM metadata (not synced to database)
+                        IFC metadata — not synced to database
                       </div>
                       <div className="space-y-1">
-                         <Label className="text-xs text-muted-foreground">Name</Label>
+                        <Label className="text-xs text-muted-foreground">Name</Label>
                         <p className="text-sm">{metaObj.name || '-'}</p>
                       </div>
                       <div className="space-y-1">
@@ -598,6 +603,19 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                           <p className="text-sm">{metaObj.parent.name || metaObj.parent.type || '-'}</p>
                         </div>
                       )}
+                      {/* Flat metaProperties from XKT (most common source of IFC data) */}
+                      {metaPropEntries.length > 0 && (
+                        <div className="space-y-1">
+                          <Label className="text-xs text-muted-foreground font-medium">Properties</Label>
+                          {metaPropEntries.map(([key, val]) => (
+                            <div key={key} className="flex justify-between text-xs">
+                              <span className="text-muted-foreground">{key}</span>
+                              <span className="text-foreground font-mono truncate ml-2 max-w-[180px]">{String(val)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Property sets (nested, from XKT v10+) */}
                       {propertySets.length > 0 && propertySets.map((ps: any, idx: number) => (
                         <div key={idx} className="space-y-1">
                           <Label className="text-xs text-muted-foreground font-medium">{ps.name || `Properties ${idx + 1}`}</Label>
@@ -780,22 +798,57 @@ const AssetPropertiesDialog: React.FC<AssetPropertiesDialogProps> = ({
                   )}
                 </div>
 
+                {assets[0].gross_area !== null && (
+                  <>
+                    <Separator />
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Gross Area</Label>
+                      <p className="text-sm">{assets[0].gross_area?.toFixed(1)} m²</p>
+                    </div>
+                  </>
+                )}
+
                 {assets[0].coordinate_x !== null && (
                   <>
                     <Separator />
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Coordinates</Label>
                       <p className="text-xs font-mono">
-                        X: {assets[0].coordinate_x?.toFixed(2)}, 
-                        Y: {assets[0].coordinate_y?.toFixed(2)}, 
+                        X: {assets[0].coordinate_x?.toFixed(2)},
+                        Y: {assets[0].coordinate_y?.toFixed(2)},
                         Z: {assets[0].coordinate_z?.toFixed(2)}
                       </p>
                     </div>
                   </>
                 )}
 
+                {/* Asset+ properties from Geminus Plus sync */}
+                {assets[0].attributes && Object.keys(assets[0].attributes).length > 0 && (() => {
+                  const skip = new Set(['bimObjectId', 'parentBimObjectId', 'parentCommonName', 'storeyName', 'modelId']);
+                  const entries = Object.entries(assets[0].attributes).filter(
+                    ([k, v]) => !skip.has(k) && v !== null && v !== undefined && v !== ''
+                  );
+                  if (entries.length === 0) return null;
+                  return (
+                    <>
+                      <Separator />
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground font-medium">Asset+ Properties</Label>
+                        <div className="space-y-1">
+                          {entries.map(([key, value]) => (
+                            <div key={key} className="flex justify-between gap-2 text-xs">
+                              <span className="text-muted-foreground shrink-0">{key.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim()}</span>
+                              <span className="text-right break-all font-medium">{String(value)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+
                 <Separator />
-                
+
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                    {assets[0].is_local && <Badge variant="secondary">Local</Badge>}
                    {assets[0].annotation_placed && <Badge variant="secondary">Placed</Badge>}

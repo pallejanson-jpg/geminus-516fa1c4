@@ -185,18 +185,18 @@ export function useSectionPlaneClipping(
    */
   const ensureAllEntitiesClippable = useCallback(() => {
     const viewer = getXeokitViewer();
-    if (!viewer?.scene?.objects) return;
-    
-    let count = 0;
-    Object.values(viewer.scene.objects).forEach((entity: any) => {
-      if (entity && entity.clippable === false) {
-        entity.clippable = true;
-        count++;
+    if (!viewer?.scene) return;
+    const scene = viewer.scene;
+    const allIds = scene.objectIds;
+    if (allIds?.length > 0) {
+      try {
+        scene.setObjectsClippable(allIds, true);
+      } catch {
+        // Fallback: per-entity loop if batch API not available
+        Object.values(scene.objects || {}).forEach((entity: any) => {
+          if (entity?.clippable === false) entity.clippable = true;
+        });
       }
-    });
-    
-    if (count > 0) {
-      logger.log(`[SectionPlane] Enabled clippable on ${count} entities`);
     }
   }, [getXeokitViewer]);
 

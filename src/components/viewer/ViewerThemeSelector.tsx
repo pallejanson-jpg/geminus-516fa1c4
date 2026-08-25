@@ -90,6 +90,8 @@ const ViewerThemeSelector: React.FC<ViewerThemeSelectorProps> = ({
   // ── Listen for external theme requests (e.g. FilterPanel re-apply) ────────
   useEffect(() => {
     return on(VIEWER_THEME_REQUESTED_EVENT, (detail) => {
+      // Don't overwrite the 2D grey palette when we're in pure-2D mode
+      if ((window as any).__viewer2dActive) return;
       if (detail.themeId) applyThemeId(detail.themeId);
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps

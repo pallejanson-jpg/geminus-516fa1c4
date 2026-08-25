@@ -19,7 +19,7 @@ import {
   ArrowLeft, Layers, Move3D, Maximize2, Minimize2, Eye,
   RefreshCw, View, Box, Combine, SplitSquareHorizontal,
   Loader2, Square, BarChart2, LayoutPanelLeft, GripHorizontal,
-  MoreVertical,
+  MoreVertical, MapPin, Plus,
 } from 'lucide-react';
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { supabase } from '@/integrations/supabase/client';
@@ -34,6 +34,8 @@ const GeminusPlusViewer = React.lazy(() => import('@/components/viewer/GeminusPl
 import AlignmentPanel from '@/components/viewer/AlignmentPanel';
 import BuildingSelector from '@/components/viewer/BuildingSelector';
 import Ivion360View from '@/components/viewer/Ivion360View';
+import UnplacedAssetsPanel from '@/components/inventory/UnplacedAssetsPanel';
+import IvionRegistrationPanel from '@/components/inventory/IvionRegistrationPanel';
 import InsightsDrawerPanel from '@/components/viewer/InsightsDrawerPanel';
 import { useBuildingViewerData } from '@/hooks/useBuildingViewerData';
 import { useIvionSdk } from '@/hooks/useIvionSdk';
@@ -360,6 +362,68 @@ const UnifiedViewerContent: React.FC<{
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [transform, setTransform] = useState<IvionBimTransform>(IDENTITY_TRANSFORM);
   const [insightsPanelOpen, setInsightsPanelOpen] = useState(!!insightsModeParam);
+  const [unplacedPanelOpen, setUnplacedPanelOpen] = useState(false);
+
+  // ─── 360° registration flow (detect a POI created natively in Ivion,
+  // then fill in its Geminus asset details) — mirrors Ivion360View.tsx ──
+  const [registrationPanelOpen, setRegistrationPanelOpen] = useState(false);
+  const [lastSeenPoiId, setLastSeenPoiId] = useState<number | null>(null);
+  const [detectedPoi, setDetectedPoi] = useState<{ id: number; titles: Record<string, string>; location: { x: number; y: number; z: number }; pointOfView?: { imageId: number } } | null>(null);
+  const [registrationConnectionStatus, setRegistrationConnectionStatus] = useState<'unknown' | 'connected' | 'error' | 'expired'>('unknown');
+  const [hasPendingPoi, setHasPendingPoi] = useState(false);
+  const [pendingPoiQueue, setPendingPoiQueue] = useState<typeof detectedPoi[]>([]);
+
+  useEffect(() => {
+    const siteId = buildingData?.ivionSiteId;
+    if (!siteId || !registrationPanelOpen) return;
+
+    const pollForNewPois = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke('ivion-poi', {
+          body: { action: 'get-latest-poi', siteId },
+        });
+        if (error) { setRegistrationConnectionStatus('error'); return; }
+        setRegistrationConnectionStatus('connected');
+        if (data?.location && data?.id) {
+          if (lastSeenPoiId !== null && data.id !== lastSeenPoiId) {
+            setDetectedPoi(data);
+            setHasPendingPoi(true);
+            setPendingPoiQueue((prev) => [...prev, data]);
+            toast.info('New POI detected in Ivion!', { description: 'Click to load coordinates' });
+          }
+          setLastSeenPoiId(data.id);
+        }
+      } catch (err) {
+        console.error('POI polling error:', err);
+        setRegistrationConnectionStatus('error');
+      }
+    };
+
+    pollForNewPois();
+    const interval = setInterval(pollForNewPois, 3000);
+    return () => clearInterval(interval);
+  }, [buildingData?.ivionSiteId, registrationPanelOpen, lastSeenPoiId]);
+
+  const handleLoadPendingPoi = useCallback(() => {
+    if (pendingPoiQueue.length > 0) {
+      const nextPoi = pendingPoiQueue[0];
+      setDetectedPoi(nextPoi);
+      setPendingPoiQueue((prev) => prev.slice(1));
+      setHasPendingPoi(pendingPoiQueue.length > 1);
+    }
+  }, [pendingPoiQueue]);
+
+  const handleRegistrationSaved = useCallback(() => {
+    setDetectedPoi(null);
+    if (pendingPoiQueue.length > 0) handleLoadPendingPoi();
+  }, [pendingPoiQueue, handleLoadPendingPoi]);
+
+  const handleRegistrationSavedAndClose = useCallback(() => {
+    setRegistrationPanelOpen(false);
+    setDetectedPoi(null);
+    setPendingPoiQueue([]);
+    setHasPendingPoi(false);
+  }, []);
 
   // ─── Embedded mode: parent window controls mode/insights via postMessage ──
   useEffect(() => {
@@ -369,7 +433,12 @@ const UnifiedViewerContent: React.FC<{
       const d = e.data;
       if (d?.type === 'geminus-viewer-mode') {
         const validModes: ViewMode[] = ['2d', '3d', 'split', 'split2d3d', 'vt', '360'];
-        if (validModes.includes(d.mode)) {
+        if (!validModes.includes(d.mode)) return;
+        if (d.mode === '2d') {
+          // 2D is handled by the FMA parent — just update the toolbar highlight
+          setEmbeddedFma2dActive(true);
+        } else {
+          setEmbeddedFma2dActive(false);
           userChangedModeRef.current = true;
           setViewMode(d.mode);
         }
@@ -696,6 +765,24 @@ const UnifiedViewerContent: React.FC<{
     if (hasIvion) setViewMode(initialMode !== '3d' ? initialMode : 'vt');
   }, [retrySDK, hasIvion, initialMode]);
 
+  // ─── Embedded mode: track whether FMA's own 2D is active ────────────
+  const [embeddedFma2dActive, setEmbeddedFma2dActive] = useState(false);
+
+  // When embedded and user clicks a mode button:
+  // "2D" → postMessage parent (FMA shows its 2D), Geminus stays in 3D.
+  // All other modes → work normally + notify parent.
+  const handleEmbeddedModeChange = useCallback((mode: ViewMode) => {
+    if (mode === '2d') {
+      setEmbeddedFma2dActive(true);
+      window.parent?.postMessage({ type: 'geminus-viewer-mode-changed', mode: '2d' }, '*');
+      return;
+    }
+    setEmbeddedFma2dActive(false);
+    window.parent?.postMessage({ type: 'geminus-viewer-mode-changed', mode }, '*');
+    userChangedModeRef.current = true;
+    setViewMode(mode);
+  }, []);
+
   // ─── Compute values used in render (must be before returns) ────────
   const is2DMode = viewMode === '2d';
   const needs3D = viewMode !== '360';
@@ -975,6 +1062,27 @@ const UnifiedViewerContent: React.FC<{
       </div>
       )}
 
+      {/* ─── Embedded mode toolbar (FMA 2.0 — compact, no back/name/insights) ─── */}
+      {embedded && (
+        <div className="shrink-0 flex items-center justify-center py-1.5 px-2 bg-black/80 backdrop-blur-sm z-40 border-b border-white/10">
+          <div className="flex gap-1 bg-black/40 backdrop-blur-md rounded-lg p-1 border border-white/10">
+            {/* 2D: handled by FMA parent — clicking notifies parent and shows FMA's own 2D */}
+            <ModeButton
+              mode="2d"
+              current={embeddedFma2dActive ? '2d' : viewMode}
+              disabled={false}
+              onClick={handleEmbeddedModeChange}
+              icon={<Square className="h-3.5 w-3.5" />}
+              label="2D"
+            />
+            <ModeButton mode="split2d3d" current={embeddedFma2dActive ? '2d' : viewMode} disabled={false} onClick={handleEmbeddedModeChange} icon={<LayoutPanelLeft className="h-3.5 w-3.5" />} label="2D/3D" />
+            <ModeButton mode="3d" current={embeddedFma2dActive ? '2d' : viewMode} disabled={false} onClick={handleEmbeddedModeChange} icon={<Box className="h-3.5 w-3.5" />} label="3D" />
+            <ModeButton mode="vt" current={embeddedFma2dActive ? '2d' : viewMode} disabled={!hasIvion || sdkStatus === 'failed'} onClick={handleEmbeddedModeChange} icon={<Combine className="h-3.5 w-3.5" />} label="VT" />
+            <ModeButton mode="360" current={embeddedFma2dActive ? '2d' : viewMode} disabled={!hasIvion || sdkStatus === 'failed'} onClick={handleEmbeddedModeChange} icon={<View className="h-3.5 w-3.5" />} label="360°" />
+          </div>
+        </div>
+      )}
+
       {/* ─── Content area ─── */}
       <div ref={contentRef} className="flex-1 flex flex-col min-h-0">
         {/* ─── Viewer area (relative, shrinks when insights open) ─── */}
@@ -993,6 +1101,59 @@ const UnifiedViewerContent: React.FC<{
             zIndex: isSplitMode ? 5 : 0,
           }}
         />
+
+        {/* 360° inventory tools: register a new asset, or create POIs from Geminus */}
+        {viewMode === '360' && sdkStatus === 'ready' && buildingData?.ivionSiteId && !isMobile && (
+          <div className="absolute top-2 right-2 z-40 flex gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="h-9 w-9 shadow-md"
+                  onClick={() => setRegistrationPanelOpen(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Registrera tillgång</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="h-9 w-9 shadow-md"
+                  onClick={() => setUnplacedPanelOpen(true)}
+                >
+                  <MapPin className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Skapa POI från Geminus</TooltipContent>
+            </Tooltip>
+          </div>
+        )}
+        {unplacedPanelOpen && buildingData?.fmGuid && buildingData?.ivionSiteId && (
+          <UnplacedAssetsPanel
+            buildingFmGuid={buildingData.fmGuid}
+            ivionSiteId={buildingData.ivionSiteId}
+            onClose={() => setUnplacedPanelOpen(false)}
+            onAssetsCreated={() => toast.success('POIs skapade i Ivion')}
+          />
+        )}
+        {registrationPanelOpen && buildingData?.fmGuid && (
+          <IvionRegistrationPanel
+            buildingFmGuid={buildingData.fmGuid}
+            ivionSiteId={buildingData.ivionSiteId || null}
+            onClose={() => setRegistrationPanelOpen(false)}
+            onSaved={handleRegistrationSaved}
+            onSavedAndClose={handleRegistrationSavedAndClose}
+            initialPoi={detectedPoi}
+            connectionStatus={registrationConnectionStatus}
+            onLoadPendingPoi={handleLoadPendingPoi}
+            hasPendingPoi={hasPendingPoi}
+          />
+        )}
 
         {/* ── SINGLE 3D Viewer — always mounted ── */}
         <div style={viewerContainerStyle}>

@@ -344,7 +344,13 @@ const ViewerTreePanel = forwardRef<HTMLDivElement, ViewerTreePanelProps>(({
   // ── Xeokit accessor ────────────────────────────────────────────────────────
 
   const getXeokitViewer = useCallback(() => {
-    return viewerRef.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    // Vue-style path (legacy GeminusPlusViewer)
+    const vueViewer = viewerRef?.current?.$refs?.AssetViewer?.$refs?.assetView?.viewer;
+    if (vueViewer) return vueViewer;
+    // Native xeokit viewer passed directly as viewerRef.current
+    if (viewerRef?.current?.scene) return viewerRef.current;
+    // Global fallback
+    return (window as any).__nativeXeokitViewer || null;
   }, [viewerRef]);
 
   // ── Debounced search ───────────────────────────────────────────────────────

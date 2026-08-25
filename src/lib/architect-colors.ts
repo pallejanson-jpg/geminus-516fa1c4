@@ -5,54 +5,128 @@
 
 import { logger } from '@/lib/logger';
 
+// ── Architectural Standard palette ───────────────────────────────────────────
+// Based on buildingSMART / Revit de facto conventions (no official ISO color
+// standard exists for BIM visualization). Walls are neutral concrete grey;
+// glazing is distinctly blue; structure uses steel tones; furniture is warm sage.
 export const IFC_TYPE_COLORS: Record<string, number[]> = {
-  'ifcwall': [0.686, 0.667, 0.529],
-  'ifcwallstandardcase': [0.761, 0.745, 0.635],
-  'ifccurtainwall': [0.686, 0.667, 0.529],
-  'ifcdoor': [0.357, 0.467, 0.420],
-  'ifcdoorstandardcase': [0.357, 0.467, 0.420],
-  'ifcwindow': [0.780, 0.780, 0.760],
-  'ifcwindowstandardcase': [0.780, 0.780, 0.760],
-  'ifcroof': [0.600, 0.608, 0.592],
-  'ifcslab': [0.600, 0.608, 0.592],
-  'ifcslabstandardcase': [0.600, 0.608, 0.592],
-  'ifcslabelementedcase': [0.600, 0.608, 0.592],
-  'ifccovering': [0.600, 0.608, 0.592],
-  'ifcbeam': [0.800, 0.788, 0.729],
-  'ifcbeamstandardcase': [0.800, 0.788, 0.729],
-  'ifccolumn': [0.820, 0.808, 0.749],
-  'ifccolumnstandardcase': [0.820, 0.808, 0.749],
-  'ifcstair': [0.780, 0.769, 0.710],
-  'ifcstairflight': [0.780, 0.769, 0.710],
-  'ifcrailing': [0.741, 0.729, 0.671],
-  'ifcfurnishingelement': [0.451, 0.545, 0.467],
-  'ifcfurniture': [0.451, 0.545, 0.467],
-  'ifcbuildingelementproxy': [0.451, 0.545, 0.467],
-  'ifccasework': [0.451, 0.545, 0.467],
-  // VVS / piping (muted copper/brass)
+  // ── Walls — neutral concrete grey (NCS S 2005-N/B range) ─────────────────
+  'ifcwall':             [0.780, 0.773, 0.757],
+  'ifcwallstandardcase': [0.780, 0.773, 0.757],
+  'ifccurtainwall':      [0.776, 0.871, 0.918], // glazed curtain wall — glass blue
+  // ── Glazing — sky blue (universally recognised as glass) ─────────────────
+  'ifcdoor':             [0.631, 0.545, 0.439], // warm wood/brown
+  'ifcdoorstandardcase': [0.631, 0.545, 0.439],
+  'ifcwindow':           [0.686, 0.839, 0.902], // glass blue
+  'ifcwindowstandardcase': [0.686, 0.839, 0.902],
+  // ── Horizontal structure — warm grey (concrete slab) ─────────────────────
+  'ifcroof':             [0.596, 0.580, 0.557],
+  'ifcslab':             [0.808, 0.796, 0.773],
+  'ifcslabstandardcase': [0.808, 0.796, 0.773],
+  'ifcslabelementedcase': [0.808, 0.796, 0.773],
+  'ifccovering':         [0.863, 0.855, 0.843], // ceiling tile — very light
+  // ── Vertical structure — structural steel / concrete (darker) ─────────────
+  'ifcbeam':             [0.608, 0.643, 0.690], // steel blue-grey
+  'ifcbeamstandardcase': [0.608, 0.643, 0.690],
+  'ifccolumn':           [0.573, 0.573, 0.573], // concrete column — neutral grey
+  'ifccolumnstandardcase': [0.573, 0.573, 0.573],
+  // ── Stairs / circulation ──────────────────────────────────────────────────
+  'ifcstair':            [0.757, 0.745, 0.722],
+  'ifcstairflight':      [0.757, 0.745, 0.722],
+  'ifcrailing':          [0.612, 0.624, 0.643], // metallic grey
+  // ── Furniture / fitout — warm sage green ─────────────────────────────────
+  'ifcfurnishingelement': [0.502, 0.573, 0.502],
+  'ifcfurniture':         [0.502, 0.573, 0.502],
+  'ifcbuildingelementproxy': [0.710, 0.698, 0.678],
+  'ifccasework':          [0.580, 0.537, 0.467], // cabinetry — warm wood
+  // ── VVS / Sanitary (copper/brass tones) ─────────────────────────────────
   'ifcpipesegment': [0.65, 0.55, 0.45],
   'ifcpipefitting': [0.65, 0.55, 0.45],
+  'ifcpipeconnection': [0.65, 0.55, 0.45],
   'ifcvalve': [0.55, 0.50, 0.45],
+  'ifcflowcontroller': [0.55, 0.50, 0.45],
+  'ifcflowinstrument': [0.60, 0.55, 0.48],
+  'ifcflowmeter': [0.60, 0.55, 0.48],
+  'ifcflowmovingdevice': [0.60, 0.55, 0.48],
+  'ifcpump': [0.55, 0.48, 0.42],
+  'ifccompressor': [0.55, 0.48, 0.42],
+  'ifcfan': [0.60, 0.60, 0.65],
   'ifcsanitaryterminal': [0.80, 0.80, 0.78],
   'ifcflowterminal': [0.70, 0.70, 0.68],
-  // HVAC ducts (light grey-blue)
-  'ifcductsegment': [0.70, 0.72, 0.74],
-  'ifcductfitting': [0.70, 0.72, 0.74],
-  'ifcairterminal': [0.75, 0.78, 0.80],
-  'ifcairterminalbox': [0.72, 0.74, 0.76],
-  // Electrical (warm yellow-grey)
-  'ifccablesegment': [0.55, 0.50, 0.40],
-  'ifccablecarriersegment': [0.60, 0.55, 0.45],
-  'ifccablecarrierfitting': [0.60, 0.55, 0.45],
-  'ifccarriersegment': [0.60, 0.55, 0.45],
+  'ifcwasteterminal': [0.72, 0.72, 0.70],
+  'ifcstoragetank': [0.58, 0.52, 0.46],
+  'ifcflowstoragedevice': [0.58, 0.52, 0.46],
+  'ifcinterceptor': [0.58, 0.52, 0.46],
+  'ifcfilter': [0.60, 0.55, 0.48],
+  'ifcelectricflowstoragedevice': [0.58, 0.52, 0.46],
+  // ── HVAC / Ventilation (blue-grey tones) ────────────────────────────────
+  'ifcductsegment': [0.55, 0.65, 0.72],
+  'ifcductfitting': [0.55, 0.65, 0.72],
+  'ifcductsilencer': [0.58, 0.67, 0.74],
+  'ifcairterminal': [0.65, 0.75, 0.80],
+  'ifcairterminalbox': [0.60, 0.70, 0.76],
+  'ifcairtoairheatrecovery': [0.52, 0.62, 0.68],
+  'ifccoil': [0.52, 0.62, 0.68],
+  'ifcchiller': [0.52, 0.62, 0.68],
+  'ifccoolingtower': [0.52, 0.62, 0.68],
+  'ifcboiler': [0.60, 0.40, 0.30],
+  'ifcheatexchanger': [0.52, 0.62, 0.68],
+  'ifchumidifier': [0.60, 0.70, 0.76],
+  'ifcunitarycontrolelement': [0.65, 0.72, 0.78],
+  'ifcunitaryequipment': [0.58, 0.65, 0.72],
+  'ifcspaceheater': [0.75, 0.50, 0.35],
+  'ifcevaporator': [0.52, 0.62, 0.68],
+  'ifccondenser': [0.52, 0.62, 0.68],
+  'ifcevaporativecooler': [0.55, 0.65, 0.72],
+  'ifcmedicaldevice': [0.80, 0.80, 0.80],
+  // ── Electrical (warm yellow/amber tones) ────────────────────────────────
+  'ifccablesegment': [0.72, 0.60, 0.25],
+  'ifccablecarriersegment': [0.68, 0.58, 0.28],
+  'ifccablecarrierfitting': [0.68, 0.58, 0.28],
+  'ifccarriersegment': [0.68, 0.58, 0.28],
   'ifcelectricappliance': [0.85, 0.78, 0.55],
-  'ifclightfixture': [0.92, 0.88, 0.65],
-  'ifcoutlet': [0.80, 0.75, 0.55],
-  'ifcswitchingdevice': [0.75, 0.70, 0.50],
+  'ifcelectricgenerator': [0.80, 0.65, 0.30],
+  'ifcelectricmotor': [0.78, 0.62, 0.28],
+  'ifcelectricdistributionboard': [0.70, 0.55, 0.22],
+  'ifcdistributionboard': [0.70, 0.55, 0.22],
+  'ifcelectrictimecontrol': [0.75, 0.65, 0.35],
+  'ifclightfixture': [0.95, 0.90, 0.60],
+  'ifclamp': [0.95, 0.90, 0.60],
+  'ifcoutlet': [0.82, 0.76, 0.50],
+  'ifcswitchingdevice': [0.78, 0.70, 0.42],
+  'ifcprotectivedevice': [0.72, 0.55, 0.30],
+  'ifcprotectivedevicetrippingunit': [0.72, 0.55, 0.30],
+  'ifcjunctionbox': [0.72, 0.62, 0.35],
+  'ifcmotorconnection': [0.78, 0.62, 0.28],
+  'ifctransformer': [0.70, 0.55, 0.25],
+  'ifcsolardevice': [0.68, 0.72, 0.40],
+  'ifcaudiovisualappliance': [0.70, 0.70, 0.70],
+  'ifccommunicationsappliance': [0.70, 0.70, 0.70],
+  'ifcalarm': [0.90, 0.35, 0.25],
+  'ifcsensor': [0.75, 0.72, 0.65],
+  'ifcactuator': [0.72, 0.68, 0.55],
+  'ifccontroller': [0.72, 0.70, 0.60],
+  'ifcfiresuppressionterminal': [0.90, 0.30, 0.20],
+  // ── Fire / Safety (red tones) ────────────────────────────────────────────
+  'ifcfireelement': [0.88, 0.30, 0.22],
+  // ── Structural steel (blue-grey) ─────────────────────────────────────────
+  'ifcmember': [0.65, 0.68, 0.72],
+  'ifcmemberstandardcase': [0.65, 0.68, 0.72],
+  'ifcplate': [0.65, 0.68, 0.72],
+  'ifcplatestandardcase': [0.65, 0.68, 0.72],
+  'ifctendon': [0.60, 0.62, 0.65],
+  'ifctendonanchor': [0.60, 0.62, 0.65],
+  'ifcreinforcingbar': [0.55, 0.55, 0.60],
+  'ifcreinforcingmesh': [0.55, 0.55, 0.60],
+  // ── Site / Civil ─────────────────────────────────────────────────────────
+  'ifcsite': [0.60, 0.70, 0.55],
+  'ifcroad': [0.55, 0.55, 0.55],
+  'ifcearthworksfill': [0.65, 0.60, 0.50],
+  'ifcgeomodel': [0.65, 0.60, 0.50],
 };
 
-export const DEFAULT_COLOR = [0.933, 0.929, 0.918];
-export const SPACE_COLOR = [0.722, 0.831, 0.890]; // Light blue #B8D4E3
+export const DEFAULT_COLOR = [0.800, 0.792, 0.776]; // neutral warm grey for unknown types
+export const SPACE_COLOR = [0.733, 0.847, 0.902];  // light sky blue — habitable space
 
 /**
  * Apply architect color palette to all objects in the scene.
@@ -91,64 +165,80 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
     }
   }
 
-  // Phase 1: Colorize objects that have metaObject entries (IFC-type-based)
+  // Phase 1: Group metaObjects by IFC type, then call setObjectsColorized once per group.
+  // One batch call per type (~20-30 types) vs one dirty-flag per entity (~20k+).
   if (metaScene?.metaObjects) {
+    // bucket: ifcType → entity IDs
+    const typeGroups = new Map<string, string[]>();
+    const spaceIds: string[] = [];
+    const areaIds: string[] = [];
+
     for (const [id, metaObj] of Object.entries(metaScene.metaObjects as Record<string, any>)) {
+      if (!scene.objects?.[id]) continue;
+      processedIds.add(id);
       const ifcType = (metaObj.type || '').toLowerCase();
       const objName = (metaObj.name || '').toLowerCase();
-      const entity = scene.objects?.[id];
-      if (!entity) continue;
-      processedIds.add(id);
 
       const isSpace = ifcType.includes('ifcspace') || ifcType === 'ifc_space' || ifcType === 'space';
       const isAreaBlanket = objName === 'area' || objName === 'areas';
-      if (isSpace || isAreaBlanket) {
-        entity.colorize = SPACE_COLOR;
-        entity.opacity = 0.3;
-        entity.visible = false;
-        entity.pickable = false;
-        hiddenSpaces++;
-        continue;
-      }
 
+      if (isSpace) {
+        spaceIds.push(id);
+      } else if (isAreaBlanket) {
+        areaIds.push(id);
+      } else {
+        if (!typeGroups.has(ifcType)) typeGroups.set(ifcType, []);
+        typeGroups.get(ifcType)!.push(id);
+      }
+    }
+
+    // Apply spaces — hidden, light blue, non-pickable
+    if (spaceIds.length > 0) {
+      scene.setObjectsColorized(spaceIds, SPACE_COLOR);
+      scene.setObjectsOpacity(spaceIds, 0.3);
+      scene.setObjectsVisible(spaceIds, false);
+      scene.setObjectsPickable(spaceIds, false);
+      hiddenSpaces += spaceIds.length;
+    }
+    // Area blankets behave like spaces
+    if (areaIds.length > 0) {
+      scene.setObjectsColorized(areaIds, SPACE_COLOR);
+      scene.setObjectsOpacity(areaIds, 0.3);
+      scene.setObjectsVisible(areaIds, false);
+      scene.setObjectsPickable(areaIds, false);
+      hiddenSpaces += areaIds.length;
+    }
+    // One batch call per IFC type
+    for (const [ifcType, ids] of typeGroups) {
       const color = IFC_TYPE_COLORS[ifcType] || DEFAULT_COLOR;
-      entity.colorize = color;
-      entity.visible = true;
-      entity.opacity = 1.0;
-      entity.edges = false;  // Subtle edges already set at scene level
-      colorized++;
+      scene.setObjectsColorized(ids, color);
+      scene.setObjectsVisible(ids, true);
+      scene.setObjectsOpacity(ids, 1.0);
+      colorized += ids.length;
     }
   }
 
-  logger.log(`[applyArchitectColors] Phase 1: colorized ${colorized} objects from metaScene`);
+  logger.log(`[applyArchitectColors] Phase 1 (batch): colorized ${colorized}, spaces ${hiddenSpaces}`);
 
-  // Phase 2: Apply DEFAULT_COLOR to any remaining scene objects without metaObject entries
-  // This prevents raw red/uncolored objects from showing
+  // Phase 2: Apply DEFAULT_COLOR to scene objects without metaObject entries (no IFC type).
   if (!allIds || allIds.length === 0) {
     try { allIds = scene.objectIds || []; } catch { /* objectIds getter can throw if internal map is null */ }
   }
-  const phase2Start = colorized;
-  for (const id of allIds) {
-    if (processedIds.has(id)) continue;
-    const entity = scene.objects?.[id];
-    if (!entity) continue;
-    entity.colorize = DEFAULT_COLOR;
-    entity.visible = true;
-    entity.opacity = 1.0;
-    colorized++;
+  const unclassified = allIds.filter(id => !processedIds.has(id));
+  if (unclassified.length > 0) {
+    scene.setObjectsColorized(unclassified, DEFAULT_COLOR);
+    scene.setObjectsVisible(unclassified, true);
+    scene.setObjectsOpacity(unclassified, 1.0);
+    colorized += unclassified.length;
   }
-  const phase2Count = colorized - phase2Start;
-  logger.log(`[applyArchitectColors] Phase 2: colorized ${phase2Count} remaining objects (total now: ${colorized})`);
+  logger.log(`[applyArchitectColors] Phase 2 (batch): ${unclassified.length} unclassified objects (total: ${colorized})`);
 
-  // NOTE: scene.setObjectsColorized(ids, colorize) takes an RGB ARRAY, not a boolean.
-  // Each entity.colorize assignment above already applies the color — no batch flag needed.
-
-  // Subtle edges for architectural look
+  // Edge material: crisp dark edges improve depth cues and overall sharpness
   try {
     const edgeMat = scene.edgeMaterial;
     if (edgeMat) {
-      edgeMat.edgeColor = [0.85, 0.84, 0.82];
-      edgeMat.edgeAlpha = 0.15;
+      edgeMat.edgeColor = [0.20, 0.20, 0.20];
+      edgeMat.edgeAlpha = 0.6;
       edgeMat.edgeWidth = 1;
     }
   } catch { /* edgeMaterial getter throws if scene is destroyed */ }

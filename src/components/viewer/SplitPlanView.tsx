@@ -11,9 +11,10 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { FLOOR_SELECTION_CHANGED_EVENT, type FloorSelectionEventDetail } from '@/hooks/useSectionPlaneClipping';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Download } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { applyArchitectColors } from '@/lib/architect-colors';
+import { isAModelName } from '@/lib/building-utils';
 import { useFloorData } from '@/hooks/useFloorData';
 import { emit, on } from '@/lib/event-bus';
 import { logger } from '@/lib/logger';
@@ -101,6 +102,11 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
   const lastDispatchedFloorRef = useRef<string | null>(null);
 
   const { floors } = useFloorData(viewerRef, buildingFmGuid);
+
+  // Auto-detect plan rotation: put the longer model axis horizontal.
+  // 0 = no rotation (X is horizontal), 90 = 90deg CW (Z becomes horizontal).
+  const [planRotation, setPlanRotation] = useState<0 | 90>(0);
+  const planRotationRef = useRef<0 | 90>(0);
 
   const normalizeGuidKey = useCallback((value?: string | null) => (value || '').toLowerCase().replace(/-/g, ''), []);
 
@@ -211,6 +217,21 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
           setStoreyPlugin(plugin);
           pluginRef.current = plugin;
           setIsLoading(false);
+
+          // Auto-detect rotation: put the longer horizontal axis horizontal on screen.
+          // StoreyViewsPlugin renders top-down with X right and -Z up, so if Z > X
+          // the image is portrait → rotate 90deg CW to make it landscape.
+          try {
+            const v = getXeokitViewer();
+            const aabb = v?.scene?.aabb;
+            if (aabb) {
+              const xSpan = aabb[3] - aabb[0];
+              const zSpan = aabb[5] - aabb[2];
+              const rot: 0 | 90 = zSpan > xSpan * 1.15 ? 90 : 0;
+              setPlanRotation(rot);
+              planRotationRef.current = rot;
+            }
+          } catch {}
         }
       } catch (e) {
         logger.warn('StoreyViewsPlugin init failed:', e);
@@ -449,8 +470,23 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     const doorIds: string[] = [];
     const metaObjects = viewer.metaScene?.metaObjects || {};
 
+    // Build A-model entity set — restrict plan image to architectural model only.
+    // B-model walls, fire model elements etc. must not appear in the 2D plan.
+    const aModelEntityIds = new Set<string>();
+    const sceneModels = viewer.scene.models || {};
+    let hasAModel = false;
+    Object.entries(sceneModels).forEach(([modelId, model]: [string, any]) => {
+      if (isAModelName(modelId)) {
+        hasAModel = true;
+        const objs = model.objects || {};
+        for (const id of Object.keys(objs)) aModelEntityIds.add(id);
+      }
+    });
+
     // Only include entities that belong to this storey's descendants
-    const entityPool = storeyDescendants.size > 0 ? storeyDescendants : new Set(Object.keys(viewer.scene.objects || {}));
+    const rawPool = storeyDescendants.size > 0 ? storeyDescendants : new Set(Object.keys(viewer.scene.objects || {}));
+    // If A-models are identified, further restrict the pool to A-model entities
+    const entityPool = hasAModel ? new Set([...rawPool].filter(id => aModelEntityIds.has(id))) : rawPool;
     for (const id of entityPool) {
       const mo = metaObjects[id] as any;
       if (!mo) continue;
@@ -932,8 +968,15 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     if (!map || !img || !viewer) return;
 
     const rect = img.getBoundingClientRect();
-    const imgX = (e.clientX - rect.left) / rect.width * map.width;
-    const imgY = (e.clientY - rect.top) / rect.height * map.height;
+    let imgX: number, imgY: number;
+    if (planRotationRef.current === 90) {
+      // 90deg CW: display axes swapped — invert the coordinate mapping
+      imgX = (1 - (e.clientY - rect.top) / rect.height) * map.width;
+      imgY = ((e.clientX - rect.left) / rect.width) * map.height;
+    } else {
+      imgX = (e.clientX - rect.left) / rect.width * map.width;
+      imgY = (e.clientY - rect.top) / rect.height * map.height;
+    }
 
     viewer.cameraFlight?.cancel?.();
 
@@ -1081,8 +1124,14 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
     if (!plugin || !map || !img) return;
 
     const rect = img.getBoundingClientRect();
-    const imgX = (e.clientX - rect.left) / rect.width * map.width;
-    const imgY = (e.clientY - rect.top) / rect.height * map.height;
+    let imgX: number, imgY: number;
+    if (planRotationRef.current === 90) {
+      imgX = (1 - (e.clientY - rect.top) / rect.height) * map.width;
+      imgY = ((e.clientX - rect.left) / rect.width) * map.height;
+    } else {
+      imgX = (e.clientX - rect.left) / rect.width * map.width;
+      imgY = (e.clientY - rect.top) / rect.height * map.height;
+    }
 
     try {
       const pickResult = plugin.pickStoreyMap(map, [imgX, imgY]);
@@ -1269,6 +1318,23 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
         </div>
       )}
 
+      {/* Download floor plan button */}
+      {storeyMap?.imageData && (
+        <button
+          className="absolute top-2 right-2 z-20 h-6 w-6 flex items-center justify-center rounded bg-card/95 backdrop-blur-sm border border-border shadow-sm hover:bg-muted transition-colors"
+          title="Ladda ner planritning"
+          onClick={(e) => {
+            e.stopPropagation();
+            const a = document.createElement('a');
+            a.href = storeyMap.imageData;
+            a.download = `planritning-${selectedFloorId || 'plan'}.png`;
+            a.click();
+          }}
+        >
+          <Download className="h-3 w-3 text-foreground/70" />
+        </button>
+      )}
+
       {/* Loading state */}
       {isLoading && !storeyMap && (
         <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: '#ffffff' }}>
@@ -1313,6 +1379,9 @@ const SplitPlanView: React.FC<SplitPlanViewProps> = ({
             style={{
               imageRendering: 'crisp-edges',
               filter: 'contrast(1.3)',
+              transform: planRotation !== 0 ? `rotate(${planRotation}deg)` : undefined,
+              // When rotated 90deg the image's visual W/H swap — getBoundingClientRect()
+              // will then return the rotated extents, which is what we want for picking.
             }}
             draggable={false}
             onClick={handleClick}
