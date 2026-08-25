@@ -183,13 +183,24 @@ const GeminusBaseV2View: React.FC = () => {
     postToViewer({ type: 'geminus-viewer-insights', open });
   };
 
-  // Re-assert current mode + insights once the iframe SPA has booted
-  // (postMessages sent before boot are lost)
+  // Last navigation sent to the Geminus viewer (building/floor/entity) — replayed once
+  // the iframe SPA has booted, since postMessages sent before boot are lost, and
+  // reused whenever the iframe is (re)loaded after a fresh building selection.
+  const pendingGeminusNavRef = useRef<object | null>(null);
+
+  const sendGeminusNav = useCallback((msg: object) => {
+    pendingGeminusNavRef.current = msg;
+    postToViewer(msg);
+  }, [postToViewer]);
+
+  // Re-assert current mode + insights + last navigation once the iframe SPA has
+  // booted (postMessages sent before boot are lost)
   const handleIframeLoad = useCallback(() => {
     setTimeout(() => {
       const m = viewModeStateRef.current;
       if (m !== '2d-fma') postToViewer({ type: 'geminus-viewer-mode', mode: m });
       if (insightsOpenRef.current) postToViewer({ type: 'geminus-viewer-insights', open: true });
+      if (pendingGeminusNavRef.current) postToViewer(pendingGeminusNavRef.current);
     }, 1500);
   }, [postToViewer]);
 
@@ -370,8 +381,21 @@ const GeminusBaseV2View: React.FC = () => {
         .eq('fm_guid', geminusBaseGuid)
         .in('category', ['Building', 'IfcBuilding'])
         .maybeSingle();
-      setViewerBuildingGuid(data?.fm_guid ? geminusBaseGuid : '');
-      setHasGeminusMatch(!!data?.fm_guid);
+      const matched = !!data?.fm_guid;
+      setViewerBuildingGuid(matched ? geminusBaseGuid : '');
+      setHasGeminusMatch(matched);
+
+      // Same systemGuid-is-the-fm_guid equivalence holds one level down: a Plan's
+      // (Building Storey's) own systemGuid is exactly its Geminus fm_guid, verified
+      // the same way as the building match above. Drive the embedded Geminus viewer
+      // (whichever mode is active) the same way we already drive 2D-FMA below.
+      if (matched) {
+        if (node.classId === 103 || node.classId === 104) {
+          sendGeminusNav({ type: 'geminus-viewer-show-building' });
+        } else if (node.classId === 105 && node.systemGuid) {
+          sendGeminusNav({ type: 'geminus-viewer-floor', fmGuid: node.systemGuid, floorName: node.objectName });
+        }
+      }
     } else {
       setViewerBuildingGuid('');
       setHasGeminusMatch(false);
@@ -432,7 +456,7 @@ const GeminusBaseV2View: React.FC = () => {
     } finally {
       setGridLoading(false);
     }
-  }, [getObjectStats, getGridObjects]);
+  }, [getObjectStats, getGridObjects, sendGeminusNav]);
 
   // ── Tab changed → load objects ────────────────────────────────────────────────
   useEffect(() => {
@@ -454,14 +478,20 @@ const GeminusBaseV2View: React.FC = () => {
   const handleGridSelect = useCallback((node: GeminusBaseNode) => {
     const guid = node.guid || node.systemGuid;
     setSelectedGridGuid(guid ?? null);
-    // Show selected object/room in viewer — tight zoom
+    // Show selected object/room in the 2D-FMA viewer — tight zoom
     if (viewerRef.current?.isReady() && node.classId && node.objectId) {
       viewerRef.current.showObject(
         String(node.objectId), String(node.classId),
         undefined, { mode: '2D', fitMode: 0, fitMargin: 0.2 },
       );
     }
-  }, []);
+    // ...and the embedded Geminus viewer too, regardless of which mode is active —
+    // its systemGuid is the room/object's Geminus fm_guid (same equivalence as
+    // buildings and floors).
+    if (guid && hasGeminusMatch) {
+      sendGeminusNav({ type: 'geminus-viewer-zoom-to-entity', fmGuid: guid });
+    }
+  }, [hasGeminusMatch, sendGeminusNav]);
 
   const handleViewerSelection = useCallback((objects: any[]) => {
     if (objects.length > 0) setSelectedGridGuid(objects[0].externalId || objects[0].objectId || null);
