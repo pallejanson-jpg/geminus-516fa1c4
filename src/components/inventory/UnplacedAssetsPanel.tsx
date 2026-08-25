@@ -55,6 +55,10 @@ async function fetchUnplacedAssets(buildingFmGuid: string): Promise<UnplacedAsse
     .select(UNPLACED_SELECT)
     .eq('building_fm_guid', buildingFmGuid)
     .eq('category', 'Instance')
+    // Only assets that don't exist in the BIM model ("Exist in model = No") need a
+    // manually/auto-derived position — assets that DO exist in the model already
+    // get their position from the model's own geometry, not from this panel.
+    .eq('created_in_model', false)
     .is('ivion_poi_id', null)
     .order('name');
 
@@ -76,6 +80,7 @@ async function fetchPendingReviewAssets(buildingFmGuid: string): Promise<Pending
     .select('id, fm_guid, name, common_name, asset_type, ivion_poi_id')
     .eq('building_fm_guid', buildingFmGuid)
     .eq('category', 'Instance')
+    .eq('created_in_model', false)
     .not('ivion_poi_id', 'is', null)
     .is('ivion_poi_confirmed_at', null)
     .order('name');
