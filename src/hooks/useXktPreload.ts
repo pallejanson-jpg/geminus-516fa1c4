@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { xktCacheService } from '@/services/xkt-cache-service';
-import { xktIdbCache } from '@/services/xkt-idb-cache';
+import { xktDiskCache } from '@/services/xkt-disk-cache';
 import { supabase } from '@/integrations/supabase/client';
 import { logger } from '@/lib/logger';
 
@@ -99,7 +99,7 @@ export function clearBuildingFromMemory(buildingFmGuid: string): void {
   keysToDelete.forEach(key => xktMemoryCache.delete(key));
   globalPreloadedBuildings.delete(buildingFmGuid);
   // Also evict IDB entries so forced re-sync gets fresh data from Asset+
-  xktIdbCache.clearBuilding(buildingFmGuid).catch(() => {});
+  xktDiskCache.clearBuilding(buildingFmGuid).catch(() => {});
   logger.log(`XKT Memory: Cleared ${keysToDelete.length} models for building ${buildingFmGuid.substring(0, 8)}... (preload guard + IDB reset)`);
 }
 
@@ -262,12 +262,12 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
 
               // Check IDB disk cache before hitting the network
               const stale = (model as any).updated_at
-                ? await xktIdbCache.isStale(buildingFmGuid, model.model_id, (model as any).updated_at)
+                ? await xktDiskCache.isStale(buildingFmGuid, model.model_id, (model as any).updated_at)
                 : false;
               if (!stale) {
-                const idbData = await xktIdbCache.get(buildingFmGuid, model.model_id);
-                if (idbData) {
-                  storeModelInMemory(model.model_id, buildingFmGuid, idbData);
+                const diskData = await xktDiskCache.get(buildingFmGuid, model.model_id);
+                if (diskData) {
+                  storeModelInMemory(model.model_id, buildingFmGuid, diskData);
                   logger.log(`XKT Preload: ⚡ IDB hit ${model.model_id}`);
                   return;
                 }
@@ -283,7 +283,7 @@ export function useXktPreload(buildingFmGuid: string | null | undefined) {
                 if (data.byteLength < 50_000 || firstByte === '<' || firstByte === '{') return;
                 storeModelInMemory(model.model_id, buildingFmGuid, data);
                 // Save to IDB in background for future sessions
-                xktIdbCache.put(buildingFmGuid, model.model_id, data, (model as any).updated_at ?? null).catch(() => {});
+                xktDiskCache.put(buildingFmGuid, model.model_id, data, (model as any).updated_at ?? null).catch(() => {});
               }
             } catch (e) {
               logger.warn(`XKT Preload: Failed to fetch ${model.model_id}:`, e);

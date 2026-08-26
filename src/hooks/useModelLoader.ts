@@ -10,7 +10,7 @@ import { useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeGuid } from '@/lib/utils';
 import { xktCacheService } from '@/services/xkt-cache-service';
-import { xktIdbCache } from '@/services/xkt-idb-cache';
+import { xktDiskCache } from '@/services/xkt-disk-cache';
 import { clearBuildingFromMemory, getModelFromMemory, storeModelInMemory } from '@/hooks/useXktPreload';
 import { applyArchitectColors } from '@/lib/architect-colors';
 import { isRealTiling, getTilesToLoad } from '@/hooks/useFloorPriorityLoading';
@@ -349,7 +349,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         const finalModelName = rawModelName || matchedRevision?.modelName || matchedRevision?.entityName || modelId;
         storeModelInMemory(modelId, buildingFmGuid, xktData);
         xktCacheService.saveModelFromViewer(modelId, xktData, buildingFmGuid, finalModelName, revisionId || undefined).catch(() => {});
-        xktIdbCache.put(buildingFmGuid, modelId, xktData, new Date().toISOString()).catch(() => {});
+        xktDiskCache.put(buildingFmGuid, modelId, xktData, new Date().toISOString()).catch(() => {});
         bootstrapped.push({
           model_id: modelId, model_name: finalModelName,
           storage_path: `${buildingFmGuid}/${modelId}.xkt`,
@@ -417,7 +417,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
         if (arrayBuf.byteLength < 50_000) continue;
 
         // Cache to IDB so next load comes from disk
-        xktIdbCache.put(buildingFmGuid, modelId, arrayBuf, new Date().toISOString()).catch(() => {});
+        xktDiskCache.put(buildingFmGuid, modelId, arrayBuf, new Date().toISOString()).catch(() => {});
         storeModelInMemory(modelId, buildingFmGuid, arrayBuf);
 
         const entity = xktLoader.load({ id: modelId, xkt: arrayBuf, edges: true, ...(metaModelSrc && { metaModelSrc }) });
@@ -481,19 +481,19 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
 
       // 2. IndexedDB disk cache — survives page refresh, no network needed
       const stale = model.updated_at
-        ? await xktIdbCache.isStale(buildingFmGuid, modelId, model.updated_at)
+        ? await xktDiskCache.isStale(buildingFmGuid, modelId, model.updated_at)
         : false;
       if (!stale) {
-        const idbData = await xktIdbCache.get(buildingFmGuid, modelId);
-        if (idbData) {
-          storeModelInMemory(modelId, buildingFmGuid, idbData);
-          const entity = xktLoader.load({ id: modelId, xkt: idbData, edges: true, ...(metaModelSrc && { metaModelSrc }) });
+        const diskData = await xktDiskCache.get(buildingFmGuid, modelId);
+        if (diskData) {
+          storeModelInMemory(modelId, buildingFmGuid, diskData);
+          const entity = xktLoader.load({ id: modelId, xkt: diskData, edges: true, ...(metaModelSrc && { metaModelSrc }) });
           const ok = await waitForModel(entity);
           if (!ok) return false;
           const loaded = viewer.scene?.models?.[modelId];
           const count = loaded?.numEntities ?? Object.keys(loaded?.objects || {}).length ?? 0;
           if (count === 0) { try { loaded?.destroy?.(); } catch {} return false; }
-          logger.log(`%c[ModelLoader] ⚡ IDB → ${modelId} (${(idbData.byteLength / 1024 / 1024).toFixed(1)} MB) ${Math.round(performance.now() - modelStart)}ms`, 'color:#a855f7;font-weight:bold');
+          logger.log(`%c[ModelLoader] ⚡ Disk → ${modelId} (${(diskData.byteLength / 1024 / 1024).toFixed(1)} MB) ${Math.round(performance.now() - modelStart)}ms`, 'color:#a855f7;font-weight:bold');
           return true;
         }
       }
@@ -525,7 +525,7 @@ export function useModelLoader({ buildingFmGuid, isMobile }: UseModelLoaderOptio
 
       storeModelInMemory(modelId, buildingFmGuid, arrayBuf);
       // Save to IDB in background — don't block loading
-      xktIdbCache.put(buildingFmGuid, modelId, arrayBuf, model.updated_at ?? null).catch(() => {});
+      xktDiskCache.put(buildingFmGuid, modelId, arrayBuf, model.updated_at ?? null).catch(() => {});
       const entity = xktLoader.load({ id: modelId, xkt: arrayBuf, edges: true, ...(metaModelSrc && { metaModelSrc }) });
       const ok = await waitForModel(entity);
       if (!ok) return false;
