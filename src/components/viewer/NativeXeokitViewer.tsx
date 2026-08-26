@@ -13,6 +13,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { AlertCircle } from 'lucide-react';
+import { Spinner } from '@/components/ui/spinner';
 import { getMemoryStats } from '@/hooks/useXktPreload';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { applyArchitectColors } from '@/lib/architect-colors';
@@ -295,6 +296,16 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           try { applyArchitectColors(viewer); } catch (e) { logger.warn('[NativeViewer] applyArchitectColors failed', e); }
         }
 
+        // Enable SAO now that models are loaded — was disabled during loading to avoid
+        // GPU stalls caused by running the 16-sample depth pass during XKT buffer uploads.
+        const saoDisabledByUser = (() => {
+          try { return localStorage.getItem('viewer-sao-enabled') === 'false'; } catch { return false; }
+        })();
+        if (!saoDisabledByUser && viewer.scene?.sao) {
+          viewer.scene.sao.enabled = true;
+          logger.log('[NativeViewer] SAO enabled post-load');
+        }
+
         // Log AABB for diagnostics
         try {
           const aabb = viewer.scene.aabb;
@@ -484,12 +495,12 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
 
   // Phase → human-readable label
   const phaseLabel: Record<string, string> = {
-    init:            'Initierar...',
-    loading_sdk:     'Laddar viewer-motor...',
-    creating_viewer: 'Skapar 3D-viewer...',
-    syncing:         'Kontrollerar modellcache...',
-    bootstrapping:   'Hämtar modeller från server...',
-    loading_models:  'Laddar 3D-modell...',
+    init:            'Initializing...',
+    loading_sdk:     'Loading viewer engine...',
+    creating_viewer: 'Creating 3D viewer...',
+    syncing:         'Checking model cache...',
+    bootstrapping:   'Fetching models from server...',
+    loading_models:  'Loading 3D model...',
   };
 
   const isLoading = phase !== 'ready' && phase !== 'error';
@@ -505,27 +516,26 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         style={{ touchAction: 'none' }}
       />
 
-      {/* Loading overlay */}
-      {isLoading && (
+      {/* Loading overlay — only shown once the viewer starts real work (not 'init')
+          so it doesn't stack with the parent FullPageSpinner/Suspense fallback. */}
+      {isLoading && phase !== 'init' && (
         <div className="absolute inset-0 flex flex-col items-center justify-center z-10 pointer-events-none">
-          <div className="bg-black/70 backdrop-blur-sm rounded-xl px-6 py-5 flex flex-col items-center gap-3 min-w-[220px] max-w-[320px]">
-            {/* Spinning ring */}
-            <svg className="animate-spin h-8 w-8 text-white/80" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"/>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
-            </svg>
-            <p className="text-white/90 text-sm font-medium text-center">{phaseLabel[phase] || 'Laddar...'}</p>
-            {/* Progress bar — only shown when XKT bytes are reported */}
+          <div className="flex flex-col items-center gap-3">
+            <Spinner size="lg" />
+            <p className="text-white/80 text-sm font-medium text-center drop-shadow">
+              {phaseLabel[phase] || 'Loading...'}
+            </p>
+            {/* Progress bar — only shown when model bytes are reported */}
             {phase === 'loading_models' && loadProgress.total > 0 && (
-              <div className="w-full">
-                <div className="w-full bg-white/10 rounded-full h-1.5 overflow-hidden">
+              <div className="w-48">
+                <div className="w-full bg-white/15 rounded-full h-1 overflow-hidden">
                   <div
-                    className="bg-white/80 h-full rounded-full transition-all duration-300"
+                    className="bg-white/70 h-full rounded-full transition-all duration-300"
                     style={{ width: `${pct}%` }}
                   />
                 </div>
-                <p className="text-white/50 text-xs mt-1 text-center">
-                  {loadProgress.currentModel ? loadProgress.currentModel : `${pct}%`}
+                <p className="text-white/40 text-xs mt-1 text-center truncate max-w-[180px]">
+                  {loadProgress.currentModel || `${pct}%`}
                 </p>
               </div>
             )}

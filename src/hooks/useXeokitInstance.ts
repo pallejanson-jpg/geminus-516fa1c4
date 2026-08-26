@@ -55,7 +55,7 @@ export function useXeokitInstance({ canvasRef, buildingFmGuid, onContextLost }: 
       canvasElement: canvasRef.current,
       transparent: false,          // opaque canvas = no alpha compositing overhead, sharper edges
       backgroundColor: [0.176, 0.176, 0.176], // match NativeViewerShell gradient mid-point (#2D2D2D)
-      saoEnabled: true,
+      saoEnabled: false,           // disabled during loading — enabled after models load to avoid GPU stalls
       entityOffsetsEnabled: true,
       dtxEnabled: true,
       pbrEnabled: false,
