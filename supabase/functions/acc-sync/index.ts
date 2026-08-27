@@ -3550,66 +3550,51 @@ serve(async (req: Request) => {
         }
 
         const sbAccProjectId = renovRow.acc_renovation_project_id;
-        const sbArchiveProjectId = renovRow.archive_project_id;
-        const sbArchiveFileItemId = renovRow.archive_file_item_id;
+        const sbRenovFolderId = renovRow.renovation_folder_id;
+        const sbArchiveFolderId = renovRow.archive_folder_id;
         const sbFileName = renovRow.archive_file_name || "model.rvt";
         const sbBuildingFmGuid = renovRow.building_fm_guid;
 
-        if (!sbAccProjectId || !sbArchiveProjectId || !sbArchiveFileItemId) {
-          return new Response(JSON.stringify({ success: false, error: "Project not fully set up (missing acc_renovation_project_id, archive_project_id, or archive_file_item_id)" }),
+        if (!sbAccProjectId || !sbRenovFolderId || !sbArchiveFolderId) {
+          return new Response(JSON.stringify({ success: false, error: "Project not fully set up (missing acc_renovation_project_id, renovation_folder_id, or archive_folder_id)" }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
         }
 
         const { token: sbToken } = await getAccToken(auth.userId, supabase);
         const sbRegionHeaders = getRegionHeader(region);
-        const sbFullRenovProjectId = `b.${sbAccProjectId.replace(/^b\./, "")}`;
-        const sbFullArchiveProjectId = `b.${sbArchiveProjectId.replace(/^b\./, "")}`;
+        const sbFullProjectId = `b.${sbAccProjectId.replace(/^b\./, "")}`;
 
         async function syncBack() {
           try {
-            // Step 1: Get latest version from renovation project (find the item first)
-            const sbRenovFoldersRes = await fetch(
-              `https://developer.api.autodesk.com/project/v1/hubs/b.${(renovRow.acc_account_id || "").replace(/^b\./, "")}/projects/${sbFullRenovProjectId}/topFolders`,
+            // Step 1: Find the .rvt item in the renovation folder directly
+            const sbRenovContentsRes = await fetch(
+              `https://developer.api.autodesk.com/data/v1/projects/${sbFullProjectId}/folders/${encodeURIComponent(sbRenovFolderId)}/contents`,
               { headers: { "Authorization": `Bearer ${sbToken}`, "Accept": "application/json", ...sbRegionHeaders } },
             );
-            let sbRenovItemId: string | null = null;
-            if (sbRenovFoldersRes.ok) {
-              const sbFoldersData = await sbRenovFoldersRes.json();
-              const sbProjFolder = (sbFoldersData.data || []).find((f: any) => {
-                const n = (f.attributes?.name || "").toLowerCase();
-                return n.includes("project file") || n.includes("projektfiler");
-              }) || sbFoldersData.data?.[0];
-              if (sbProjFolder) {
-                const contRes = await fetch(
-                  `https://developer.api.autodesk.com/data/v1/projects/${sbFullRenovProjectId}/folders/${sbProjFolder.id}/contents`,
-                  { headers: { "Authorization": `Bearer ${sbToken}`, "Accept": "application/json", ...sbRegionHeaders } },
-                );
-                if (contRes.ok) {
-                  const contData = await contRes.json();
-                  const rvtItem = (contData.data || []).find((i: any) =>
-                    (i.attributes?.displayName || "").toLowerCase().endsWith(".rvt") || i.type === "items"
-                  );
-                  sbRenovItemId = rvtItem?.id || null;
-                }
-              }
-            }
+            if (!sbRenovContentsRes.ok) throw new Error(`Failed to list renovation folder: ${sbRenovContentsRes.status}`);
+            const sbRenovContents = await sbRenovContentsRes.json();
+            const sbRenovItem = (sbRenovContents.data || []).find((i: any) =>
+              (i.attributes?.displayName || "").toLowerCase().endsWith(".rvt")
+            );
+            if (!sbRenovItem) throw new Error("Could not find .rvt file in renovation folder");
+            const sbRenovItemId = sbRenovItem.id;
 
             // Step 2: Get tip version storage URN from renovation item
-            if (!sbRenovItemId) throw new Error("Could not find model file in renovation project");
             const sbVersionsRes = await fetch(
-              `https://developer.api.autodesk.com/data/v1/projects/${sbFullRenovProjectId}/items/${encodeURIComponent(sbRenovItemId)}/versions`,
+              `https://developer.api.autodesk.com/data/v1/projects/${sbFullProjectId}/items/${encodeURIComponent(sbRenovItemId)}/versions`,
               { headers: { "Authorization": `Bearer ${sbToken}`, "Accept": "application/json", ...sbRegionHeaders } },
             );
             if (!sbVersionsRes.ok) throw new Error(`Versions fetch failed: ${sbVersionsRes.status}`);
             const sbVersionsData = await sbVersionsRes.json();
             const sbTipVersion = sbVersionsData.data?.[0];
-            if (!sbTipVersion) throw new Error("No versions in renovation project");
+            if (!sbTipVersion) throw new Error("No versions found for renovation model");
 
             const sbStorageRef = sbTipVersion.relationships?.storage?.data;
             if (!sbStorageRef) throw new Error("No storage reference on renovation model version");
             const sbStorageUrn = sbStorageRef.id;
             const [sbBucketKey, ...sbObjParts] = sbStorageUrn.replace("urn:adsk.objects:os.object:", "").split("/");
             const sbObjectName = sbObjParts.join("/");
+            const sbRenovFileName = sbRenovItem.attributes?.displayName || sbFileName;
 
             // Step 3: Download bytes
             const sbDownloadRes = await fetch(
@@ -3618,11 +3603,28 @@ serve(async (req: Request) => {
             );
             if (!sbDownloadRes.ok) throw new Error(`Download failed: ${sbDownloadRes.status}`);
             const sbBytes = await sbDownloadRes.arrayBuffer();
-            console.log(`[sync-back-to-archive] Downloaded ${sbBytes.byteLength} bytes from renovation project`);
+            console.log(`[sync-back-to-archive] Downloaded ${sbBytes.byteLength} bytes from renovation folder`);
 
-            // Step 4: Create storage in archive project
+            // Step 4: Find (or create) the archive item in the archive folder
+            const sbArchiveContentsRes = await fetch(
+              `https://developer.api.autodesk.com/data/v1/projects/${sbFullProjectId}/folders/${encodeURIComponent(sbArchiveFolderId)}/contents`,
+              { headers: { "Authorization": `Bearer ${sbToken}`, "Accept": "application/json", ...sbRegionHeaders } },
+            );
+            let sbArchiveItemId: string | null = null;
+            if (sbArchiveContentsRes.ok) {
+              const sbArchiveContents = await sbArchiveContentsRes.json();
+              const sbExistingItem = (sbArchiveContents.data || []).find((i: any) =>
+                (i.attributes?.displayName || "").toLowerCase().endsWith(".rvt")
+              );
+              sbArchiveItemId = sbExistingItem?.id ?? null;
+            }
+
+            // Create storage slot linked to the archive item (or folder if new item)
+            const sbStorageTarget = sbArchiveItemId
+              ? { type: "items", id: sbArchiveItemId }
+              : { type: "folders", id: sbArchiveFolderId };
             const sbNewStorageRes = await fetch(
-              `https://developer.api.autodesk.com/data/v1/projects/${sbFullArchiveProjectId}/storage`,
+              `https://developer.api.autodesk.com/data/v1/projects/${sbFullProjectId}/storage`,
               {
                 method: "POST",
                 headers: { "Authorization": `Bearer ${sbToken}`, "Content-Type": "application/vnd.api+json", "Accept": "application/vnd.api+json", ...sbRegionHeaders },
@@ -3630,8 +3632,8 @@ serve(async (req: Request) => {
                   jsonapi: { version: "1.0" },
                   data: {
                     type: "objects",
-                    attributes: { name: sbFileName },
-                    relationships: { target: { data: { type: "items", id: sbArchiveFileItemId } } },
+                    attributes: { name: sbRenovFileName },
+                    relationships: { target: { data: sbStorageTarget } },
                   },
                 }),
               },
@@ -3653,34 +3655,72 @@ serve(async (req: Request) => {
             );
             if (!sbUploadRes.ok) throw new Error(`Upload to archive failed: ${sbUploadRes.status}`);
 
-            // Step 6: Create new version on the archive item
-            const sbNewVersionBody = {
-              jsonapi: { version: "1.0" },
-              data: {
-                type: "versions",
-                attributes: {
-                  name: sbFileName,
-                  extension: { type: "versions:autodesk.bim360:File", version: "1.0" },
+            // Step 6: Create new version on existing item, or create a new item in the archive folder
+            let sbCreateVersionRes: Response;
+            if (sbArchiveItemId) {
+              const sbNewVersionBody = {
+                jsonapi: { version: "1.0" },
+                data: {
+                  type: "versions",
+                  attributes: {
+                    name: sbRenovFileName,
+                    extension: { type: "versions:autodesk.bim360:File", version: "1.0" },
+                  },
+                  relationships: {
+                    item: { data: { type: "items", id: sbArchiveItemId } },
+                    storage: { data: { type: "objects", id: sbNewStorageUrn } },
+                  },
                 },
-                relationships: {
-                  item: { data: { type: "items", id: sbArchiveFileItemId } },
-                  storage: { data: { type: "objects", id: sbNewStorageUrn } },
+              };
+              sbCreateVersionRes = await fetch(
+                `https://developer.api.autodesk.com/data/v1/projects/${sbFullProjectId}/versions`,
+                {
+                  method: "POST",
+                  headers: { "Authorization": `Bearer ${sbToken}`, "Content-Type": "application/vnd.api+json", "Accept": "application/vnd.api+json", ...sbRegionHeaders },
+                  body: JSON.stringify(sbNewVersionBody),
                 },
-              },
-            };
-            const sbCreateVersionRes = await fetch(
-              `https://developer.api.autodesk.com/data/v1/projects/${sbFullArchiveProjectId}/versions`,
-              {
-                method: "POST",
-                headers: { "Authorization": `Bearer ${sbToken}`, "Content-Type": "application/vnd.api+json", "Accept": "application/vnd.api+json", ...sbRegionHeaders },
-                body: JSON.stringify(sbNewVersionBody),
-              },
-            );
+              );
+            } else {
+              // No existing .rvt in archive folder — create a new item
+              const sbNewItemBody = {
+                jsonapi: { version: "1.0" },
+                data: {
+                  type: "items",
+                  attributes: {
+                    displayName: sbRenovFileName,
+                    extension: { type: "items:autodesk.bim360:File", version: "1.0" },
+                  },
+                  relationships: {
+                    tip: { data: { type: "versions", id: "1" } },
+                    parent: { data: { type: "folders", id: sbArchiveFolderId } },
+                  },
+                },
+                included: [{
+                  type: "versions",
+                  id: "1",
+                  attributes: {
+                    name: sbRenovFileName,
+                    extension: { type: "versions:autodesk.bim360:File", version: "1.0" },
+                  },
+                  relationships: {
+                    storage: { data: { type: "objects", id: sbNewStorageUrn } },
+                  },
+                }],
+              };
+              sbCreateVersionRes = await fetch(
+                `https://developer.api.autodesk.com/data/v1/projects/${sbFullProjectId}/items`,
+                {
+                  method: "POST",
+                  headers: { "Authorization": `Bearer ${sbToken}`, "Content-Type": "application/vnd.api+json", "Accept": "application/vnd.api+json", ...sbRegionHeaders },
+                  body: JSON.stringify(sbNewItemBody),
+                },
+              );
+            }
             if (!sbCreateVersionRes.ok) {
               const errText = await sbCreateVersionRes.text();
               throw new Error(`Create archive version failed: ${sbCreateVersionRes.status} ${errText.slice(0, 200)}`);
             }
-            console.log(`[sync-back-to-archive] New version created in archive project`);
+            console.log(`[sync-back-to-archive] New version created in archive folder`);
 
             // Step 7: Mark project completed
             await supabase.from("renovation_projects").update({
