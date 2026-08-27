@@ -26,6 +26,7 @@ const FmaInternalView = lazy(() => import("@/components/viewer/FmaInternalView")
 const GeminusBaseV2View = lazy(() => import("@/components/geminus-base/GeminusBaseV2View"));
 const CesiumGlobeView = lazy(() => import("@/components/globe/CesiumGlobeView"));
 const CustomerPortalView = lazy(() => import("@/components/support/CustomerPortalView"));
+const IfcFederationView = lazy(() => import("@/components/ifc-federation/IfcFederationView"));
 
 const VIEWER_APPS = ['geminus_plus_viewer', 'viewer', 'native_viewer', 'radar', 'geminus_premium_dashboard', 'globe', 'map'];
 const FILL_APPS = ['portfolio', 'navigation', 'fma_plus', 'geminus_base_native', 'entity_insights', 'ivion_create', 'ai_scan'];
@@ -182,6 +183,12 @@ const MainContent: React.FC = () => {
                 return (
                     <Suspense fallback={<LazyFallback />}>
                         <CustomerPortalView />
+                    </Suspense>
+                );
+            case 'ifc_federation':
+                return (
+                    <Suspense fallback={<LazyFallback />}>
+                        <IfcFederationView />
                     </Suspense>
                 );
             default:

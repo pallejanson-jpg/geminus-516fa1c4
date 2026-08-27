@@ -88,11 +88,20 @@ Exposes `buildCanonicalStoreys(ifcText)` / `getArchitectStoreysFromFile(path)` �
 
 Verified against a hand-built two-storey fixture ([`ifc-federation/test-fixtures/sample-architect.ifc`](../../ifc-federation/test-fixtures/sample-architect.ifc)) with one storey carrying an existing `FmGuid` property and one without: the existing GUID was correctly reused, and a fresh UUID was generated for the storey missing one — matching the business rule exactly. **Caveat:** only tested against a synthetic fixture, not a real Revit/architect IFC export — the STEP grammar handled here (single-line entities, no line-continuation edge cases beyond what `ifc-fmguid-prep` already handles) should be re-verified against an actual exported file before relying on this for real buildings.
 
-### Phase 3 — Multi-model ingestion (Node module)
-New Node module (repo root, alongside `sync-service.js`) that:
-- Accepts N discipline IFC files for one building.
-- Runs each through `web-ifc` (parsing) — same library already used server-side, now invoked from Node instead of Deno.
-- Produces per-model storey lists and object lists ready for Phase 4/5.
+### Phase 3 — Multi-model ingestion (Node module) — done, verified end-to-end
+
+Implemented as [`ifc-federation/ingest-federation.js`](../../ifc-federation/ingest-federation.js): a thin orchestration layer, not new parsing (the STEP-text parsing already lives in Phase 2 and Phase 5's modules; there was never a `web-ifc` dependency to introduce here — see Phase 2's note that the existing parsing is plain regex/string-based). `ingestFederation({ buildingIdentifier, architectFile, disciplineFiles })`:
+
+1. Calls Phase 1's `getBuildingByIdentifier()` — if found, canonical storeys come from Phase 1's `getStoreysForBuilding()`.
+2. If not found, requires an `architectFile` and falls back to Phase 2's `buildCanonicalStoreys()`.
+3. Reads every discipline file once, feeds the same in-memory model list into Phase 4's `buildMatrix()` and Phase 5's `validateFederation()`.
+4. Returns `{ canonicalSource, building, canonicalStoreys, matrix, guidValidation }` — everything a caller (an upload endpoint, or the eventual UI) needs in one call.
+
+Verified end-to-end against the existing fixtures on **both** authority paths:
+- **Architect-fallback path** (no Geminus Plus building given): canonical storeys built from `sample-architect.ifc`, matrix built against `sample-electrical.ifc` + `sample-hvac.ifc`, GUID validation run across all three. Produced the expected matrix (both discipline storeys `fmguid-match` against "Plan 01") and correctly re-surfaced the planted duplicate FMGUID between Lamp A and Duct A.
+- **Geminus Plus authority path** (real building `c757f78f-…`, "Byggnad 1", live-looked-up per Phase 1): ran without error against the same synthetic discipline files. Its one real storey ("Plan 11") naturally didn't match the fixtures' fake storey names, and both correctly landed in `unmatched` rather than being force-matched — a useful negative-case confirmation that mismatched real/synthetic data doesn't get silently glued together.
+
+**Notable integration-level finding** (not a bug): when the architect model is included as one of the matrix's own columns and one of its storeys had no `FmGuid` property in the source file, Phase 2 generates a fresh canonical FMGUID **in memory only** — it isn't written back into the file until Phase 7. Re-parsing that same architect file for the matrix therefore still sees no FMGUID on that storey and can only resolve it via `name-match`, not `fmguid-match`, even though it's the canonical source itself. This is correct and expected (write-back hasn't happened yet), but worth documenting clearly so it isn't mistaken for a matching bug when the UI is wired up — a canonical row can legitimately show anything less than fmguid-match confidence for its own source model, once, until the file is re-saved through Phase 7.
 
 ### Phase 4 — Storey reconciliation matrix — logic and table UI done, verified in-browser
 
@@ -118,8 +127,6 @@ One inconclusive item from testing: pressing Enter inside the canonical-name edi
 
 The throwaway demo route/page used for this verification was removed after testing; only the reusable component and the fix to `storey-reconciliation.js` remain.
 
-**Not yet built:** the actual table UI component (React, per the rest of the app's stack) that renders `buildMatrix()`'s output, lets a user edit/override cells and canonical names, and calls `applyReconciliation()` on confirm. That's the remaining Phase 4 work before moving to Phase 3 (multi-model ingestion) and Phase 6 (viewer) per the build order.
-
 ### Phase 5 — Object-level FMGUID validation (extend to cross-model) — done, verified against fixtures
 
 Implemented as [`ifc-federation/federation-guid-validator.js`](../../ifc-federation/federation-guid-validator.js). Parses every discipline model with the same product-type allowlist and `FmGuid`-property detection as `ifc-fmguid-prep/index.ts` (all types, not just storeys — that's `architect-model-template.js`'s narrower job), then does the genuinely new part: builds one `FMGUID → [locations]` map **across every uploaded model**, storeys excluded. `validateFederation(models)` returns the full element list plus a `duplicates` report (each with the offending FMGUID and every `{ modelName, ifcType, globalId, name }` location); `repairFederation(result)` then generates FMGUIDs for elements missing one and re-mints every occurrence after the first for a duplicated (non-storey) FMGUID — storeys are left untouched, since their shared-FMGUID reconciliation belongs to Phase 4, not here.
@@ -138,10 +145,20 @@ Verified against three fixtures ([`ifc-federation/test-fixtures/`](../../ifc-fed
 - Focus/fade behavior and matrix ↔ viewer linked selection.
 - Primary purpose: catch coordinate misalignment between discipline models, which the data matrix alone can't reveal.
 
-### Phase 7 — Commit / export
-- Use `web-ifc`'s write path to stamp confirmed storey names/FMGUIDs (Phase 4) and object FMGUIDs (Phase 5) back into each discipline's original file.
-- Output: same number of files as uploaded, cross-referenced via shared storey FMGUIDs and unique object FMGUIDs.
-- Explicitly out of scope: pushing the corrected models into Geminus Plus. That's the existing upload path (and, later, the Asset+ push logic described in `acc-ifc-to-assetplus-push-plan.md`) — wiring "validate → push to Asset+" as one flow is a good candidate for a later phase once this pipeline is proven.
+### Phase 7 — Commit / export — done, verified end-to-end (round-trip)
+
+Implemented as [`ifc-federation/ifc-writer.js`](../../ifc-federation/ifc-writer.js). No `web-ifc` write path used or needed — the whole pipeline has stayed plain STEP-text parsing since Phase 2, so writing back is done the same way: locate each entity by GlobalId, either overwrite an existing `FmGuid` property's value in place, or (if the element had no `FmGuid` property chain at all) append a new `IFCPROPERTYSINGLEVALUE` + `IFCPROPERTYSET` + `IFCRELDEFINESBYPROPERTIES` triplet wired to it, reusing the element's own OwnerHistory reference. Storey writes also overwrite the entity's Name attribute. `applyFederationWrites(ifcText, { storeyWrites, guidAssignments })` operates on one file at a time and returns the rewritten text plus a report (`storeysWritten`, `guidsWritten`, `guidsCreated`, `errors`).
+
+Verified as a full round-trip against the electrical + HVAC fixtures, feeding this phase directly from Phase 4/5's real output (not hand-built inputs):
+1. Ran Phase 4's `applyReconciliation()` (after renaming the canonical "Plan 01" to "Plan 01 (confirmed)", to prove name write-back) and Phase 5's `repairFederation()` (on the same planted Lamp A / Duct A duplicate and Lamp B's missing FMGUID) to get the real write instructions.
+2. Applied them to each file via `applyFederationWrites()`.
+3. **Re-parsed the written files** (not just eyeballed the text) with the same Phase 5 validator and Phase 2 storey parser used throughout.
+
+Result: both files' storeys now read "Plan 01 (confirmed)" with the shared canonical FMGUID; Lamp B (previously missing) now carries a freshly created FmGuid property chain; the duplicate FMGUID was resolved by keeping the first occurrence (electrical's Lamp A) untouched and re-minting every later occurrence (HVAC's Duct A) — re-validating the output found `missing: 0` and `duplicateGroups: 0`. This confirms the write path produces files that are not just textually plausible but actually re-parse correctly and satisfy every business rule the earlier phases enforce.
+
+**Scope confirmed as originally planned:** pushing the corrected models into Geminus Plus stays out of scope here — that's the existing upload path (and, later, the Asset+ push logic in `acc-ifc-to-assetplus-push-plan.md`). Wiring "validate → push to Asset+" as one flow remains a good candidate for a later chapter.
+
+**Caveat, same pattern as Phase 2/5:** verified against hand-built STEP fixtures. The writer reconstructs every touched entity as a single line and normalizes any multi-line-formatted entity to one line in the output — semantically valid STEP, but not a byte-identical diff of the original file. Needs re-verification against a real multi-line-formatted export (e.g. from Revit) before production use.
 
 ## Suggested build order
 
