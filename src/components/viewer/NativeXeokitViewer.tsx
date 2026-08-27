@@ -271,6 +271,10 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
         // Only use native colors if explicitly set to 'none'; otherwise default to architect palette
         const userWantsNative = savedTheme === 'none';
 
+        // Arch model IDs: models loaded in the primary pass (not in the deferred secondaryQueue).
+        // Used to scope applyArchitectColors so B/E/V-models keep their native XKT colors.
+        let archModelIds = new Set<string>();
+
         if (userWantsNative) {
           logger.log('[NativeViewer] Native colors requested — skipping architect palette');
           // Bucket IDs: raw-red (no XKT material) get a neutral; others clear any override.
@@ -293,7 +297,12 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
           // genuinely red XKT materials (roofs, facade strips) through unstyled —
           // so always apply the palette unless the user explicitly chose native.
           logger.log('[NativeViewer] Applying architect colors (default palette)');
-          try { applyArchitectColors(viewer); } catch (e) { logger.warn('[NativeViewer] applyArchitectColors failed', e); }
+          // Compute arch model IDs: primary loaded models = all models minus the deferred secondary queue
+          const secondaryModelIds = new Set(secondaryQueue.map((m: any) => m.model_id));
+          archModelIds = new Set(
+            models.filter((m: any) => !secondaryModelIds.has(m.model_id)).map((m: any) => m.model_id),
+          );
+          try { applyArchitectColors(viewer, archModelIds); } catch (e) { logger.warn('[NativeViewer] applyArchitectColors failed', e); }
         }
 
         // Enable SAO now that models are loaded — was disabled during loading to avoid
@@ -438,9 +447,9 @@ const NativeXeokitViewer: React.FC<NativeXeokitViewerProps> = ({
                   }
                 }
               }
-              // Apply architect palette to new model entities (raw XKT materials can be wrong colors)
+              // Re-apply architect palette to A-model entities only — secondary models keep native colors
               if (!(window as any).__colorFilterActive) {
-                try { applyArchitectColors(v); } catch {}
+                try { applyArchitectColors(v, archModelIds); } catch {}
                 const savedTheme = localStorage.getItem('geminus-viewer-theme-id');
                 if (savedTheme && savedTheme !== 'none') {
                   // Re-emit DB theme so it covers the newly loaded model too

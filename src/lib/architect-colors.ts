@@ -132,7 +132,10 @@ export const SPACE_COLOR = [0.733, 0.847, 0.902];  // light sky blue — habitab
  * Apply architect color palette to all objects in the scene.
  * Spaces are pre-colored but hidden. All other objects get IFC-type-based colors.
  */
-export function applyArchitectColors(viewer: any): { colorized: number; hiddenSpaces: number } {
+export function applyArchitectColors(
+  viewer: any,
+  onlyModelIds?: Set<string>,
+): { colorized: number; hiddenSpaces: number } {
   // Skip if a color filter is actively applied — don't overwrite user-applied colors
   if ((window as any).__colorFilterActive) return { colorized: 0, hiddenSpaces: 0 };
   const scene = viewer?.scene;
@@ -143,13 +146,30 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
   let colorized = 0;
   const processedIds = new Set<string>();
 
-  // Get all object IDs for later phases
+  // Build entity ID scope: either the specified models, or all currently-visible models.
+  // This prevents applyArchitectColors from unhiding entities belonging to models the user
+  // has toggled off, and from overwriting native colors on non-architectural models (B/E/V).
   let allIds: string[] = [];
   try {
-    allIds = scene.objectIds || [];
+    const sceneModels = (scene.models || {}) as Record<string, any>;
+    const modelEntries = Object.entries(sceneModels);
+    if (onlyModelIds && onlyModelIds.size > 0) {
+      for (const [modelId, model] of modelEntries) {
+        if (onlyModelIds.has(modelId)) allIds.push(...Object.keys(model.objects || {}));
+      }
+    } else {
+      // Default: only process entities from currently-visible models
+      const anyTracked = modelEntries.some(([, m]) => typeof m.visible !== 'undefined');
+      for (const [, model] of modelEntries) {
+        if (!anyTracked || model.visible !== false) allIds.push(...Object.keys(model.objects || {}));
+      }
+      if (allIds.length === 0) allIds = scene.objectIds || [];
+    }
   } catch {
-    // objectIds getter can throw if internal map is null
+    try { allIds = scene.objectIds || []; } catch { /* ignore */ }
   }
+  // Fast-lookup set used by Phase 1 to skip out-of-scope entities
+  const allIdsSet = new Set(allIds);
 
   // CRITICAL: Batch operations FIRST to clear XKT material conflicts (essential!)
   // The order matters: disable colorized → set colorize → enable colorized
@@ -175,6 +195,7 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
 
     for (const [id, metaObj] of Object.entries(metaScene.metaObjects as Record<string, any>)) {
       if (!scene.objects?.[id]) continue;
+      if (!allIdsSet.has(id)) continue; // skip entities outside scope (other models)
       processedIds.add(id);
       const ifcType = (metaObj.type || '').toLowerCase();
       const objName = (metaObj.name || '').toLowerCase();
@@ -221,9 +242,6 @@ export function applyArchitectColors(viewer: any): { colorized: number; hiddenSp
   logger.log(`[applyArchitectColors] Phase 1 (batch): colorized ${colorized}, spaces ${hiddenSpaces}`);
 
   // Phase 2: Apply DEFAULT_COLOR to scene objects without metaObject entries (no IFC type).
-  if (!allIds || allIds.length === 0) {
-    try { allIds = scene.objectIds || []; } catch { /* objectIds getter can throw if internal map is null */ }
-  }
   const unclassified = allIds.filter(id => !processedIds.has(id));
   if (unclassified.length > 0) {
     scene.setObjectsColorized(unclassified, DEFAULT_COLOR);
