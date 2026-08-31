@@ -88,9 +88,31 @@ export const AI_FILTER_SYNC_EVENT = 'AI_FILTER_SYNC';
 
 function getContextualGreeting(context?: GunnarContext): string {
   if (context?.currentBuilding?.name) {
-    return `Hi! I see you're looking at **${context.currentBuilding.name}**. Ask me about equipment, systems, rooms or ask me to highlight objects in the 3D viewer!`;
+    return `Hej! Jag ser att du tittar på **${context.currentBuilding.name}**. Fråga mig om utrustning, system, rum eller be mig markera objekt i 3D-viewern!`;
   }
-  return `Hi! I'm Geminus AI, your digital twin assistant. I can:\n\n• Search equipment and systems\n• Highlight objects in the 3D viewer\n• Provide building overviews\n\nWhat would you like to know?`;
+  return `Hej! Jag är Geminus AI, din digitala tvillingassistent. Jag kan:\n\n• Söka utrustning och system\n• Markera objekt i 3D-viewern\n• Ge byggnadsöversikter\n• Visa sensordata och inomhusklimat\n• Svara på frågor om underhållsdokumentation\n\nVad vill du veta?`;
+}
+
+function getStarterQuestions(context?: GunnarContext): string[] {
+  if (context?.currentBuilding?.name) {
+    const b = context.currentBuilding.name;
+    return [
+      `Hur många rum finns i ${b}?`,
+      "Visa ventilationen i 3D",
+      "Vilket rum har högst temperatur?",
+      "Finns det öppna ärenden?",
+      "Vad säger skötseldokumentet?",
+      "Visa arbetsordrar",
+    ];
+  }
+  return [
+    "Vilka byggnader finns?",
+    "Visa ventilationen",
+    "Hur många rum finns det?",
+    "Vilka arbetsordrar är öppna?",
+    "Visa underhållsdokumentation",
+    "Vilket rum är varmast?",
+  ];
 }
 
 /** Normalize buttons: backend may send ActionButton[] or string[] */
@@ -640,6 +662,25 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
           {proactiveInsights.map((insight, i) => (
             <p key={i} className="text-sm text-foreground">{insight}</p>
           ))}
+        </div>
+      )}
+
+      {/* Starter questions — shown only on the initial greeting */}
+      {messages.length === 1 && !isLoading && (
+        <div className="space-y-1.5 pt-1">
+          <p className="text-xs text-muted-foreground px-0.5">{t("Prova att fråga:", "Try asking:")}</p>
+          <div className="flex flex-wrap gap-1.5">
+            {getStarterQuestions(context).map((q, i) => (
+              <button
+                key={i}
+                type="button"
+                className="rounded-full border border-primary/30 bg-primary/8 px-3 py-1.5 text-xs text-primary hover:bg-primary/15 active:bg-primary/25 transition-colors text-left"
+                onClick={() => sendMessage(q)}
+              >
+                {q}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

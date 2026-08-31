@@ -417,6 +417,24 @@ const tools = [
       },
     },
   },
+  // ── iLean maintenance documentation (Geminus Premium / Senslinc) ──
+  {
+    type: "function",
+    function: {
+      name: "ask_ilean",
+      description: "Ask iLean for maintenance documentation, service manuals, operation cards, and technical specs. Use when user asks about what a maintenance document says, how to service a specific piece of equipment, what to check during maintenance rounds, or 'vad säger skötseldokumentet / skötselanvisningen om X'. DIFFERENT from search_documents (general Geminus Base docs): iLean is specifically curated maintenance and operational documentation per building/room in Senslinc.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "The question to ask iLean" },
+          building_guid: { type: "string", description: "Building fm_guid for context (recommended)" },
+          room_guid: { type: "string", description: "Optional: room fm_guid to scope to room-specific documentation" },
+        },
+        required: ["query"],
+        additionalProperties: false,
+      },
+    },
+  },
   // ── Adaptive Memory ──
   {
     type: "function",
@@ -556,6 +574,8 @@ async function executeTool(supabase: any, name: string, args: any) {
       return execRoomOptimization(supabase, args);
     case "search_documents":
       return execSearchDocuments(supabase, args);
+    case "ask_ilean":
+      return execAskIlean(supabase, args);
     case "save_memory":
       return execSaveMemory(supabase, args, (globalThis as any).__currentUserId);
     default:
@@ -1099,6 +1119,36 @@ async function execSaveMemory(supabase: any, args: any, userId: string) {
   });
   if (error) throw error;
   return { success: true, message: "Memory saved" };
+}
+
+/* ── iLean maintenance documentation ── */
+
+async function execAskIlean(supabase: any, args: any) {
+  const { query, building_guid, room_guid } = args;
+  if (!query) return { error: "query is required" };
+
+  const fmGuid = room_guid || building_guid || null;
+  const contextLevel = room_guid ? "room" : "building";
+
+  const { data, error } = await supabase.functions.invoke("geminus-premium-query", {
+    body: {
+      action: "ilean-ask",
+      fmGuid,
+      buildingFmGuid: building_guid || null,
+      contextLevel,
+      question: query,
+    },
+  });
+
+  if (error) return { error: error.message || "iLean query failed" };
+  if (!data?.success) return { error: data?.error || "iLean returned no result" };
+
+  return {
+    answer: data.data?.answer || "No answer from iLean.",
+    sources: data.data?.sources || [],
+    document_count: data.data?.documentCount || null,
+    source_type: data.data?.source || "unknown",
+  };
 }
 
 async function loadUserMemories(supabase: any, userId: string, buildingFmGuid?: string): Promise<string> {
@@ -2287,8 +2337,16 @@ PREDICTIVE MAINTENANCE & SPACE OPTIMIZATION (Insights AI):
 - These analyses take a few seconds. Don't say "Jag analyserar..." — just call the tool and report results.
 - You CAN combine these with colorize: for predictive maintenance, map room_guids to risk colors (high=[255,60,60], medium=[255,180,0], low=[0,200,0]); for optimization, color underutilized rooms orange, overcrowded rooms red.
 
-DOCUMENT SEARCH (RAG):
-- For questions about what's written in documents, technical specs, product manuals, or "vad säger dokumentationen om X": call search_documents(query, building_guid).
+ILEAN MAINTENANCE DOCUMENTATION (Senslinc):
+- For questions about maintenance documentation, service manuals, operation cards, technical specs for specific equipment, or inspection checklists: use ask_ilean(query, building_guid).
+- If the user asks about a specific room, pass room_guid to get room-specific documentation.
+- Examples: "vad säger skötseldokumentet för pump X?", "finns det servicedokumentation för ventilationsaggregatet?", "vad ska kontrolleras vid underhåll av sprinklersystemet?", "visa skötselanvisningen för rummet".
+- iLean's knowledge base is curated maintenance documentation from Senslinc. It is DIFFERENT from general document search — prefer ask_ilean for anything about how to maintain or operate equipment, and search_documents for general project docs, drawings, or reports.
+- Report the answer field directly. Cite sources when provided. If iLean is not available for the building, say "Underhållsdokumentation via iLean är inte tillgänglig för den här byggnaden just nu."
+
+DOCUMENT SEARCH (Geminus Base RAG):
+- For questions about what's written in general building documents, technical reports, product manuals, or "vad säger dokumentationen om X": call search_documents(query, building_guid).
+- Use for project documents, inspection reports, and drawings indexed from Geminus Base — not for maintenance/service manuals (use ask_ilean for those).
 - Report the answer field directly. Cite sources from the sources array. If confidence < 0.5, note that the answer may be incomplete.
 - If no documents are found, say "Inga dokument hittades som svarar på din fråga."
 
