@@ -8,10 +8,19 @@ avsnitt).
 Backend återanvänder den redan testade pipeline-koden i
 [`../ifc-federation/`](../ifc-federation) oförändrad — Phase 1 (Geminus Plus-uppslag),
 Phase 2 (arkitektmodell-fallback), Phase 4 (matchningsmatris), Phase 5
-(global FMGUID-validering) och Phase 7 (skriv tillbaka/export). **Phase 6
-(3D-viewer) ingår inte i denna första version** — ingen riktig XKT-data
-fanns tillgänglig att bygga/verifiera den mot, och den drar ut betydligt
-på arbetet. Kandidat för nästa iteration.
+(global FMGUID-validering) och Phase 7 (skriv tillbaka/export).
+
+**Phase 6 (3D-viewer, xeokit) är nu porterad** från huvudappens
+`FederationViewer.tsx`/`FederationWorkspace.tsx` — [`client/src/FederationViewer.tsx`](client/src/FederationViewer.tsx),
+omskriven mot denna apps vanliga CSS istället för Tailwind/shadcn, i övrigt
+identisk logik (samma xeokit-SDK-bootstrap, samma per-disciplin-färgläggning,
+samma fokus/tona-ner kopplat till matrisen via hover). **Kräver dock
+konverterade `.xkt`-filer för att visa något** — den här appen har ingen
+IFC→XKT-konvertering ännu (huvudappen har en, `ifc-to-xkt`, som Supabase
+edge function). Att portera viewern och att portera konverteringssteget är
+två separata jobb; bara det förra är gjort. Tills konverteringen finns
+visar viewer-sektionen ett tydligt "inga modeller ännu"-läge istället för
+att krascha eller låtsas fungera.
 
 ## Köra lokalt
 

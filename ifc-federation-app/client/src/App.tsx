@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import FederationViewer, { FederationViewerModel } from './FederationViewer';
 
 interface DisciplineRow {
   id: number;
@@ -111,6 +112,13 @@ export default function App() {
   const [overrides, setOverrides] = useState<Overrides>({});
   const [confirmed, setConfirmed] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [focusedModelName, setFocusedModelName] = useState<string | null>(null);
+
+  // Empty until IFC->XKT conversion exists in this app (the main Geminus app
+  // has one, `ifc-to-xkt`, as a Supabase edge function — porting that is
+  // separate work from porting the viewer itself). Placeholder colours are
+  // ready to use the moment real xktUrls are available per model.
+  const viewerModels: FederationViewerModel[] = [];
 
   function addDisciplineRow() {
     setDisciplines(prev => [...prev, { id: rowId++, name: '', file: null }]);
@@ -400,7 +408,9 @@ export default function App() {
               <thead>
                 <tr>
                   <th>Kanonisk våning</th>
-                  {result.matrix.models.map(m => <th key={m}>{m}</th>)}
+                  {result.matrix.models.map(m => (
+                    <th key={m} onMouseEnter={() => setFocusedModelName(m)} onMouseLeave={() => setFocusedModelName(null)}>{m}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -499,6 +509,14 @@ export default function App() {
               </button>
             </div>
             {confirmed && <div className="success">Mappningen är bekräftad. Du kan nu exportera de korrigerade filerna.</div>}
+          </div>
+
+          <div className="card">
+            <h2>4. 3D-vy</h2>
+            <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
+              Hovra en disciplin i matrisen ovan för att fokusera den här och tona ner de andra — bra för att upptäcka om modellerna faktiskt ligger i linje med varandra.
+            </p>
+            <FederationViewer models={viewerModels} focusedModelName={focusedModelName} />
           </div>
         </>
       )}
