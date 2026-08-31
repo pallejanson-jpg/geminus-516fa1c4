@@ -1,9 +1,31 @@
 # IFC Federation App
 
 En helt fristående app för IFC-federationspipelinen (se
-[`docs/plans/ifc-federation-plan.md`](../docs/plans/ifc-federation-plan.md)).
+[`docs/plans/ifc-federation-plan.md`](../docs/plans/ifc-federation-plan.md))
+och för IDS-validering + BCF-rapportering (se
+[`docs/plans/ids-validation-plan.md`](../docs/plans/ids-validation-plan.md)).
 Körs idag lokalt; avsedd att flyttas till Render senare (se README:s sista
 avsnitt).
+
+## Extra beroende: Python (för IDS-validering)
+
+Utöver Node behöver `.venv`/systemets Python ha `ifcopenshell` och
+`ifctester` installerat:
+
+```bash
+python -m pip install ifcopenshell ifctester
+```
+
+Detta används bara av IDS-valideringssteget (`ifc-federation/ids-validator.js`,
+som anropar `ifctester` som subprocess) — resten av appen är ren Node och
+kräver inget Python alls. Regelbiblioteket ligger i
+[`../ifc-federation/ids-rules/`](../ifc-federation/ids-rules) — en delad,
+Geminus-underhållen samling `.ids`-filer (beslut: inte kundspecifika
+uppladdningar i v1, se planen för resonemang). Verktyg för att skriva egna
+regler: [blenderbim.org/ifctester](https://blenderbim.org/ifctester/) (samma
+ekosystem, ingen installation) eller
+[IDS-Light Editor](https://github.com/louistrue/ids-light-editor)
+(självhostbar, skriv i YAML/JSON istället för rå XML).
 
 Backend återanvänder den redan testade pipeline-koden i
 [`../ifc-federation/`](../ifc-federation) oförändrad — Phase 1 (Geminus Plus-uppslag),

@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Geminus shared IDS rule library — geminus-fmguid-storeys.ids
+
+  Requires every IfcBuildingStorey to carry an FmGuid property in FM_Pset.
+  This is the same property the IFC Federation pipeline's own FMGUID logic
+  (ifc-federation/*.js) reads and writes — so this rule also, usefully,
+  validates that pipeline's own output: run it against a file this app has
+  already processed and it should pass.
+
+  Verified against real production data during the planning phase for this
+  feature (see docs/plans/ids-validation-plan.md): run against
+  "K-00-V-100 (NCC).ifc" before processing, ifctester reported 0/9 storeys
+  passing -matching federation-guid-validator.js's independent finding
+  (hadFmguid: 0) for the exact same file.
+
+  Add more <specification> blocks to this file, or add more .ids files to
+  this folder, to grow the shared rule library -see
+  docs/plans/ids-validation-plan.md for the decision behind keeping rules
+  here rather than per-project.
+-->
+<ids xmlns="http://standards.buildingsmart.org/IDS" xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <info>
+    <title>Geminus - FmGuid required on storeys</title>
+    <version>1.0</version>
+    <description>Every IfcBuildingStorey must carry an FmGuid property in FM_Pset, so it can be tracked as a Geminus asset.</description>
+    <author>geminus@swg.com</author>
+  </info>
+  <specifications>
+    <specification name="All IfcBuildingStorey must have FmGuid" ifcVersion="IFC4">
+      <applicability>
+        <entity>
+          <name>
+            <simpleValue>IFCBUILDINGSTOREY</simpleValue>
+          </name>
+        </entity>
+      </applicability>
+      <requirements>
+        <property dataType="IFCTEXT" cardinality="required">
+          <propertySet>
+            <simpleValue>FM_Pset</simpleValue>
+          </propertySet>
+          <baseName>
+            <simpleValue>FmGuid</simpleValue>
+          </baseName>
+        </property>
+      </requirements>
+    </specification>
+  </specifications>
+</ids>

@@ -30,9 +30,11 @@ import express from 'express';
 import cors from 'cors';
 import multer from 'multer';
 import { ZipArchive } from 'archiver';
+import AdmZip from 'adm-zip';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm } from 'node:fs/promises';
+import { mkdir, readFile, rm, mkdtemp } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -41,6 +43,7 @@ import { buildCanonicalStoreys } from '../ifc-federation/architect-model-templat
 import { buildMatrix, applyReconciliation } from '../ifc-federation/storey-reconciliation.js';
 import { validateFederation, repairFederation } from '../ifc-federation/federation-guid-validator.js';
 import { applyFederationWrites } from '../ifc-federation/ifc-writer.js';
+import { getAvailableRules, validateFile, runIfctesterBcf } from '../ifc-federation/ids-validator.js';
 
 /**
  * Progress reporting for /api/ingest.
@@ -75,7 +78,15 @@ const PORT = process.env.PORT || 4500;
 
 await mkdir(UPLOAD_DIR, { recursive: true });
 
-const upload = multer({ dest: UPLOAD_DIR });
+// Preserve the original file extension (multer's default `dest` option
+// saves uploads under a bare random hash with no extension at all) --
+// ifctester's CLI refuses to run against a file that isn't named `*.ifc`,
+// confirmed in practice.
+const storage = multer.diskStorage({
+  destination: UPLOAD_DIR,
+  filename: (req, file, cb) => cb(null, `${randomUUID()}${path.extname(file.originalname) || '.ifc'}`),
+});
+const upload = multer({ storage });
 
 const app = express();
 app.use(cors());
@@ -311,6 +322,103 @@ app.post('/api/export', async (req, res) => {
   } catch (err) {
     console.error(err);
     if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
+// ── IDS validation (docs/plans/ids-validation-plan.md) ──────────────────────
+// A different kind of check than FMGUID handling: validates arbitrary
+// information requirements (buildingSMART's open IDS standard) using
+// ifctester as a subprocess. Rules come from the shared library in
+// ../ifc-federation/ids-rules/ (a deliberate choice — see the plan) and are
+// run against every uploaded model's original file (session.models'
+// filePath, not the write-back output — this checks what was uploaded, not
+// what Phase 7 produced; validating the corrected output is a natural
+// follow-up once this is proven).
+app.get('/api/ids-rules', async (req, res) => {
+  try {
+    const rules = await getAvailableRules();
+    res.json({ rules: rules.map(({ id, title }) => ({ id, title })) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/validate-ids', async (req, res) => {
+  try {
+    const { sessionId } = req.body ?? {};
+    const session = sessions.get(sessionId);
+    if (!session) return res.status(404).json({ error: 'Unknown session — re-run /api/ingest.' });
+
+    const results = {};
+    for (const { modelName, filePath } of session.models) {
+      results[modelName] = await validateFile(filePath);
+    }
+    session.idsResults = results;
+    res.json({ results });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Merge every failing (model, rule) pair's individual BCF output into one
+// combined report — ifctester only produces one .bcf per (ifc, ids) pair,
+// but a designer receiving this wants one file covering every discipline
+// and every rule, not a folder of separate downloads.
+app.post('/api/validate-ids/export', async (req, res) => {
+  const { sessionId } = req.body ?? {};
+  const session = sessions.get(sessionId);
+  if (!session) return res.status(404).json({ error: 'Unknown session — re-run /api/ingest.' });
+  if (!session.idsResults) return res.status(400).json({ error: 'Run /api/validate-ids first.' });
+
+  const tmpDir = await mkdtemp(path.join(tmpdir(), 'ids-bcf-'));
+  try {
+    const rules = await getAvailableRules();
+    const rulesById = new Map(rules.map(r => [r.id, r]));
+    const combined = new AdmZip();
+    let projectAdded = false;
+    let issueCount = 0;
+
+    for (const { modelName, filePath } of session.models) {
+      const modelResults = session.idsResults[modelName] ?? [];
+      for (const { ruleId, report } of modelResults) {
+        if (!report) continue;
+        const anyFailing = report.specifications.some(s => !s.status);
+        if (!anyFailing) continue; // nothing to report for this (model, rule) pair
+
+        const rule = rulesById.get(ruleId);
+        if (!rule) continue;
+        const bcfPath = path.join(tmpDir, `${modelName}__${ruleId}.bcf`);
+        await runIfctesterBcf(filePath, rule.path, bcfPath);
+
+        const zip = new AdmZip(bcfPath);
+        for (const entry of zip.getEntries()) {
+          if (entry.entryName === 'project.bcfp' || entry.entryName === 'bcf.version') {
+            if (projectAdded) continue; // keep only the first copy
+            projectAdded = true;
+          }
+          // Namespace each issue folder by model+rule so identical GlobalIds
+          // across disciplines never collide when merged into one archive.
+          const isTopLevelFile = !entry.entryName.includes('/');
+          const outName = isTopLevelFile ? entry.entryName : `${modelName}__${ruleId}__${entry.entryName}`;
+          combined.addFile(outName, entry.getData());
+          if (entry.entryName.endsWith('/markup.bcf')) issueCount++;
+        }
+      }
+    }
+
+    if (issueCount === 0) {
+      return res.json({ empty: true, message: 'Inga underkända kontroller att rapportera — allt godkänt.' });
+    }
+
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'attachment; filename="ids-validation-report.bcfzip"');
+    res.send(combined.toBuffer());
+  } catch (err) {
+    console.error(err);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
   }
 });
 

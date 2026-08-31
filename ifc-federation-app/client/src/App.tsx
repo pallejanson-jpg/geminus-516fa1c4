@@ -57,6 +57,21 @@ interface IngestResult {
 
 type Overrides = Record<string, Record<string, string | null>>;
 
+interface IdsSpecResult {
+  name: string;
+  status: boolean;
+  total_applicable: number;
+  total_applicable_pass: number;
+  total_applicable_fail: number;
+}
+interface IdsRuleResult {
+  ruleId: string;
+  ruleTitle: string;
+  report: { specifications: IdsSpecResult[] } | null;
+  error?: string;
+}
+type IdsResults = Record<string, IdsRuleResult[]>; // modelName -> rule results
+
 const UNMAPPED = '__unmapped__';
 let rowId = 0;
 
@@ -119,6 +134,11 @@ export default function App() {
   // separate work from porting the viewer itself). Placeholder colours are
   // ready to use the moment real xktUrls are available per model.
   const viewerModels: FederationViewerModel[] = [];
+
+  const [idsResults, setIdsResults] = useState<IdsResults | null>(null);
+  const [validatingIds, setValidatingIds] = useState(false);
+  const [idsError, setIdsError] = useState<string | null>(null);
+  const [exportingBcf, setExportingBcf] = useState(false);
 
   function addDisciplineRow() {
     setDisciplines(prev => [...prev, { id: rowId++, name: '', file: null }]);
@@ -294,6 +314,64 @@ export default function App() {
       setError(err.message ?? String(err));
     } finally {
       setExporting(false);
+    }
+  }
+
+  // Runs every rule in Geminus's shared IDS rule library
+  // (ifc-federation/ids-rules/*.ids) against every uploaded model's
+  // original file. Independent of the storey-matching/FMGUID flow above —
+  // can be run before, after, or without it.
+  async function runIdsValidation() {
+    if (!result) return;
+    setValidatingIds(true);
+    setIdsError(null);
+    setIdsResults(null);
+    try {
+      const res = await fetch('/api/validate-ids', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: result.sessionId }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'IDS-validering misslyckades.');
+      setIdsResults(json.results);
+    } catch (err: any) {
+      setIdsError(err.message ?? String(err));
+    } finally {
+      setValidatingIds(false);
+    }
+  }
+
+  async function exportBcfReport() {
+    if (!result) return;
+    setExportingBcf(true);
+    setIdsError(null);
+    try {
+      const res = await fetch('/api/validate-ids/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: result.sessionId }),
+      });
+      const contentType = res.headers.get('content-type') ?? '';
+      if (contentType.includes('application/json')) {
+        const json = await res.json();
+        if (json.empty) { setIdsError(json.message); return; }
+        throw new Error(json.error || 'BCF-export misslyckades.');
+      }
+      if (!res.ok) throw new Error('BCF-export misslyckades.');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ids-validation-report.bcfzip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setIdsError(err.message ?? String(err));
+    } finally {
+      setExportingBcf(false);
     }
   }
 
@@ -517,6 +595,55 @@ export default function App() {
               Hovra en disciplin i matrisen ovan för att fokusera den här och tona ner de andra — bra för att upptäcka om modellerna faktiskt ligger i linje med varandra.
             </p>
             <FederationViewer models={viewerModels} focusedModelName={focusedModelName} />
+          </div>
+
+          <div className="card">
+            <h2>5. IDS-validering</h2>
+            <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
+              Kontrollerar informationskrav (namn, obligatoriska egenskaper m.m.) enligt buildingSMARTs IDS-standard —
+              oberoende av FMGUID-hanteringen ovan. Kör mot Geminus delade regelbibliotek.
+            </p>
+            <div className="row-actions">
+              <button onClick={runIdsValidation} disabled={validatingIds} type="button">
+                {validatingIds ? 'Validerar…' : 'Kör IDS-validering'}
+              </button>
+              {idsResults && (
+                <button className="amber" onClick={exportBcfReport} disabled={exportingBcf} type="button">
+                  {exportingBcf ? 'Skapar rapport…' : 'Ladda ner BCF-rapport'}
+                </button>
+              )}
+            </div>
+
+            {idsError && <div className="error" style={{ marginTop: '0.75rem' }}>{idsError}</div>}
+
+            {idsResults && (
+              <table>
+                <thead>
+                  <tr><th>Modell</th><th>Regel</th><th>Resultat</th></tr>
+                </thead>
+                <tbody>
+                  {Object.entries(idsResults).flatMap(([modelName, ruleResults]) =>
+                    ruleResults.map(r => (
+                      <tr key={`${modelName}-${r.ruleId}`}>
+                        <td>{modelName}</td>
+                        <td>{r.ruleTitle}</td>
+                        <td>
+                          {r.error ? (
+                            <span className="badge badge-unnamed">Fel: {r.error.split('\n')[0]}</span>
+                          ) : (
+                            r.report!.specifications.map(spec => (
+                              <span key={spec.name} className={`badge ${spec.status ? 'badge-fmguid' : 'badge-unnamed'}`}>
+                                {spec.status ? 'Godkänd' : 'Underkänd'} ({spec.total_applicable_pass}/{spec.total_applicable})
+                              </span>
+                            ))
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
           </div>
         </>
       )}
