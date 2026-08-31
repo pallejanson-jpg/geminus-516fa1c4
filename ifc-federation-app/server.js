@@ -32,7 +32,7 @@ import multer from 'multer';
 import { ZipArchive } from 'archiver';
 import AdmZip from 'adm-zip';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rm, mkdtemp } from 'node:fs/promises';
+import { mkdir, readFile, writeFile, rm, mkdtemp } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -44,6 +44,7 @@ import { buildMatrix, applyReconciliation } from '../ifc-federation/storey-recon
 import { validateFederation, repairFederation } from '../ifc-federation/federation-guid-validator.js';
 import { applyFederationWrites } from '../ifc-federation/ifc-writer.js';
 import { getAvailableRules, validateFile, runIfctesterBcf } from '../ifc-federation/ids-validator.js';
+import { listRules, getRule, createRule, updateRule, deleteRule } from '../ifc-federation/ids-rules-editor.js';
 import { generateIdsReportPdf } from './pdf-report.js';
 
 /**
@@ -197,9 +198,16 @@ async function runIngestJob(jobId, { buildingIdentifier, architectUpload, discip
   let canonicalSource;
   let building = null;
   let canonicalStoreys;
+  let buildingLookupWarning = null;
 
   if (buildingIdentifier) {
     building = await getBuildingByIdentifier(buildingIdentifier);
+    if (!building) {
+      // Don't silently fall back to the architect model as master when the
+      // user explicitly picked a building -- that's a surprising, easy-to-miss
+      // switch of the source of truth. Surface it instead.
+      buildingLookupWarning = `Building "${buildingIdentifier}" was selected but could not be found in Geminus Plus — falling back to the architect model as master.`;
+    }
   }
 
   if (building) {
@@ -269,6 +277,7 @@ async function runIngestJob(jobId, { buildingIdentifier, architectUpload, discip
       sessionId,
       canonicalSource,
       building,
+      buildingLookupWarning,
       canonicalStoreys,
       matrix,
       guidValidation: { stats: validation.stats, duplicates: validation.duplicates },
@@ -291,6 +300,20 @@ app.post('/api/reconcile', (req, res) => {
   }
 });
 
+// Corrected IFC text for one model in a session: same write-back logic used
+// by /api/export, factored out so /api/validate-ids can validate against
+// what actually gets exported instead of the untouched original upload.
+// Object-level FMGUID assignments always apply (repairFederation already ran
+// during /api/ingest); storey FMGUIDs only apply once reconciliation has been
+// confirmed via /api/reconcile (session.storeyWrites is empty until then).
+function buildCorrectedIfcText(session, modelName, ifcText) {
+  const storeyWritesForModel = session.storeyWrites.filter(w => w.modelName === modelName);
+  const guidAssignments = session.validation.elements
+    .filter(el => el.modelName === modelName && !el.isStorey)
+    .map(el => ({ globalId: el.globalId, fmguid: el.fmguid }));
+  return applyFederationWrites(ifcText, { storeyWrites: storeyWritesForModel, guidAssignments }).ifcText;
+}
+
 // ── Phase 7: write confirmed storey + object FMGUIDs back into every file,
 //    zip the results, stream the zip back. ─────────────────────────────────
 app.post('/api/export', async (req, res) => {
@@ -310,12 +333,7 @@ app.post('/api/export', async (req, res) => {
     archive.pipe(res);
 
     for (const { modelName, ifcText } of session.models) {
-      const storeyWritesForModel = session.storeyWrites.filter(w => w.modelName === modelName);
-      const guidAssignments = session.validation.elements
-        .filter(el => el.modelName === modelName && !el.isStorey)
-        .map(el => ({ globalId: el.globalId, fmguid: el.fmguid }));
-
-      const { ifcText: newText } = applyFederationWrites(ifcText, { storeyWrites: storeyWritesForModel, guidAssignments });
+      const newText = buildCorrectedIfcText(session, modelName, ifcText);
       archive.append(newText, { name: `${modelName}.ifc` });
     }
 
@@ -330,11 +348,16 @@ app.post('/api/export', async (req, res) => {
 // A different kind of check than FMGUID handling: validates arbitrary
 // information requirements (buildingSMART's open IDS standard) using
 // ifctester as a subprocess. Rules come from the shared library in
-// ../ifc-federation/ids-rules/ (a deliberate choice — see the plan) and are
-// run against every uploaded model's original file (session.models'
-// filePath, not the write-back output — this checks what was uploaded, not
-// what Phase 7 produced; validating the corrected output is a natural
-// follow-up once this is proven).
+// ../ifc-federation/ids-rules/ (a deliberate choice — see the plan).
+//
+// Runs against the CORRECTED IFC text (same write-back logic as
+// /api/export, via buildCorrectedIfcText), not the raw upload — validating
+// the original file makes every "FmGuid required" rule fail even after the
+// user has confirmed a mapping, which is confusing: the corrected content
+// only exists once you export it, so checking the untouched upload doesn't
+// reflect what the user is about to ship. Each model's corrected text is
+// written to a throwaway temp .ifc file (ifctester's CLI requires a real
+// file path) and cleaned up after validation.
 app.get('/api/ids-rules', async (req, res) => {
   try {
     const rules = await getAvailableRules();
@@ -344,21 +367,76 @@ app.get('/api/ids-rules', async (req, res) => {
   }
 });
 
+// ── IDS rule editor: read/create/update/delete rules in the shared library.
+//    Scoped to the single-specification / single-property-requirement shape
+//    the library actually uses today -- see ids-rules-editor.js. ───────────
+app.get('/api/ids-rules/list', async (req, res) => {
+  try {
+    res.json({ rules: await listRules() });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/ids-rules/:id', async (req, res) => {
+  try {
+    res.json(await getRule(req.params.id));
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
+app.post('/api/ids-rules', async (req, res) => {
+  try {
+    const { id, ...fields } = req.body ?? {};
+    if (!id) return res.status(400).json({ error: 'Missing rule id.' });
+    const ruleId = id.endsWith('.ids') ? id : `${id}.ids`;
+    res.json(await createRule(ruleId, fields));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.put('/api/ids-rules/:id', async (req, res) => {
+  try {
+    res.json(await updateRule(req.params.id, req.body ?? {}));
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/ids-rules/:id', async (req, res) => {
+  try {
+    await deleteRule(req.params.id);
+    res.json({ deleted: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 app.post('/api/validate-ids', async (req, res) => {
+  const tmpDirs = [];
   try {
     const { sessionId } = req.body ?? {};
     const session = sessions.get(sessionId);
     if (!session) return res.status(404).json({ error: 'Unknown session — re-run /api/ingest.' });
 
     const results = {};
-    for (const { modelName, filePath } of session.models) {
-      results[modelName] = await validateFile(filePath);
+    for (const { modelName, ifcText } of session.models) {
+      const correctedText = buildCorrectedIfcText(session, modelName, ifcText);
+      const tmpDir = await mkdtemp(path.join(tmpdir(), 'ids-validate-'));
+      tmpDirs.push(tmpDir);
+      const tmpPath = path.join(tmpDir, `${modelName}.ifc`);
+      await writeFile(tmpPath, correctedText, 'utf8');
+      results[modelName] = await validateFile(tmpPath);
     }
     session.idsResults = results;
     res.json({ results });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
+  } finally {
+    await Promise.all(tmpDirs.map(d => rm(d, { recursive: true, force: true })));
   }
 });
 

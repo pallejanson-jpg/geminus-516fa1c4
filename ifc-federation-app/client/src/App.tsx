@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import FederationViewer, { FederationViewerModel } from './FederationViewer';
+import IdsRuleEditor from './IdsRuleEditor';
 
 interface DisciplineRow {
   id: number;
@@ -47,6 +48,7 @@ interface IngestResult {
   sessionId: string;
   canonicalSource: 'geminus-plus' | 'architect-model';
   building: { fmguid: string; name: string | null } | null;
+  buildingLookupWarning: string | null;
   canonicalStoreys: CanonicalStorey[];
   matrix: Matrix;
   guidValidation: {
@@ -87,6 +89,12 @@ interface BuildingOption {
 }
 
 const NEW_BUILDING = '__new__';
+
+function masterLabel(result: IngestResult): string {
+  return result.canonicalSource === 'geminus-plus'
+    ? `Master (Geminus Plus${result.building?.name ? `: ${result.building.name}` : ''})`
+    : 'Master (architect)';
+}
 
 // RGB (0-1 range) per model, cycled by upload order — architect first.
 const VIEWER_PALETTE: Array<[number, number, number]> = [
@@ -520,9 +528,9 @@ export default function App() {
         <>
           <div className="card">
             <h2>2. Results</h2>
+            {result.buildingLookupWarning && <div className="error" style={{ marginBottom: '0.75rem' }}>{result.buildingLookupWarning}</div>}
             <p>
-              Source for canonical storeys:{' '}
-              <strong>{result.canonicalSource === 'geminus-plus' ? `Geminus Plus (${result.building?.name ?? result.building?.fmguid})` : 'Architect model (new building)'}</strong>
+              Master: <strong>{masterLabel(result)}</strong>
             </p>
             <div className="stat-row">
               <div className="stat"><span className="n">{result.guidValidation.stats.totalElements}</span><span className="l">elements total</span></div>
@@ -535,7 +543,7 @@ export default function App() {
           <div className="card">
             <h2>3. Storey matching</h2>
             <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
-              Source of truth: <strong>{result.canonicalSource === 'geminus-plus' ? `Geminus Plus (${result.building?.name ?? result.building?.fmguid})` : 'architect model'}</strong> — every other model is matched against its storeys below.
+              Master: <strong>{masterLabel(result)}</strong> — every other model is matched against its storeys below.
             </p>
             <table>
               <thead>
@@ -707,6 +715,11 @@ export default function App() {
           </div>
         </>
       )}
+
+      <div className="card">
+        <h2>6. IDS rule library</h2>
+        <IdsRuleEditor />
+      </div>
     </div>
   );
 }
