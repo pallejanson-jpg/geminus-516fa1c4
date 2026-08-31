@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { supabase, SUPABASE_URL } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
 import { useDeepgramSpeechRecognition as useWebSpeechRecognition } from "@/hooks/useDeepgramSpeechRecognition";
-import { getGunnarSettings, saveGunnarSettings } from "@/components/settings/GunnarSettings";
+import { getGeminusAISettings, saveGeminusAISettings } from "@/components/settings/GunnarSettings";
 import { dispatchAiViewerCommand } from "@/hooks/useAiViewerBridge";
 import { useLanguage } from '@/context/LanguageContext';
 import { AI_SENSOR_DATA_EVENT } from "@/components/viewer/SensorDataOverlay";
@@ -22,7 +22,7 @@ type Message = {
   content: string;
 };
 
-export interface GunnarContext {
+export interface GeminusAIContext {
   activeApp: string;
   currentBuilding?: { fmGuid: string; name: string };
   currentStorey?: { fmGuid: string; name: string };
@@ -37,10 +37,10 @@ export interface GunnarContext {
   };
 }
 
-interface GunnarChatProps {
+export interface GeminusAIChatProps {
   open: boolean;
   onClose: () => void;
-  context?: GunnarContext;
+  context?: GeminusAIContext;
   embedded?: boolean;
   autoVoice?: boolean;
   onAutoVoiceConsumed?: () => void;
@@ -86,14 +86,14 @@ interface AiStructuredResponse {
 
 export const AI_FILTER_SYNC_EVENT = 'AI_FILTER_SYNC';
 
-function getContextualGreeting(context?: GunnarContext): string {
+function getContextualGreeting(context?: GeminusAIContext): string {
   if (context?.currentBuilding?.name) {
     return `Hej! Jag ser att du tittar på **${context.currentBuilding.name}**. Fråga mig om utrustning, system, rum eller be mig markera objekt i 3D-viewern!`;
   }
   return `Hej! Jag är Geminus AI, din digitala tvillingassistent. Jag kan:\n\n• Söka utrustning och system\n• Markera objekt i 3D-viewern\n• Ge byggnadsöversikter\n• Visa sensordata och inomhusklimat\n• Svara på frågor om underhållsdokumentation\n\nVad vill du veta?`;
 }
 
-function getStarterQuestions(context?: GunnarContext): string[] {
+function getStarterQuestions(context?: GeminusAIContext): string[] {
   if (context?.currentBuilding?.name) {
     const b = context.currentBuilding.name;
     return [
@@ -126,7 +126,7 @@ function normalizeButtons(raw: ActionButton[] | string[] | undefined): ActionBut
 
 const CHAT_URL = `${SUPABASE_URL}/functions/v1/geminus-ai`;
 
-const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function GunnarChat({ open, onClose, context, embedded, autoVoice, onAutoVoiceConsumed }, _ref) {
+const GeminusAIChat = React.forwardRef<HTMLDivElement, GeminusAIChatProps>(function GeminusAIChat({ open, onClose, context, embedded, autoVoice, onAutoVoiceConsumed }, _ref) {
   const { t } = useLanguage();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -208,7 +208,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
 
     stopSpeaking();
 
-    const settings = getGunnarSettings();
+    const settings = getGeminusAISettings();
 
     try {
       setIsSpeaking(true);
@@ -548,7 +548,7 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
   const handleSend = () => sendMessage(input);
 
   // ── Voice ──
-  const speechSettings = getGunnarSettings();
+  const speechSettings = getGeminusAISettings();
   const {
     isListening, isSupported: isVoiceSupported,
     start: startListening, stop: stopListening,
@@ -814,4 +814,4 @@ const GunnarChat = React.forwardRef<HTMLDivElement, GunnarChatProps>(function Gu
   );
 });
 
-export default GunnarChat;
+export default GeminusAIChat;

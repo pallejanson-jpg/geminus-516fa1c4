@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { User, Bot, MousePointer } from 'lucide-react';
 import { useLanguage } from '@/context/LanguageContext';
 import ProfileSettings from './ProfileSettings';
-import GunnarSettings from './GunnarSettings';
+import GeminusAISettings from './GunnarSettings';
 import IleanSettings from './IleanSettings';
 import VoiceSettings from './VoiceSettings';
 import ContextMenuSettingsPanel from './ContextMenuSettingsPanel';
@@ -64,7 +64,7 @@ const ProfileModal: React.FC<ProfileModalProps> = ({ isOpen, onClose }) => {
             </TabsContent>
 
             <TabsContent value="assistants" className="m-0 space-y-6">
-              <GunnarSettings />
+              <GeminusAISettings />
               <div className="border-t pt-6">
                 <IleanSettings />
               </div>

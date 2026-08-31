@@ -245,11 +245,11 @@ export interface EventMap {
   // Initial visualization
   INITIAL_VISUALIZATION_REQUESTED: { type: string };
 
-  // Gunnar
-  GUNNAR_AUTO_OPEN_VOICE: void;
-  GUNNAR_SHOW_FLOOR: { floorFmGuid: string };
-  GUNNAR_HIGHLIGHT: { fmGuids: string[] };
-  GUNNAR_FLY_TO: { fmGuid: string };
+  // Geminus AI
+  GEMINUS_AI_AUTO_OPEN_VOICE: void;
+  GEMINUS_AI_SHOW_FLOOR: { floorFmGuid: string };
+  GEMINUS_AI_HIGHLIGHT: { fmGuids: string[] };
+  GEMINUS_AI_FLY_TO: { fmGuid: string };
 
   // Architect mode
   ARCHITECT_MODE_REQUESTED: { enabled: boolean };

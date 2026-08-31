@@ -1,6 +1,6 @@
 {
-  "name": "Gunnar AI",
-  "short_name": "Gunnar",
+  "name": "Geminus AI",
+  "short_name": "Geminus AI",
   "description": "AI-assistent för fastighetsdata.",
   "start_url": "/ai",
   "display": "standalone",

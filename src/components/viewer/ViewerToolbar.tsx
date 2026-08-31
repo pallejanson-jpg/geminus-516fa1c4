@@ -40,7 +40,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils';
 import { applyArchitectColors } from '@/lib/architect-colors';
 import { isAModelName } from '@/lib/building-utils';
-import GunnarChat, { GunnarContext } from '@/components/chat/GunnarChat';
+import GeminusAIChat, { GeminusAIContext } from '@/components/chat/GunnarChat';
 import { ARCHITECT_BACKGROUND_CHANGED_EVENT } from '@/hooks/useArchitectViewMode';
 import {
   useSectionPlaneClipping,
@@ -271,8 +271,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
   const [isXrayActive, setIsXrayActive] = useState(false);
   const [isOnHoverActive, setIsOnHoverActive] = useState(false);
   const [isCrosshairActive, setIsCrosshairActive] = useState(false);
-  const [isGunnarOpen, setIsGunnarOpen] = useState(false);
-  const [isGunnarDocked, setIsGunnarDocked] = useState(() =>
+  const [isGeminusAIOpen, setIsGeminusAIOpen] = useState(false);
+  const [isGeminusAIDocked, setIsGeminusAIDocked] = useState(() =>
     localStorage.getItem('viewer-ai-docked') === 'true'
   );
   // Floating drag state
@@ -311,7 +311,7 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
 
   // Drag handlers for floating AI panel
   const onDragStart = useCallback((e: React.MouseEvent) => {
-    if (isGunnarDocked) return;
+    if (isGeminusAIDocked) return;
     e.preventDefault();
     const pos = dragPos ?? { x: window.innerWidth - 400, y: window.innerHeight - 600 };
     dragStartRef.current = { mx: e.clientX, my: e.clientY, px: pos.x, py: pos.y };
@@ -332,10 +332,10 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
-  }, [isGunnarDocked, dragPos]);
+  }, [isGeminusAIDocked, dragPos]);
 
   const toggleDocked = useCallback(() => {
-    setIsGunnarDocked(prev => {
+    setIsGeminusAIDocked(prev => {
       const next = !prev;
       localStorage.setItem('viewer-ai-docked', String(next));
       if (!next) setDragPos(null); // reset to default bottom-right when undocking
@@ -1746,8 +1746,8 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
                 <ToolButton
                   icon={tool.icon}
                   label={tool.label}
-                  onClick={() => setIsGunnarOpen(p => !p)}
-                  active={isGunnarOpen}
+                  onClick={() => setIsGeminusAIOpen(p => !p)}
+                  active={isGeminusAIOpen}
                   disabled={!isReady}
                 />
               )}
@@ -1894,15 +1894,15 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
       </div>
 
       {/* Geminus AI — floating (draggable) or docked to right edge */}
-      {isGunnarOpen && (() => {
-        const gunnarContext: GunnarContext = {
+      {isGeminusAIOpen && (() => {
+        const geminusAIContext: GeminusAIContext = {
           activeApp: 'viewer',
           currentBuilding: buildingFmGuid
             ? { fmGuid: buildingFmGuid, name: buildingName || buildingFmGuid }
             : undefined,
         };
 
-        if (isGunnarDocked) {
+        if (isGeminusAIDocked) {
           // Docked: fixed right sidebar, full viewer height
           return (
             <div className="fixed z-50 top-[44px] right-0 w-[360px] h-[calc(100vh-44px)] bg-card/98 backdrop-blur-md border-l border-border shadow-2xl flex flex-col animate-in slide-in-from-right-4 fade-in duration-200">
@@ -1920,13 +1920,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
                     </TooltipTrigger>
                     <TooltipContent side="bottom">Lossa från panel</TooltipContent>
                   </Tooltip>
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsGunnarOpen(false)}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsGeminusAIOpen(false)}>
                     <X className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
               <div className="flex-1 overflow-hidden min-h-0">
-                <GunnarChat open={true} onClose={() => setIsGunnarOpen(false)} context={gunnarContext} embedded />
+                <GeminusAIChat open={true} onClose={() => setIsGeminusAIOpen(false)} context={geminusAIContext} embedded />
               </div>
             </div>
           );
@@ -1960,13 +1960,13 @@ const ViewerToolbar: React.FC<ViewerToolbarProps> = ({ viewer, buildingFmGuid, b
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Docka till höger</TooltipContent>
                 </Tooltip>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsGunnarOpen(false)}>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsGeminusAIOpen(false)}>
                   <X className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>
             <div className="flex-1 overflow-hidden min-h-0">
-              <GunnarChat open={true} onClose={() => setIsGunnarOpen(false)} context={gunnarContext} embedded />
+              <GeminusAIChat open={true} onClose={() => setIsGeminusAIOpen(false)} context={geminusAIContext} embedded />
             </div>
           </div>
         );

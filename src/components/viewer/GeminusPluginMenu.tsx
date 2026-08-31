@@ -23,7 +23,7 @@ import type { GeminusBaseContextChangedDetail } from '@/lib/event-bus';
 import CreateIssueDialog from './CreateIssueDialog';
 import CreateWorkOrderDialog from './CreateWorkOrderDialog';
 import InsightsDrawerPanel from './InsightsDrawerPanel';
-import GunnarChat, { GunnarContext } from '@/components/chat/GunnarChat';
+import GeminusAIChat, { GeminusAIContext } from '@/components/chat/GunnarChat';
 import CreateSupportCase from '@/components/support/CreateSupportCase';
 import IleanEmbeddedChat from './IleanEmbeddedChat';
 import InventoryPanel from './InventoryPanel';
@@ -36,7 +36,7 @@ interface GeminusPluginMenuProps {
   contextMetadata?: Record<string, any>;
 }
 
-type ActivePanel = null | 'issue' | 'workorder' | 'support' | 'insights' | 'gunnar' | 'ilean' | 'inventory' | 'viewer';
+type ActivePanel = null | 'issue' | 'workorder' | 'support' | 'insights' | 'geminus-ai' | 'ilean' | 'inventory' | 'viewer';
 
 // Labels are defined as functions to support i18n — called inside the component
 const MENU_ITEM_DEFS = [
@@ -46,7 +46,7 @@ const MENU_ITEM_DEFS = [
   { id: 'inventory' as const, labelSv: 'Asset panel', labelEn: 'Asset panel', icon: Package },
   { id: 'insights' as const, labelSv: 'Insikter', labelEn: 'Insights', icon: BarChart2 },
   { id: 'viewer' as const, labelSv: 'Geminus View', labelEn: 'Geminus View', icon: Eye },
-  { id: 'gunnar' as const, labelSv: 'Fråga Geminus AI', labelEn: 'Ask Geminus AI', icon: Bot },
+  { id: 'geminus-ai' as const, labelSv: 'Fråga Geminus AI', labelEn: 'Ask Geminus AI', icon: Bot },
   { id: 'ilean' as const, labelSv: 'Fråga Ilean', labelEn: 'Ask Ilean', icon: FileText },
 ];
 
@@ -108,8 +108,8 @@ export default function GeminusPluginMenu({
     setActivePanel(null);
   }, []);
 
-  // Build Gunnar context from plugin menu props + live Geminus Base context
-  const gunnarContext: GunnarContext & { contextMetadata?: Record<string, any> } = {
+  // Build Geminus AI context from plugin menu props + live Geminus Base context
+  const geminusAIContext: GeminusAIContext & { contextMetadata?: Record<string, any> } = {
     activeApp: source === 'fma_plus' ? 'fma_plus' : source === 'geminus_base_native' ? 'geminus_base_native' : source === '2d_geminus_base' ? 'fma_plus' : source,
     currentBuilding: buildingFmGuid ? { fmGuid: buildingFmGuid, name: buildingName || 'Building' } : undefined,
     currentStorey: contextMetadata?.floorGuid ? { fmGuid: contextMetadata.floorGuid, name: contextMetadata.floorName || '' } : undefined,
@@ -268,8 +268,8 @@ export default function GeminusPluginMenu({
         </div>
       )}
 
-      {/* Gunnar Chat — fullscreen on mobile, floating panel on desktop */}
-      {activePanel === 'gunnar' && (
+      {/* Geminus AI Chat — fullscreen on mobile, floating panel on desktop */}
+      {activePanel === 'geminus-ai' && (
         <div className={cn(
           "fixed z-50 bg-card/95 backdrop-blur-md border border-border shadow-2xl flex flex-col overflow-hidden animate-in fade-in duration-200",
           isMobile
@@ -288,7 +288,7 @@ export default function GeminusPluginMenu({
             </Button>
           </div>
           <div className="flex-1 overflow-hidden min-h-0">
-            <GunnarChat open={true} onClose={handleClose} context={gunnarContext} embedded />
+            <GeminusAIChat open={true} onClose={handleClose} context={geminusAIContext} embedded />
           </div>
         </div>
       )}

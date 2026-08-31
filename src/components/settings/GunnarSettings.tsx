@@ -9,8 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { speakWithDeepgram, stopDeepgramAudio } from '@/lib/deepgram-tts';
 import { useLanguage } from '@/context/LanguageContext';
 
-const GUNNAR_SETTINGS_KEY = 'gunnar-settings';
-export const GUNNAR_SETTINGS_CHANGED_EVENT = 'gunnar-settings-changed';
+const GEMINUS_AI_SETTINGS_KEY = 'gunnar-settings';
+export const GEMINUS_AI_SETTINGS_CHANGED_EVENT = 'geminus-ai-settings-changed';
 
 export interface GunnarSettingsData {
   visible: boolean;
@@ -40,9 +40,9 @@ const DEFAULT_SETTINGS: GunnarSettingsData = {
   speechRate: 1.0,
 };
 
-export function getGunnarSettings(): GunnarSettingsData {
+export function getGeminusAISettings(): GunnarSettingsData {
   try {
-    const stored = localStorage.getItem(GUNNAR_SETTINGS_KEY);
+    const stored = localStorage.getItem(GEMINUS_AI_SETTINGS_KEY);
     if (stored) {
       return { ...DEFAULT_SETTINGS, ...JSON.parse(stored) };
     }
@@ -52,13 +52,13 @@ export function getGunnarSettings(): GunnarSettingsData {
   return DEFAULT_SETTINGS;
 }
 
-export function saveGunnarSettings(settings: Partial<GunnarSettingsData>): void {
+export function saveGeminusAISettings(settings: Partial<GunnarSettingsData>): void {
   try {
-    const current = getGunnarSettings();
+    const current = getGeminusAISettings();
     const updated = { ...current, ...settings };
-    localStorage.setItem(GUNNAR_SETTINGS_KEY, JSON.stringify(updated));
+    localStorage.setItem(GEMINUS_AI_SETTINGS_KEY, JSON.stringify(updated));
     window.dispatchEvent(
-      new CustomEvent(GUNNAR_SETTINGS_CHANGED_EVENT, { detail: updated })
+      new CustomEvent(GEMINUS_AI_SETTINGS_CHANGED_EVENT, { detail: updated })
     );
   } catch (e) {
     console.error('Failed to save Gunnar settings:', e);
@@ -67,44 +67,44 @@ export function saveGunnarSettings(settings: Partial<GunnarSettingsData>): void 
 
 // useAvailableVoices removed — using ElevenLabs presets instead
 
-const GunnarSettings: React.FC = () => {
+const GeminusAISettings: React.FC = () => {
   const { t } = useLanguage();
-  const [settings, setSettings] = useState<GunnarSettingsData>(getGunnarSettings);
+  const [settings, setSettings] = useState<GunnarSettingsData>(getGeminusAISettings);
 
   useEffect(() => {
     const handler = (e: CustomEvent<GunnarSettingsData>) => {
       setSettings(e.detail);
     };
-    window.addEventListener(GUNNAR_SETTINGS_CHANGED_EVENT, handler as EventListener);
-    return () => window.removeEventListener(GUNNAR_SETTINGS_CHANGED_EVENT, handler as EventListener);
+    window.addEventListener(GEMINUS_AI_SETTINGS_CHANGED_EVENT, handler as EventListener);
+    return () => window.removeEventListener(GEMINUS_AI_SETTINGS_CHANGED_EVENT, handler as EventListener);
   }, []);
 
   const handleVisibilityChange = (visible: boolean) => {
     setSettings(prev => ({ ...prev, visible }));
-    saveGunnarSettings({ visible });
+    saveGeminusAISettings({ visible });
   };
 
   const handleResetPosition = () => {
     setSettings(prev => ({ ...prev, buttonPosition: null }));
-    saveGunnarSettings({ buttonPosition: null });
+    saveGeminusAISettings({ buttonPosition: null });
   };
 
   const handleLangChange = (lang: string) => {
     const speechLang = lang as 'sv-SE' | 'en-US';
     setSettings(prev => ({ ...prev, speechLang, voiceName: null }));
-    saveGunnarSettings({ speechLang, voiceName: null });
+    saveGeminusAISettings({ speechLang, voiceName: null });
   };
 
   const handleVoiceChange = (voiceId: string) => {
     const voiceName = voiceId === '__default__' ? null : voiceId;
     setSettings(prev => ({ ...prev, voiceName }));
-    saveGunnarSettings({ voiceName });
+    saveGeminusAISettings({ voiceName });
   };
 
   const handleSpeechRateChange = (value: number[]) => {
     const speechRate = value[0];
     setSettings(prev => ({ ...prev, speechRate }));
-    saveGunnarSettings({ speechRate });
+    saveGeminusAISettings({ speechRate });
   };
 
   const [isTesting, setIsTesting] = useState(false);
@@ -322,4 +322,4 @@ const GunnarSettings: React.FC = () => {
   );
 };
 
-export default GunnarSettings;
+export default GeminusAISettings;

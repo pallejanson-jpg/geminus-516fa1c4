@@ -30,7 +30,7 @@ import ViewerThemeSettings from './ViewerThemeSettings';
 import RoomLabelSettings from './RoomLabelSettings';
 import ProfileSettings from './ProfileSettings';
 import IvionConnectionModal from './IvionConnectionModal';
-import GunnarSettings from './GunnarSettings';
+import GeminusAISettings from './GunnarSettings';
 import IleanSettings from './IleanSettings';
 import { getFastNavEnabled, setFastNavEnabled } from './VoiceSettings';
 import KnowledgeBaseSettings from './KnowledgeBaseSettings';
@@ -4259,7 +4259,7 @@ const ApiSettingsModal: React.FC<ApiSettingsModalProps> = ({ isOpen, onClose }) 
                                     </div>
                                 </AccordionTrigger>
                                 <AccordionContent>
-                                    <GunnarSettings />
+                                    <GeminusAISettings />
                                 </AccordionContent>
                             </AccordionItem>
                             <AccordionItem value="ilean" className="border rounded-lg px-4">

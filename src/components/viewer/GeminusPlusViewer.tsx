@@ -3557,9 +3557,9 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
     return () => clearTimeout(timer);
   }, [modelLoadState, initStep, modelNamesMap]);
 
-  // Listen for Gunnar commands
+  // Listen for Geminus AI commands
   useEffect(() => {
-    const handleGunnarShowFloor = (detail: { floorFmGuid: string }) => {
+    const handleGeminusAIShowFloor = (detail: { floorFmGuid: string }) => {
       const viewer = viewerInstanceRef.current;
       if (viewer && detail.floorFmGuid) {
         try {
@@ -3569,24 +3569,24 @@ const GeminusPlusViewer: React.FC<GeminusPlusViewerProps> = ({
         }
       }
     };
-    
-    const handleGunnarHighlight = (detail: { fmGuids: string[] }) => {
+
+    const handleGeminusAIHighlight = (detail: { fmGuids: string[] }) => {
       if (detail.fmGuids && detail.fmGuids.length > 0) {
         detail.fmGuids.forEach(guid => {
           flashEntityById(guid, viewerInstanceRef.current);
         });
       }
     };
-    
-    const handleGunnarFlyTo = (detail: { fmGuid: string }) => {
+
+    const handleGeminusAIFlyTo = (detail: { fmGuid: string }) => {
       if (detail.fmGuid) {
         lookAtInstanceFromAngle(detail.fmGuid, defaultMinimumHeightAboveBase, defaultHeightAboveAABB);
       }
     };
-    
-    const offShowFloor = on('GUNNAR_SHOW_FLOOR', handleGunnarShowFloor);
-    const offHighlight = on('GUNNAR_HIGHLIGHT', handleGunnarHighlight);
-    const offFlyTo = on('GUNNAR_FLY_TO', handleGunnarFlyTo);
+
+    const offShowFloor = on('GEMINUS_AI_SHOW_FLOOR', handleGeminusAIShowFloor);
+    const offHighlight = on('GEMINUS_AI_HIGHLIGHT', handleGeminusAIHighlight);
+    const offFlyTo = on('GEMINUS_AI_FLY_TO', handleGeminusAIFlyTo);
     
     return () => {
       offShowFloor();

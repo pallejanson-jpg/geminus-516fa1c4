@@ -1,7 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import { useMemo, useState, useCallback, useEffect } from "react";
-import GunnarChat from "@/components/chat/GunnarChat";
-import type { GunnarContext } from "@/components/chat/GunnarChat";
+import GeminusAIChat from "@/components/chat/GunnarChat";
+import type { GeminusAIContext } from "@/components/chat/GunnarChat";
 
 const AiChat = () => {
   const [searchParams] = useSearchParams();
@@ -9,7 +9,7 @@ const AiChat = () => {
 
   const buildingGuid = searchParams.get("building");
 
-  const context = useMemo<GunnarContext>(() => ({
+  const context = useMemo<GeminusAIContext>(() => ({
     activeApp: "ai-standalone",
     currentBuilding: buildingGuid ? { fmGuid: buildingGuid, name: "" } : undefined,
   }), [buildingGuid]);
@@ -21,7 +21,7 @@ const AiChat = () => {
     setAutoVoice(false);
   }, []);
 
-  // Swap PWA manifest + meta tags so "Add to Home Screen" uses Gunnar AI branding
+  // Swap PWA manifest + meta tags so "Add to Home Screen" uses Geminus AI branding
   useEffect(() => {
     const manifestLink = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
     const originalHref = manifestLink?.getAttribute("href");
@@ -41,15 +41,15 @@ const AiChat = () => {
       return { el, prev: el.getAttribute("content") };
     };
 
-    const title = setMeta("apple-mobile-web-app-title", "Gunnar AI");
-    title.el.setAttribute("content", "Gunnar AI");
+    const title = setMeta("apple-mobile-web-app-title", "Geminus AI");
+    title.el.setAttribute("content", "Geminus AI");
 
     const capable = setMeta("apple-mobile-web-app-capable", "yes");
     capable.el.setAttribute("content", "yes");
 
     // Update document title
     const prevTitle = document.title;
-    document.title = "Gunnar AI";
+    document.title = "Geminus AI";
 
     return () => {
       if (manifestLink && originalHref) {
@@ -63,7 +63,7 @@ const AiChat = () => {
 
   return (
     <div className="h-screen w-screen bg-background">
-      <GunnarChat
+      <GeminusAIChat
         open={true}
         onClose={handleClose}
         context={context}

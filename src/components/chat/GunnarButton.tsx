@@ -3,10 +3,10 @@ import { Sparkles, MessageCircle, GripHorizontal, X, Minimize2, Maximize2, Move 
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/components/ui/tooltip';
 import { useApp } from '@/context/AppContext';
-import GunnarChat from './GunnarChat';
+import GeminusAIChat from './GunnarChat';
 import { cn } from '@/lib/utils';
 import { VIEWER_CONTEXT_CHANGED_EVENT, ViewerContextChangedDetail, AI_VIEWER_FOCUS_EVENT } from '@/lib/viewer-events';
-import { getGunnarSettings, saveGunnarSettings, GUNNAR_SETTINGS_CHANGED_EVENT, type GunnarSettingsData } from '@/components/settings/GunnarSettings';
+import { getGeminusAISettings, saveGeminusAISettings, GEMINUS_AI_SETTINGS_CHANGED_EVENT, type GunnarSettingsData } from '@/components/settings/GunnarSettings';
 
 import { on } from '@/lib/event-bus';
 import { useLanguage } from '@/context/LanguageContext';
@@ -55,7 +55,7 @@ export default function GunnarButton() {
 
   // Load saved position on mount — clamp to current viewport
   useEffect(() => {
-    const settings = getGunnarSettings();
+    const settings = getGeminusAISettings();
     if (settings.buttonPosition) {
       const maxX = window.innerWidth - BUTTON_SIZE;
       const maxY = window.innerHeight - BUTTON_SIZE;
@@ -95,7 +95,7 @@ export default function GunnarButton() {
       setIsOpen(true);
       setIsMinimized(false);
     };
-    const off = on('GUNNAR_AUTO_OPEN_VOICE', handler);
+    const off = on('GEMINUS_AI_AUTO_OPEN_VOICE', handler);
     return () => off();
   }, []);
 
@@ -210,7 +210,7 @@ export default function GunnarButton() {
     
     // Save position if it was dragged
     if (wasDraggedRef.current && triggerPosition) {
-      saveGunnarSettings({ buttonPosition: triggerPosition });
+      saveGeminusAISettings({ buttonPosition: triggerPosition });
     }
   }, [triggerPosition]);
 
@@ -231,7 +231,7 @@ export default function GunnarButton() {
     }
   }, [isTriggerDragging, handleTriggerDragMove, handleTriggerDragEnd]);
 
-  // Build context object for GunnarChat
+  // Build context object for GeminusAIChat
   const buildContext = () => {
     const context: any = {
       activeApp,
@@ -513,9 +513,9 @@ export default function GunnarButton() {
 
           {/* Chat content */}
           <div className="flex-1 overflow-hidden">
-            <GunnarChat 
-              open={true} 
-              onClose={() => setIsOpen(false)} 
+            <GeminusAIChat
+              open={true}
+              onClose={() => setIsOpen(false)}
               context={buildContext()}
               embedded
               autoVoice={autoVoice}

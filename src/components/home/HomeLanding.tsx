@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 
-import GunnarChat from "@/components/chat/GunnarChat";
+import GeminusAIChat from "@/components/chat/GunnarChat";
 import IleanButton from "@/components/chat/IleanButton";
 import { useAllBuildingSettings } from "@/hooks/useAllBuildingSettings";
 import { AppContext } from "@/context/AppContext";
@@ -15,7 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useNavigate } from "react-router-dom";
 import { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext } from "@/components/ui/carousel";
 
-type AssistantType = "gunnar" | "ilean";
+type AssistantType = "geminus-ai" | "ilean";
 
 const ASSISTANTS: Array<{
   id: AssistantType;
@@ -25,7 +25,7 @@ const ASSISTANTS: Array<{
   icon: React.ComponentType<{ className?: string }>;
   available: boolean;
 }> = [
-  { id: "gunnar", title: "Geminus AI", subtitle: "Data Assistant", description: "Ask about buildings, rooms and assets", icon: Database, available: true },
+  { id: "geminus-ai", title: "Geminus AI", subtitle: "Data Assistant", description: "Ask about buildings, rooms and assets", icon: Database, available: true },
   { id: "ilean", title: "Ilean", subtitle: "Document Assistant", description: "Search documents and drawings", icon: FileQuestion, available: true },
 ];
 
@@ -92,7 +92,7 @@ function CardSkeleton() {
 export default function HomeLanding() {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const [gunnarOpen, setGunnarOpen] = useState(false);
+  const [geminusAIOpen, setGeminusAIOpen] = useState(false);
   const [ileanOpen, setIleanOpen] = useState(false);
   const { settingsMap, isLoading: isLoadingSettings, getFavorites, getHeroImage } = useAllBuildingSettings();
   const { navigatorTreeData, setSelectedFacility, setActiveApp, allData } = useContext(AppContext);
@@ -148,7 +148,7 @@ export default function HomeLanding() {
 
   const openAssistant = useCallback(
     (type: AssistantType) => {
-      if (type === "gunnar") { setGunnarOpen(true); return; }
+      if (type === "geminus-ai") { setGeminusAIOpen(true); return; }
       if (type === "ilean") { setIleanOpen(true); return; }
       toast({ title: "AI Assistant (coming soon)", description: `${type} is not yet implemented.` });
     },
@@ -319,7 +319,7 @@ export default function HomeLanding() {
         </div>
       </div>
 
-      <GunnarChat open={gunnarOpen} onClose={() => setGunnarOpen(false)} context={{ activeApp: 'home' }} />
+      <GeminusAIChat open={geminusAIOpen} onClose={() => setGeminusAIOpen(false)} context={{ activeApp: 'home' }} />
       {ileanOpen && <IleanButton />}
     </div>
   );

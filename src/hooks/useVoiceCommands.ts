@@ -16,8 +16,8 @@ interface VoiceCommand {
 
 interface VoiceCommandCallbacks {
   onSearch?: (term: string) => void;
-  onOpenGunnar?: () => void;
-  onAskGunnar?: (question: string) => void;
+  onOpenGeminusAI?: () => void;
+  onAskGeminusAI?: (question: string) => void;
 }
 
 // Helper to find a building by name in the tree
@@ -268,22 +268,22 @@ const VOICE_COMMANDS: VoiceCommand[] = [
   // === Assistant Commands ===
   {
     patterns: [
-      /^(prata med|öppna|starta)\s+(gunnar|assistenten|ai|chatten)$/i,
-      /^gunnar$/i,
+      /^(prata med|öppna|starta)\s+(geminus|assistenten|ai|chatten)$/i,
+      /^geminus$/i,
     ],
-    action: (_ctx, _match, callbacks) => { callbacks.onOpenGunnar?.(); },
-    description: 'Open Gunnar',
+    action: (_ctx, _match, callbacks) => { callbacks.onOpenGeminusAI?.(); },
+    description: 'Open Geminus AI',
     category: 'assistant',
   },
   {
     patterns: [
-      /^(fråga gunnar|hej gunnar|gunnar)[,:.]?\s+(.+)$/i,
+      /^(fråga geminus|hej geminus|geminus)[,:.]?\s+(.+)$/i,
     ],
     action: (_ctx, match, callbacks) => {
       const question = match[2];
-      callbacks.onAskGunnar?.(question);
+      callbacks.onAskGeminusAI?.(question);
     },
-    description: 'Ask Gunnar [question]',
+    description: 'Ask Geminus AI [question]',
     category: 'assistant',
   },
 
@@ -349,3 +349,4 @@ export function useVoiceCommands(callbacks: VoiceCommandCallbacks = {}) {
 }
 
 export type { VoiceCommand, VoiceCommandCallbacks };
+

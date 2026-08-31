@@ -10,7 +10,7 @@ import GunnarButton from '@/components/chat/GunnarButton';
 import IleanButton from '@/components/chat/IleanButton';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { getVoiceSettings, VOICE_SETTINGS_CHANGED_EVENT } from '@/components/settings/VoiceSettings';
-import { getGunnarSettings, GUNNAR_SETTINGS_CHANGED_EVENT } from '@/components/settings/GunnarSettings';
+import { getGeminusAISettings, GEMINUS_AI_SETTINGS_CHANGED_EVENT } from '@/components/settings/GunnarSettings';
 import { getIleanSettings, ILEAN_SETTINGS_CHANGED_EVENT } from '@/components/settings/IleanSettings';
 import { AppContext } from '@/context/AppContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,7 +25,7 @@ const VIEWER_APPS = ['geminus_plus_viewer', 'viewer', 'native_viewer'];
 const AppLayoutInner: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const [voiceEnabled, setVoiceEnabled] = useState(() => getVoiceSettings().enabled);
-    const [gunnarVisible, setGunnarVisible] = useState(() => getGunnarSettings().visible);
+    const [geminusAIVisible, setGeminusAIVisible] = useState(() => getGeminusAISettings().visible);
     const [ileanVisible, setIleanVisible] = useState(() => getIleanSettings().visible);
     const isMobile = useIsMobile();
     const { activeApp, setSelectedFacility } = useContext(AppContext);
@@ -52,13 +52,13 @@ const AppLayoutInner: React.FC = () => {
         return () => window.removeEventListener(VOICE_SETTINGS_CHANGED_EVENT, handleSettingsChange as EventListener);
     }, []);
 
-    // Listen for Gunnar settings changes
+    // Listen for Geminus AI settings changes
     useEffect(() => {
-        const handleGunnarSettingsChange = (e: CustomEvent) => {
-            setGunnarVisible(e.detail?.visible ?? true);
+        const handleGeminusAISettingsChange = (e: CustomEvent) => {
+            setGeminusAIVisible(e.detail?.visible ?? true);
         };
-        window.addEventListener(GUNNAR_SETTINGS_CHANGED_EVENT, handleGunnarSettingsChange as EventListener);
-        return () => window.removeEventListener(GUNNAR_SETTINGS_CHANGED_EVENT, handleGunnarSettingsChange as EventListener);
+        window.addEventListener(GEMINUS_AI_SETTINGS_CHANGED_EVENT, handleGeminusAISettingsChange as EventListener);
+        return () => window.removeEventListener(GEMINUS_AI_SETTINGS_CHANGED_EVENT, handleGeminusAISettingsChange as EventListener);
     }, []);
 
     // Listen for Ilean settings changes
@@ -96,7 +96,7 @@ const AppLayoutInner: React.FC = () => {
         }
     }, [setSelectedFacility]);
 
-    // Deep link: ?gunnar=voice → auto-open Gunnar in voice mode
+    // Deep link: ?gunnar=voice → auto-open Geminus AI in voice mode (kept for backwards compat)
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         if (params.get('gunnar') === 'voice') {
@@ -108,7 +108,7 @@ const AppLayoutInner: React.FC = () => {
             window.history.replaceState({}, '', newUrl);
             // Dispatch event after a short delay to let components mount
             setTimeout(() => {
-                window.dispatchEvent(new CustomEvent('GUNNAR_AUTO_OPEN_VOICE'));
+                window.dispatchEvent(new CustomEvent('GEMINUS_AI_AUTO_OPEN_VOICE'));
             }, 500);
         }
     }, []);
@@ -118,11 +118,11 @@ const AppLayoutInner: React.FC = () => {
         onSearch: (term: string) => {
             logger.log('Voice search:', term);
         },
-        onOpenGunnar: () => {
-            logger.log('Voice: Open Gunnar');
+        onOpenGeminusAI: () => {
+            logger.log('Voice: Open Geminus AI');
         },
-        onAskGunnar: (question: string) => {
-            logger.log('Voice ask Gunnar:', question);
+        onAskGeminusAI: (question: string) => {
+            logger.log('Voice ask Geminus AI:', question);
         },
     }), []);
 
@@ -181,8 +181,8 @@ const AppLayoutInner: React.FC = () => {
             {/* Voice Control - only visible when enabled in Settings */}
             {voiceEnabled && !isImmersive && <VoiceControlButton callbacks={voiceCallbacks()} />}
 
-            {/* Gunnar AI Assistant - visible based on settings */}
-            {gunnarVisible && !isImmersive && <GunnarButton />}
+            {/* Geminus AI Assistant - visible based on settings */}
+            {geminusAIVisible && !isImmersive && <GunnarButton />}
 
             {/* Ilean AI Assistant - visible based on settings */}
             {ileanVisible && !isImmersive && <IleanButton />}
