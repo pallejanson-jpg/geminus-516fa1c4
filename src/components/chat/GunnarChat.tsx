@@ -149,6 +149,12 @@ const GeminusAIChat = React.forwardRef<HTMLDivElement, GeminusAIChatProps>(funct
   
   const currentBuildingRef = useRef<string | undefined>(undefined);
 
+  // Set initial greeting on mount
+  useEffect(() => {
+    setMessages([{ role: "assistant", content: getContextualGreeting(context) }]);
+    currentBuildingRef.current = context?.currentBuilding?.fmGuid;
+  }, []);
+
   // Fetch proactive insights when context has a building
   useEffect(() => {
     const buildingKey = context?.currentBuilding?.fmGuid || "";
