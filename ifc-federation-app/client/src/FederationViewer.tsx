@@ -144,13 +144,13 @@ export default function FederationViewer({ models, focusedModelName }: Federatio
 
       {models.length === 0 && (
         <div className="viewer-overlay viewer-overlay-muted">
-          Inga modeller att visa ännu — kräver konverterade .xkt-filer (se README).
+          No models to show yet — requires converted .xkt files (see README).
         </div>
       )}
 
       {(loadState.status === 'loading-sdk' || loadState.status === 'loading-models') && (
         <div className="viewer-overlay viewer-overlay-dark">
-          {loadState.status === 'loading-sdk' ? 'Laddar 3D-motor…' : 'Laddar modeller…'}
+          {loadState.status === 'loading-sdk' ? 'Loading 3D engine…' : 'Loading models…'}
         </div>
       )}
 

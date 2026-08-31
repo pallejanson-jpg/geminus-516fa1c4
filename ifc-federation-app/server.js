@@ -44,6 +44,7 @@ import { buildMatrix, applyReconciliation } from '../ifc-federation/storey-recon
 import { validateFederation, repairFederation } from '../ifc-federation/federation-guid-validator.js';
 import { applyFederationWrites } from '../ifc-federation/ifc-writer.js';
 import { getAvailableRules, validateFile, runIfctesterBcf } from '../ifc-federation/ids-validator.js';
+import { generateIdsReportPdf } from './pdf-report.js';
 
 /**
  * Progress reporting for /api/ingest.
@@ -63,7 +64,7 @@ const jobs = new Map(); // jobId -> { status: 'processing'|'done'|'error', progr
 
 function makeJob() {
   const jobId = randomUUID();
-  jobs.set(jobId, { status: 'processing', progress: 0, stage: 'Startar…' });
+  jobs.set(jobId, { status: 'processing', progress: 0, stage: 'Starting…' });
   return jobId;
 }
 
@@ -190,7 +191,7 @@ async function runIngestJob(jobId, { buildingIdentifier, architectUpload, discip
   const STAGE = { canonical: [0, 20], matrix: [20, 55], validate: [55, 95], finalize: [95, 100] };
   const mapRange = ([lo, hi], fraction) => lo + fraction * (hi - lo);
 
-  updateJob(jobId, { stage: 'Läser filer…', progress: 0 });
+  updateJob(jobId, { stage: 'Reading files…', progress: 0 });
 
   // ── Resolve canonical storeys: Geminus Plus first, architect fallback ──
   let canonicalSource;
@@ -204,7 +205,7 @@ async function runIngestJob(jobId, { buildingIdentifier, architectUpload, discip
   if (building) {
     canonicalSource = 'geminus-plus';
     canonicalStoreys = await getStoreysForBuilding(building.fmguid);
-    updateJob(jobId, { stage: 'Hämtade våningar från Geminus Plus', progress: STAGE.canonical[1] });
+    updateJob(jobId, { stage: 'Fetched storeys from Geminus Plus', progress: STAGE.canonical[1] });
   } else {
     if (!architectUpload) {
       throw new Error(
@@ -213,7 +214,7 @@ async function runIngestJob(jobId, { buildingIdentifier, architectUpload, discip
     }
     canonicalSource = 'architect-model';
     const architectIfcText = await readFile(architectUpload.path, 'utf8');
-    updateJob(jobId, { stage: 'Tolkar arkitektmodellens våningar…' });
+    updateJob(jobId, { stage: 'Parsing architect model storeys…' });
     canonicalStoreys = await buildCanonicalStoreys(architectIfcText, (fraction) =>
       updateJob(jobId, { progress: mapRange(STAGE.canonical, fraction) })
     );
@@ -238,26 +239,26 @@ async function runIngestJob(jobId, { buildingIdentifier, architectUpload, discip
     });
   }
 
-  updateJob(jobId, { stage: 'Bygger matchningsmatris…' });
+  updateJob(jobId, { stage: 'Building match matrix…' });
   const matrix = await buildMatrix(canonicalStoreys, models, {
     onProgress: (modelName, fraction) =>
       updateJob(jobId, {
         progress: mapRange(STAGE.matrix, fraction),
-        stage: modelName ? `Bygger matchningsmatris… (${modelName})` : 'Bygger matchningsmatris…',
+        stage: modelName ? `Building match matrix… (${modelName})` : 'Building match matrix…',
       }),
   });
 
-  updateJob(jobId, { stage: 'Validerar FMGUID…', progress: STAGE.validate[0] });
+  updateJob(jobId, { stage: 'Validating FMGUIDs…', progress: STAGE.validate[0] });
   const validation = await validateFederation(models, {
     onProgress: (modelName, fraction) =>
       updateJob(jobId, {
         progress: mapRange(STAGE.validate, fraction),
-        stage: modelName ? `Validerar FMGUID… (${modelName})` : 'Validerar FMGUID…',
+        stage: modelName ? `Validating FMGUIDs… (${modelName})` : 'Validating FMGUIDs…',
       }),
   });
   repairFederation(validation, { regenerateAll: regenerateAllGuids }); // mutates validation.elements' fmguid in place
 
-  updateJob(jobId, { stage: 'Klar', progress: STAGE.finalize[1] });
+  updateJob(jobId, { stage: 'Done', progress: STAGE.finalize[1] });
 
   const sessionId = randomUUID();
   sessions.set(sessionId, { models, canonicalStoreys, canonicalSource, building, matrix, validation, storeyWrites: [] });
@@ -408,7 +409,7 @@ app.post('/api/validate-ids/export', async (req, res) => {
     }
 
     if (issueCount === 0) {
-      return res.json({ empty: true, message: 'Inga underkända kontroller att rapportera — allt godkänt.' });
+      return res.json({ empty: true, message: 'No failed checks to report — everything passed.' });
     }
 
     res.setHeader('Content-Type', 'application/octet-stream');
@@ -419,6 +420,26 @@ app.post('/api/validate-ids/export', async (req, res) => {
     if (!res.headersSent) res.status(500).json({ error: err.message });
   } finally {
     await rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+// Human-readable A4 companion to the BCF export above — same
+// session.idsResults data, rendered as a document instead of a
+// machine-openable bundle. See pdf-report.js.
+app.post('/api/validate-ids/pdf', async (req, res) => {
+  try {
+    const { sessionId } = req.body ?? {};
+    const session = sessions.get(sessionId);
+    if (!session) return res.status(404).json({ error: 'Unknown session — re-run /api/ingest.' });
+    if (!session.idsResults) return res.status(400).json({ error: 'Run /api/validate-ids first.' });
+
+    const pdfBuffer = await generateIdsReportPdf(session.idsResults);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="geminus-ids-validation-report.pdf"');
+    res.send(pdfBuffer);
+  } catch (err) {
+    console.error(err);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
