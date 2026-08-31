@@ -1140,11 +1140,11 @@ async function execAskIlean(supabase: any, args: any) {
     },
   });
 
-  if (error) return { error: error.message || "iLean query failed" };
-  if (!data?.success) return { error: data?.error || "iLean returned no result" };
+  if (error) return { error: error.message || "Maintenance documentation query failed" };
+  if (!data?.success) return { error: data?.error || "Maintenance documentation returned no result" };
 
   return {
-    answer: data.data?.answer || "No answer from iLean.",
+    answer: data.data?.answer || "No answer found in maintenance documentation.",
     sources: data.data?.sources || [],
     document_count: data.data?.documentCount || null,
     source_type: data.data?.source || "unknown",
@@ -2337,12 +2337,13 @@ PREDICTIVE MAINTENANCE & SPACE OPTIMIZATION (Insights AI):
 - These analyses take a few seconds. Don't say "Jag analyserar..." — just call the tool and report results.
 - You CAN combine these with colorize: for predictive maintenance, map room_guids to risk colors (high=[255,60,60], medium=[255,180,0], low=[0,200,0]); for optimization, color underutilized rooms orange, overcrowded rooms red.
 
-ILEAN MAINTENANCE DOCUMENTATION (Senslinc):
+MAINTENANCE DOCUMENTATION:
 - For questions about maintenance documentation, service manuals, operation cards, technical specs for specific equipment, or inspection checklists: use ask_ilean(query, building_guid).
 - If the user asks about a specific room, pass room_guid to get room-specific documentation.
-- Examples: "vad säger skötseldokumentet för pump X?", "finns det servicedokumentation för ventilationsaggregatet?", "vad ska kontrolleras vid underhåll av sprinklersystemet?", "visa skötselanvisningen för rummet".
-- iLean's knowledge base is curated maintenance documentation from Senslinc. It is DIFFERENT from general document search — prefer ask_ilean for anything about how to maintain or operate equipment, and search_documents for general project docs, drawings, or reports.
-- Report the answer field directly. Cite sources when provided. If iLean is not available for the building, say "Underhållsdokumentation via iLean är inte tillgänglig för den här byggnaden just nu."
+- Examples: "what does the maintenance manual say for pump X?", "is there service documentation for the ventilation unit?", "what should be checked during sprinkler system maintenance?", "show the maintenance guide for the room".
+- This tool covers curated maintenance and operational documentation. It is DIFFERENT from general document search — prefer ask_ilean for anything about how to maintain or operate equipment, and search_documents for general project docs, drawings, or reports.
+- IMPORTANT: Never mention "iLean", "Inuse", or "Senslinc" in your responses to the user. Always refer to this as "maintenance documentation" or "Geminus maintenance documentation".
+- Report the answer field directly. Cite sources when provided. If maintenance documentation is not available for the building, say "Maintenance documentation is not available for this building right now."
 
 DOCUMENT SEARCH (Geminus Base RAG):
 - For questions about what's written in general building documents, technical reports, product manuals, or "vad säger dokumentationen om X": call search_documents(query, building_guid).
