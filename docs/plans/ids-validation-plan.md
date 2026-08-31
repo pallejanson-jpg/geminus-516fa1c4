@@ -75,6 +75,19 @@ Detta kan köras **oberoende av eller tillsammans med** dagens FMGUID-flöde —
 3. **UI-integration:** ny sektion i `ifc-federation-app`, enligt flödet ovan.
 4. **Regelbibliotek:** i samråd med er, bygg ett första gemensamt `.ids`-regelset för Geminus (kan med fördel inkludera "FMGUID måste finnas" som en IDS-regel, vilket faktiskt validerar hela vår egen pipeline med samma verktyg).
 
+## Status: skarpt implementerat (2026-08-31)
+
+Hela flödet ovan är byggt och verifierat, plus en tillagd PDF-rapport utöver ursprungsplanens BCF-export:
+
+- **`ifc-federation/ids-validator.js`** — Node-wrapper runt `ifctester` (subprocess), enligt planen. `getAvailableRules()`, `runIfctesterJson`, `runIfctesterBcf`, `validateFile()`.
+- **Regelbibliotek: `ifc-federation/ids-rules/*.ids`** — beslut från öppen fråga #1: ett delat, Geminus-underhållet bibliotek incheckat i repo, inte kunduppladdningar i v1. Första regeln: `geminus-fmguid-storeys.ids` (kräver `FmGuid` i `FM_Pset` på alla `IfcBuildingStorey`) — validerar därmed även vår egen FMGUID-pipelines output, precis som planen föreslog.
+- **UI-sektion "5. IDS validation"** i `ifc-federation-app` — kör alla regler mot varje uppladdad modell, visar resultat per regel/modell i tabellform.
+- **BCF-export** (`/api/validate-ids/export`) — slår ihop varje modell/regel-kombinations `ifctester`-genererade BCF-zip till en enda nedladdningsbar `.bcfzip`.
+- **Nytt utöver ursprungsplanen — PDF-rapport** (`ifc-federation-app/pdf-report.js`, endpoint `/api/validate-ids/pdf`): ett läsbart A4-komplement till BCF-filen, byggt med `pdfkit` (ingen native-dependency). Geminus-logotyp i sidhuvud, titel "Geminus IDS validation-report", grön bock/röd kryss per validerad specifikation, kort förklaring + fil/objekt-info per underkänd kontroll, sidfot med sidnumrering. Verifierat end-to-end mot en riktig HTTP-anrop till den körande servern (200, `application/pdf`, giltig PDF).
+- **Hela `ifc-federation-app`-gränssnittet är nu på engelska** (tidigare på svenska) — inklusive server-genererade `stage`-strängar i job-progress-pollingen, som annars läckte svenska in i UI:t trots att själva komponenterna var översatta.
+
+Kvarstår, inte byggt: Revit-specifik IDS-validering. Slutsats från research: ingen mogen ODA/Revit-native IDS-motor att luta sig mot är värd att investera i just nu — rekommenderad väg är att behålla "ladda upp IFC här" som primärt flöde (Revit exporterar redan IFC nativt) och att en eventuell framtida Geminus Revit-tillägg anropar denna apps redan byggda `/api/validate-ids`-API istället för att återimplementera IDS-validering i .NET eller licensiera ODA:s kommersiella SDK.
+
 ## Sources
 - [buildingSMART IDS](https://www.buildingsmart.org/standards/bsi-standards/information-delivery-specification-ids/)
 - [GitHub buildingSMART/IDS](https://github.com/buildingsmart/ids)

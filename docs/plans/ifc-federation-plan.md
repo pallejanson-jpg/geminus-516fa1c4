@@ -224,3 +224,13 @@ Result: both files' storeys now read "Plan 01 (confirmed)" with the shared canon
 - Whether Phase 1's Geminus Plus calls can stay on `supabase.functions.invoke(...)` (Path A) or need a native-Node port (Path B) for acceptable latency — decide per `SYNC_ARCHITECTURE.md`'s framework, not up front.
 - Exact shape of the "location" reference used in Phase 5's duplicate-FMGUID report (file + IFC line/entity id) — needs to be useful enough for a user to find and fix the object.
 - How the new Node module authenticates to Supabase (service_role key, per `SYNC_ARCHITECTURE.md` §2) if it needs write access beyond what `sync-service.js` already does.
+
+## Status update (2026-08-31): IDS validation + reporting shipped
+
+Beyond the seven phases above, a further validation layer has been built and shipped on top of the standalone `ifc-federation-app` — full detail in [`ids-validation-plan.md`](ids-validation-plan.md), summarized here:
+
+- **IDS (buildingSMART Information Delivery Specification) validation**, wrapping `ifctester` (IfcOpenShell) as a Python subprocess, against a shared, Geminus-maintained rule library checked into the repo (`ifc-federation/ids-rules/*.ids`). This checks information requirements (naming, required properties, classifications, etc.) — complementary to, and independent of, the FMGUID handling in Phases 1–7 above.
+- **BCF export** of failing checks, for opening directly in the projector/designer's own BIM tool.
+- **A4 PDF report** (`ifc-federation-app/pdf-report.js`), Geminus-branded, green check/red cross per validated specification — a readable companion to the BCF file. Verified end-to-end against the running server.
+- **The entire `ifc-federation-app` UI (and server-emitted job-status strings) is now in English**, not Swedish as originally built.
+- Deliberately **not** built: a Revit-native/ODA-based IDS engine — decided against in favor of keeping "upload IFC here" as the primary flow, with any future Revit add-in calling this app's own `/api/validate-ids` API instead.
