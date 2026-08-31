@@ -21,6 +21,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 
 // Same product-type allowlist as ifc-fmguid-prep/index.ts.
 const IFC_PRODUCT_TYPES = new Set([
@@ -74,8 +75,15 @@ function extractNameAttr(attrs) {
   return '';
 }
 
-/** Parse one model's IFC text into { lineId, ifcType, globalId, name, fmguid }[]. */
-function parseElements(ifcText) {
+/**
+ * Parse one model's IFC text into { lineId, ifcType, globalId, name, fmguid }[].
+ * `onProgress(fraction)` is optional and cosmetic; the periodic
+ * `await yieldToEventLoop()` alongside it is NOT cosmetic — see
+ * architect-model-template.js's parseStoreys for why a purely synchronous
+ * version of this loop makes a Node HTTP server unable to answer its own
+ * progress-polling endpoint while this runs (confirmed in practice).
+ */
+async function parseElements(ifcText, onProgress) {
   const elements = [];
   const propMap = new Map();
   const psetProps = new Map();
@@ -85,7 +93,15 @@ function parseElements(ifcText) {
   let buffer = '';
   const entities = [];
 
-  for (const line of lines) {
+  const total = lines.length;
+  const reportEvery = Math.max(1, Math.floor(total / 100));
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (i % reportEvery === 0) {
+      onProgress?.(i / total);
+      await yieldToEventLoop();
+    }
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('/*') || trimmed.startsWith('//')) continue;
     buffer += ' ' + trimmed;
@@ -96,6 +112,7 @@ function parseElements(ifcText) {
       if (m) entities.push({ lineId: m[1], rest: `${m[2]}|${m[3]}` });
     }
   }
+  onProgress?.(1);
 
   for (const { lineId, rest } of entities) {
     const pipeIdx = rest.indexOf('|');
@@ -158,19 +175,35 @@ function parseElements(ifcText) {
  * Validate FMGUIDs across the whole federation.
  *
  * @param {{ modelName: string, ifcText: string }[]} models
+ * @param {{ onProgress?: (modelName: string, overallFraction: number) => void }} [opts]
+ *   Optional, cosmetic only. `overallFraction` (0-1) is weighted by each
+ *   model's text length relative to the federation's total, so a UI
+ *   progress bar advances proportionally to how much text has actually
+ *   been parsed — not just "1 of N files done", which would jump unevenly
+ *   for a federation mixing a 276 MB architect file with a 2 MB one.
  * @returns {{
  *   elements: Array<{ modelName, lineId, ifcType, globalId, name, fmguid, isStorey }>,
  *   duplicates: Array<{ fmguid, locations: Array<{ modelName, ifcType, globalId, name }> }>,
  *   stats: { totalElements, storeyElements, hadFmguid, missing, duplicateGroups, duplicateElements }
  * }}
  */
-function validateFederation(models) {
+async function validateFederation(models, opts = {}) {
+  const { onProgress } = opts;
+  const totalChars = models.reduce((sum, m) => sum + m.ifcText.length, 0) || 1;
+
   const elements = [];
+  let charsDoneBefore = 0;
   for (const { modelName, ifcText } of models) {
-    for (const el of parseElements(ifcText)) {
+    const modelChars = ifcText.length;
+    const parsed = await (onProgress
+      ? parseElements(ifcText, (fraction) => onProgress(modelName, (charsDoneBefore + fraction * modelChars) / totalChars))
+      : parseElements(ifcText));
+    for (const el of parsed) {
       elements.push({ modelName, ...el, isStorey: el.ifcType === 'IFCBUILDINGSTOREY' });
     }
+    charsDoneBefore += modelChars;
   }
+  onProgress?.(null, 1);
 
   // Global map, storeys excluded — they're allowed (expected) to repeat.
   const byFmguid = new Map();
@@ -208,29 +241,35 @@ function validateFederation(models) {
 }
 
 /**
- * Apply repairs to a `validateFederation()` result, in place on `elements`:
- *  - Missing FMGUID -> generate a new one.
- *  - Duplicate (non-storey) FMGUID -> keep the first occurrence's value,
- *    re-mint a fresh one for every later occurrence. No "same object in two
- *    models" exception in v1 (per plan) — every duplicate is treated as an error.
+ * Apply repairs to a `validateFederation()` result, in place on `elements`.
+ * Storeys are always left untouched — their shared-FMGUID reconciliation is
+ * Phase 4's job, not this one's.
+ *
+ * @param {ReturnType<typeof validateFederation>} result
+ * @param {{ regenerateAll?: boolean }} [opts]
+ *   Default behavior (`regenerateAll: false`, or omitted) respects any
+ *   FMGUID an object already carries:
+ *    - Missing FMGUID -> generate a new one.
+ *    - Duplicate (non-storey) FMGUID -> keep the first occurrence's existing
+ *      value, re-mint a fresh one for every later occurrence. No "same
+ *      object in two models" exception in v1 (per plan) — every duplicate
+ *      is treated as an error.
+ *   `regenerateAll: true` instead mints a brand-new FMGUID for every
+ *   non-storey object regardless of what it already had — for the case
+ *   where existing FMGUIDs in the source files are not trusted and a clean
+ *   slate is wanted instead of a minimal patch.
  * Returns the same `elements` array, now with every non-storey FMGUID unique
- * and every missing FMGUID filled in. Storeys are left untouched — their
- * shared-FMGUID reconciliation is Phase 4's job, not this one's.
+ * and every missing FMGUID filled in.
  */
-function repairFederation({ elements }) {
+function repairFederation({ elements }, opts = {}) {
+  const { regenerateAll = false } = opts;
   const seenNonStorey = new Set();
 
   for (const el of elements) {
     if (el.isStorey) continue;
 
-    if (!el.fmguid) {
-      el.fmguid = randomUUID();
-      seenNonStorey.add(el.fmguid);
-      continue;
-    }
-
-    if (seenNonStorey.has(el.fmguid)) {
-      // Every occurrence after the first for a given FMGUID gets re-minted.
+    if (regenerateAll || !el.fmguid || seenNonStorey.has(el.fmguid)) {
+      // Missing, forced-regenerate, or a duplicate's later occurrence — mint fresh.
       el.fmguid = randomUUID();
     }
     seenNonStorey.add(el.fmguid);
@@ -257,7 +296,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       ifcText: await readFile(filePath, 'utf8'),
     })));
 
-    const result = validateFederation(models);
+    const result = await validateFederation(models);
     console.log(`Total elements: ${result.stats.totalElements} (storeys: ${result.stats.storeyElements})`);
     console.log(`Had FmGuid: ${result.stats.hadFmguid}  Missing: ${result.stats.missing}`);
     console.log(`Duplicate FMGUID groups: ${result.stats.duplicateGroups} (${result.stats.duplicateElements} elements affected)`);

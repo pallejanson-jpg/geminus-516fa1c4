@@ -36,8 +36,9 @@ function normalizeStoreyName(name) {
  * Returns [{ fmguid, name, globalId, lineId }] — same shape parseStoreys
  * already produces, just re-exported here under the vocabulary Phase 4 uses.
  */
-function getModelStoreys(ifcText) {
-  return parseStoreys(ifcText).map(s => ({
+async function getModelStoreys(ifcText, onProgress) {
+  const parsed = await parseStoreys(ifcText, onProgress);
+  return parsed.map(s => ({
     fmguid: s.fmguid,
     name: s.name || null,
     globalId: s.globalId,
@@ -50,6 +51,12 @@ function getModelStoreys(ifcText) {
  *
  * @param {{fmguid, name, sequence}[]} canonicalStoreys - from Phase 1 or Phase 2
  * @param {{modelName: string, ifcText: string}[]} models
+ * @param {{ onProgress?: (modelName: string, overallFraction: number) => void }} [opts]
+ *   Optional, cosmetic only — same weighted-by-text-length approach as
+ *   validateFederation's `onProgress`. This function re-scans every line of
+ *   every model (via parseStoreys), so for large files it is NOT the "fast"
+ *   step it might look like — confirmed comparable in cost to
+ *   validateFederation on real multi-hundred-MB files.
  * @returns {{
  *   canonicalStoreys: Array,
  *   models: string[],
@@ -60,11 +67,21 @@ function getModelStoreys(ifcText) {
  *   unmatched: Array<{ modelName, modelStorey }>  // model storeys with no canonical suggestion at all
  * }}
  */
-function buildMatrix(canonicalStoreys, models) {
-  const parsedModels = models.map(({ modelName, ifcText }) => ({
-    modelName,
-    storeys: getModelStoreys(ifcText),
-  }));
+async function buildMatrix(canonicalStoreys, models, opts = {}) {
+  const { onProgress } = opts;
+  const totalChars = models.reduce((sum, m) => sum + m.ifcText.length, 0) || 1;
+  let charsDoneBefore = 0;
+
+  const parsedModels = [];
+  for (const { modelName, ifcText } of models) {
+    const modelChars = ifcText.length;
+    const storeys = await (onProgress
+      ? getModelStoreys(ifcText, (fraction) => onProgress(modelName, (charsDoneBefore + fraction * modelChars) / totalChars))
+      : getModelStoreys(ifcText));
+    charsDoneBefore += modelChars;
+    parsedModels.push({ modelName, storeys });
+  }
+  onProgress?.(null, 1);
 
   const canonicalByFmguid = new Map(canonicalStoreys.map(c => [c.fmguid, c]));
   const canonicalByNormName = new Map(

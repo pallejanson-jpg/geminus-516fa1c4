@@ -65,7 +65,7 @@ async function ingestFederation({ buildingIdentifier, architectFile, disciplineF
     }
     canonicalSource = 'architect-model';
     const architectIfcText = await readFile(architectFile.filePath, 'utf8');
-    canonicalStoreys = buildCanonicalStoreys(architectIfcText);
+    canonicalStoreys = await buildCanonicalStoreys(architectIfcText);
   }
 
   // ── Load every discipline model's raw text once, reused for both Phase 4 and Phase 5 ──
@@ -77,10 +77,10 @@ async function ingestFederation({ buildingIdentifier, architectFile, disciplineF
   );
 
   // ── Phase 4: storey reconciliation matrix (suggestions only, nothing applied yet) ──
-  const matrix = buildMatrix(canonicalStoreys, models);
+  const matrix = await buildMatrix(canonicalStoreys, models);
 
   // ── Phase 5: cross-model FMGUID validation (object-level, storeys excluded) ──
-  const guidValidation = validateFederation(models);
+  const guidValidation = await validateFederation(models);
 
   return { canonicalSource, building, canonicalStoreys, matrix, guidValidation };
 }

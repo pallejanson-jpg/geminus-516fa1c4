@@ -1,0 +1,479 @@
+import React, { useState } from 'react';
+
+interface DisciplineRow {
+  id: number;
+  name: string;
+  file: File | null;
+}
+
+interface CanonicalStorey {
+  fmguid: string;
+  name: string | null;
+  sequence: number | null;
+}
+
+interface ModelStorey {
+  fmguid: string | null;
+  name: string | null;
+  globalId: string;
+  lineId: string;
+}
+
+interface MatrixCell {
+  modelStorey: ModelStorey;
+  suggestedCanonicalFmguid: string;
+  confidence: 'fmguid-match' | 'name-match';
+}
+
+interface MatrixRow {
+  canonical: CanonicalStorey;
+  cells: Record<string, MatrixCell | undefined>;
+}
+
+interface UnmatchedEntry {
+  modelName: string;
+  modelStorey: ModelStorey;
+}
+
+interface Matrix {
+  canonicalStoreys: CanonicalStorey[];
+  models: string[];
+  rows: MatrixRow[];
+  unmatched: UnmatchedEntry[];
+}
+
+interface IngestResult {
+  sessionId: string;
+  canonicalSource: 'geminus-plus' | 'architect-model';
+  building: { fmguid: string; name: string | null } | null;
+  canonicalStoreys: CanonicalStorey[];
+  matrix: Matrix;
+  guidValidation: {
+    stats: { totalElements: number; storeyElements: number; hadFmguid: number; missing: number; duplicateGroups: number; duplicateElements: number };
+    duplicates: Array<{ fmguid: string; locations: Array<{ modelName: string; ifcType: string; globalId: string; name: string | null }> }>;
+  };
+}
+
+type Overrides = Record<string, Record<string, string | null>>;
+
+const UNMAPPED = '__unmapped__';
+let rowId = 0;
+
+interface BuildingCheckResult {
+  found: boolean;
+  building?: { fmguid: string; name: string | null };
+  storeys?: CanonicalStorey[];
+}
+
+export default function App() {
+  const [buildingIdentifier, setBuildingIdentifier] = useState('');
+  const [architectFile, setArchitectFile] = useState<File | null>(null);
+  const [disciplines, setDisciplines] = useState<DisciplineRow[]>([{ id: rowId++, name: '', file: null }]);
+  const [regenerateAllGuids, setRegenerateAllGuids] = useState(false);
+
+  const [buildingCheck, setBuildingCheck] = useState<BuildingCheckResult | null>(null);
+  const [checkingBuilding, setCheckingBuilding] = useState(false);
+  const [buildingCheckError, setBuildingCheckError] = useState<string | null>(null);
+
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState(0); // 0-100, combined upload+processing
+  const [progressLabel, setProgressLabel] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<IngestResult | null>(null);
+  const [overrides, setOverrides] = useState<Overrides>({});
+  const [confirmed, setConfirmed] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  function addDisciplineRow() {
+    setDisciplines(prev => [...prev, { id: rowId++, name: '', file: null }]);
+  }
+  function removeDisciplineRow(id: number) {
+    setDisciplines(prev => prev.filter(r => r.id !== id));
+  }
+  function updateDiscipline(id: number, patch: Partial<DisciplineRow>) {
+    setDisciplines(prev => prev.map(r => (r.id === id ? { ...r, ...patch } : r)));
+  }
+
+  // Lets the user confirm, before running a full analysis, whether Geminus
+  // Plus will actually take over as the source of truth for storeys — this
+  // already happens automatically in /api/ingest whenever the building is
+  // found (Geminus Plus wins over an uploaded architect model regardless),
+  // but that only becomes visible after the full upload+analysis completes.
+  // Checking it up front removes the guesswork, especially for a large
+  // architect file that's slow to upload/parse for no reason if Geminus
+  // Plus was going to be authoritative anyway.
+  async function checkBuilding() {
+    setBuildingCheckError(null);
+    setBuildingCheck(null);
+    if (!buildingIdentifier.trim()) return;
+    setCheckingBuilding(true);
+    try {
+      const res = await fetch('/api/lookup-building', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: buildingIdentifier.trim() }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Kunde inte slå upp byggnaden.');
+      setBuildingCheck(json);
+    } catch (err: any) {
+      setBuildingCheckError(err.message ?? String(err));
+    } finally {
+      setCheckingBuilding(false);
+    }
+  }
+
+  // Overall progress = upload phase (0-30, real byte progress via XHR) +
+  // processing phase (30-100, real server-side progress via polling).
+  // Uploads over localhost are typically fast even for huge files, so most
+  // of the bar's visible movement happens during processing — but for a
+  // slower network (once this is hosted on Render) the upload segment will
+  // matter more, hence tracking it for real rather than assuming it's instant.
+  function uploadWithProgress(form: FormData): Promise<{ jobId: string }> {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/api/ingest');
+      xhr.upload.onprogress = (e) => {
+        if (!e.lengthComputable) return;
+        setProgress(Math.round((e.loaded / e.total) * 30));
+        setProgressLabel('Laddar upp filer…');
+      };
+      xhr.onload = () => {
+        try {
+          const json = JSON.parse(xhr.responseText);
+          if (xhr.status >= 200 && xhr.status < 300) resolve(json);
+          else reject(new Error(json.error || `Uppladdning misslyckades (HTTP ${xhr.status}).`));
+        } catch {
+          reject(new Error(`Servern svarade oväntat (HTTP ${xhr.status}).`));
+        }
+      };
+      xhr.onerror = () => reject(new Error('Nätverksfel vid uppladdning.'));
+      xhr.send(form);
+    });
+  }
+
+  async function pollJob(jobId: string): Promise<IngestResult> {
+    while (true) {
+      const res = await fetch(`/api/ingest/${jobId}`);
+      const job = await res.json();
+      if (!res.ok) throw new Error(job.error || 'Kunde inte hämta analysstatus.');
+
+      if (job.status === 'error') throw new Error(job.error || 'Analysen misslyckades.');
+      if (job.status === 'done') {
+        setProgress(100);
+        return job.result as IngestResult;
+      }
+
+      setProgress(30 + Math.round((job.progress ?? 0) * 0.7));
+      setProgressLabel(job.stage || 'Bearbetar…');
+      await new Promise(r => setTimeout(r, 300));
+    }
+  }
+
+  async function runAnalysis() {
+    setError(null);
+    setLoading(true);
+    setProgress(0);
+    setProgressLabel('Laddar upp filer…');
+    setResult(null);
+    setConfirmed(false);
+    setOverrides({});
+    try {
+      const validRows = disciplines.filter(r => r.file && r.name.trim());
+      if (!architectFile && validRows.length === 0) {
+        throw new Error('Ladda upp minst en fil (arkitekt eller en disciplin).');
+      }
+
+      const form = new FormData();
+      if (buildingIdentifier.trim()) form.append('buildingIdentifier', buildingIdentifier.trim());
+      if (architectFile) form.append('architectFile', architectFile);
+      form.append('disciplineNames', JSON.stringify(validRows.map(r => r.name.trim())));
+      form.append('regenerateAllGuids', String(regenerateAllGuids));
+      for (const r of validRows) form.append('disciplineFiles', r.file as File);
+
+      const { jobId } = await uploadWithProgress(form);
+      setProgress(30);
+      setProgressLabel('Bearbetar…');
+      const json = await pollJob(jobId);
+      setResult(json);
+    } catch (err: any) {
+      setError(err.message ?? String(err));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function effectiveTarget(modelName: string, cell: MatrixCell | undefined): string {
+    if (!cell) return UNMAPPED;
+    const override = overrides[modelName]?.[cell.modelStorey.globalId];
+    if (override !== undefined) return override ?? UNMAPPED;
+    return cell.suggestedCanonicalFmguid;
+  }
+
+  function setOverride(modelName: string, globalId: string, canonicalFmguid: string | null) {
+    setOverrides(prev => ({ ...prev, [modelName]: { ...prev[modelName], [globalId]: canonicalFmguid } }));
+  }
+
+  async function confirmReconciliation() {
+    if (!result) return;
+    setError(null);
+    try {
+      const res = await fetch('/api/reconcile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: result.sessionId, overrides }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Kunde inte bekräfta mappningen.');
+      setConfirmed(true);
+    } catch (err: any) {
+      setError(err.message ?? String(err));
+    }
+  }
+
+  async function exportFiles() {
+    if (!result) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: result.sessionId }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || 'Export misslyckades.');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'ifc-federation-export.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      setError(err.message ?? String(err));
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  return (
+    <div className="app">
+      <div className="app-header">
+        <img src="/geminus-logo.png" alt="Geminus" />
+        <h1>IFC Federation</h1>
+      </div>
+      <p className="subtitle">Matcha våningar och tilldela unika FMGUID mellan flera disciplinmodeller.</p>
+
+      <div className="card">
+        <h2>1. Ladda upp modeller</h2>
+        <label>Byggnads-ID i Geminus Plus (FMGUID eller namn, valfritt)</label>
+        <div className="discipline-row" style={{ gridTemplateColumns: '1fr auto' }}>
+          <input
+            type="text"
+            value={buildingIdentifier}
+            onChange={e => { setBuildingIdentifier(e.target.value); setBuildingCheck(null); setBuildingCheckError(null); }}
+            placeholder="Lämna tomt om byggnaden är ny"
+          />
+          <button className="secondary" onClick={checkBuilding} disabled={checkingBuilding || !buildingIdentifier.trim()} type="button">
+            {checkingBuilding ? 'Kontrollerar…' : 'Kontrollera byggnad'}
+          </button>
+        </div>
+
+        {buildingCheckError && <div className="error" style={{ marginTop: '0.6rem' }}>{buildingCheckError}</div>}
+        {buildingCheck?.found && (
+          <div className="success" style={{ marginTop: '0.6rem' }}>
+            Hittad i Geminus Plus: <strong>{buildingCheck.building?.name ?? buildingCheck.building?.fmguid}</strong> ({buildingCheck.storeys?.length ?? 0} våningar).
+            Dessa våningsnamn och FMGUID används som facit — en eventuellt uppladdad arkitektmodell används då bara som en disciplin bland andra, inte som master.
+          </div>
+        )}
+        {buildingCheck && !buildingCheck.found && (
+          <div className="error" style={{ marginTop: '0.6rem' }}>
+            Byggnaden hittades inte i Geminus Plus. Ladda upp en arkitektmodell nedan — den används då som master för våningsstrukturen.
+          </div>
+        )}
+
+        <label>Arkitektmodell (krävs om byggnaden är ny)</label>
+        <input type="file" accept=".ifc" onChange={e => setArchitectFile(e.target.files?.[0] ?? null)} />
+
+        <label>Disciplinmodeller</label>
+        {disciplines.map(row => (
+          <div className="discipline-row" key={row.id}>
+            <input
+              type="text"
+              placeholder="Namn, t.ex. El"
+              value={row.name}
+              onChange={e => updateDiscipline(row.id, { name: e.target.value })}
+            />
+            <input type="file" accept=".ifc" onChange={e => updateDiscipline(row.id, { file: e.target.files?.[0] ?? null })} />
+            <button className="secondary" onClick={() => removeDisciplineRow(row.id)} type="button">Ta bort</button>
+          </div>
+        ))}
+
+        <label style={{ marginTop: '1.2rem' }}>Objekt-FMGUID (rum, tillgångar, m.m.)</label>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 400, color: 'var(--ink)', fontSize: '0.88rem', marginTop: '0.3rem' }}>
+          <input
+            type="checkbox"
+            style={{ width: 'auto' }}
+            checked={regenerateAllGuids}
+            onChange={e => setRegenerateAllGuids(e.target.checked)}
+          />
+          Generera om alla objekt-FMGUID, även de som redan finns
+        </label>
+        <p className="muted" style={{ marginTop: '0.3rem', fontSize: '0.8rem' }}>
+          {regenerateAllGuids
+            ? 'Alla rum/objekt får ett nytt FMGUID, oavsett vad de redan hade.'
+            : 'Standard: befintliga FMGUID på rum/objekt behålls. Bara saknade eller dubbla FMGUID åtgärdas.'}
+        </p>
+
+        <div className="row-actions">
+          <button className="secondary" onClick={addDisciplineRow} type="button" disabled={loading}>+ Lägg till disciplin</button>
+          <button onClick={runAnalysis} disabled={loading} type="button">{loading ? 'Analyserar…' : 'Analysera'}</button>
+        </div>
+
+        {loading && (
+          <div className="progress-wrap">
+            <div className="progress-label">
+              <span>{progressLabel}</span>
+              <span className="pct">{progress}%</span>
+            </div>
+            <div className="progress-track">
+              <div className="progress-fill" style={{ width: `${progress}%` }} />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      {result && (
+        <>
+          <div className="card">
+            <h2>2. Resultat</h2>
+            <p>
+              Källa för kanoniska våningar:{' '}
+              <strong>{result.canonicalSource === 'geminus-plus' ? `Geminus Plus (${result.building?.name ?? result.building?.fmguid})` : 'Arkitektmodell (ny byggnad)'}</strong>
+            </p>
+            <div className="stat-row">
+              <div className="stat"><span className="n">{result.guidValidation.stats.totalElements}</span><span className="l">element totalt</span></div>
+              <div className="stat"><span className="n">{result.guidValidation.stats.missing}</span><span className="l">saknade FMGUID</span></div>
+              <div className="stat"><span className="n">{result.guidValidation.stats.duplicateGroups}</span><span className="l">dubblettgrupper</span></div>
+              <div className="stat"><span className="n">{result.matrix.unmatched.length}</span><span className="l">omatchade våningar</span></div>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>3. Våningsmatchning</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Kanonisk våning</th>
+                  {result.matrix.models.map(m => <th key={m}>{m}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {result.matrix.rows.map(row => (
+                  <tr key={row.canonical.fmguid}>
+                    <td>
+                      {row.canonical.name ?? <span className="badge badge-unnamed">Namnlös</span>}
+                    </td>
+                    {result.matrix.models.map(modelName => {
+                      const cell = row.cells[modelName];
+                      if (!cell) return <td key={modelName} className="muted">— ingen träff —</td>;
+                      const target = effectiveTarget(modelName, cell);
+                      const isOverridden = overrides[modelName]?.[cell.modelStorey.globalId] !== undefined;
+                      return (
+                        <td key={modelName}>
+                          {cell.modelStorey.name ?? <em className="muted">(namnlös)</em>}
+                          {isOverridden
+                            ? <span className="badge badge-manual">Manuellt vald</span>
+                            : <span className={`badge ${cell.confidence === 'fmguid-match' ? 'badge-fmguid' : 'badge-name'}`}>{cell.confidence === 'fmguid-match' ? 'FMGUID' : 'Namnlikhet'}</span>}
+                          <select
+                            value={target}
+                            onChange={e => setOverride(modelName, cell.modelStorey.globalId, e.target.value === UNMAPPED ? null : e.target.value)}
+                            disabled={confirmed}
+                          >
+                            <option value={UNMAPPED}>— Ingen matchning —</option>
+                            {result.canonicalStoreys.map(c => (
+                              <option key={c.fmguid} value={c.fmguid}>{c.name ?? '(namnlös kanonisk våning)'}</option>
+                            ))}
+                          </select>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {result.matrix.unmatched.length > 0 && (
+              <>
+                <h3 style={{ marginTop: '1.5rem' }}>Omatchade våningar — tilldela manuellt</h3>
+                <table>
+                  <thead><tr><th>Modell</th><th>Våning i modellen</th><th>Tilldela till</th></tr></thead>
+                  <tbody>
+                    {result.matrix.unmatched.map(u => {
+                      const target = overrides[u.modelName]?.[u.modelStorey.globalId] ?? UNMAPPED;
+                      return (
+                        <tr key={`${u.modelName}:${u.modelStorey.globalId}`}>
+                          <td>{u.modelName}</td>
+                          <td>{u.modelStorey.name ?? <em className="muted">(namnlös)</em>}</td>
+                          <td>
+                            <select
+                              value={target}
+                              onChange={e => setOverride(u.modelName, u.modelStorey.globalId, e.target.value === UNMAPPED ? null : e.target.value)}
+                              disabled={confirmed}
+                            >
+                              <option value={UNMAPPED}>— Ingen matchning —</option>
+                              {result.canonicalStoreys.map(c => (
+                                <option key={c.fmguid} value={c.fmguid}>{c.name ?? '(namnlös kanonisk våning)'}</option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </>
+            )}
+
+            {result.guidValidation.duplicates.length > 0 && (
+              <>
+                <h3 style={{ marginTop: '1.5rem' }}>Dubbla FMGUID (åtgärdas automatiskt vid export)</h3>
+                <table>
+                  <thead><tr><th>FMGUID</th><th>Förekomster</th></tr></thead>
+                  <tbody>
+                    {result.guidValidation.duplicates.slice(0, 25).map(d => (
+                      <tr key={d.fmguid}>
+                        <td style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{d.fmguid}</td>
+                        <td>{d.locations.map(l => `${l.modelName}/${l.name ?? l.ifcType}`).join(', ')}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {result.guidValidation.duplicates.length > 25 && (
+                  <p className="muted">…och {result.guidValidation.duplicates.length - 25} till.</p>
+                )}
+              </>
+            )}
+
+            <div className="row-actions">
+              <button className="amber" onClick={confirmReconciliation} disabled={confirmed} type="button">
+                {confirmed ? 'Mappning bekräftad ✓' : 'Bekräfta mappning'}
+              </button>
+              <button onClick={exportFiles} disabled={!confirmed || exporting} type="button">
+                {exporting ? 'Exporterar…' : 'Exportera korrigerade IFC-filer (.zip)'}
+              </button>
+            </div>
+            {confirmed && <div className="success">Mappningen är bekräftad. Du kan nu exportera de korrigerade filerna.</div>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

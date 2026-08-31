@@ -1,0 +1,205 @@
+/*
+ * Palette matches the Geminus Revit add-ins' actual WPF dialogs (see
+ * C:\MDP\Geminus Revit Tools\Geminus.RevitAddin.v2023\UI\*.xaml and the
+ * logo at Geminus.RevitAddin.Core\Resources\logo.png), not an invented one —
+ * so this app reads as the same product family, not a one-off web tool:
+ *   --navy   #203B35  dark charcoal-green (dialog headers, primary text) —
+ *            same hex as the logo's "G" glyph.
+ *   --accent #1D9E75  teal-green brand accent (buttons, links, highlights)
+ *            — used across SelectModelDialog/SyncProgressDialog/KeycloakLoginDialog.
+ *   --steel  #3A5A52  secondary dark green.
+ *   --logo-bg #A7BB9D sage green, the logo's circular background.
+ *   --ice    #E9F1EC  light green-tinted panel background (this app's own
+ *            derivation, for tinted cards/badges — not sampled from the
+ *            add-in, which uses flat off-white panels instead).
+ *   --bg     #F5F5F2  warm off-white page/dialog background (SyncProgressDialog,
+ *            KeycloakLoginDialog).
+ *   --border #E0E0D8  border/divider tone used throughout the add-in dialogs.
+ *   --ink    #1A1A18  near-black body text.
+ *   --muted  #666660  muted/secondary text.
+ * Corner radii also match: 6px for cards/buttons, 4px for progress bars —
+ * same values found in SyncProgressDialog.xaml.
+ */
+:root {
+  --navy: #203B35;
+  --accent: #1D9E75;
+  --steel: #3A5A52;
+  --logo-bg: #A7BB9D;
+  --ice: #E9F1EC;
+  --bg: #F5F5F2;
+  --border: #E0E0D8;
+  --ink: #1A1A18;
+  --muted: #666660;
+  font-family: "Segoe UI", Calibri, Arial, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.app {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.app-header img {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--logo-bg);
+}
+
+h1 {
+  font-size: 1.6rem;
+  color: var(--navy);
+  margin: 0;
+}
+
+.subtitle {
+  color: var(--muted);
+  margin-top: 0;
+  margin-bottom: 2rem;
+}
+
+.card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(32, 59, 53, 0.06);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.card h2 {
+  font-size: 1.1rem;
+  color: var(--navy);
+  margin-top: 0;
+}
+
+label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+  margin-top: 0.9rem;
+}
+
+input[type="text"], input[type="file"], select {
+  width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background: white;
+  color: var(--ink);
+}
+input[type="text"]:focus, select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(29, 158, 117, 0.2);
+}
+
+.discipline-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr auto;
+  gap: 0.6rem;
+  align-items: end;
+  margin-top: 0.6rem;
+}
+
+button {
+  background: var(--navy);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { background: var(--steel); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button.secondary { background: var(--ice); color: var(--navy); }
+button.secondary:hover:not(:disabled) { background: var(--border); }
+button.danger { background: #B3261E; }
+button.amber { background: var(--accent); color: white; }
+button.amber:hover:not(:disabled) { background: #17805F; }
+
+.row-actions { display: flex; gap: 0.6rem; margin-top: 1rem; flex-wrap: wrap; }
+
+table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.85rem; }
+th, td { text-align: left; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--ice); vertical-align: top; }
+th { background: var(--navy); color: white; }
+tr:nth-child(even) td { background: #FAFCFA; }
+
+.badge { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.7rem; font-weight: 700; margin-left: 0.4rem; }
+.badge-fmguid { background: var(--ice); color: var(--navy); }
+.badge-name { background: #FFF3D6; color: #8A6100; }
+.badge-manual { background: var(--navy); color: white; }
+.badge-unnamed { background: #FBE1DF; color: #B3261E; }
+
+.muted { color: var(--muted); font-style: italic; }
+.error { color: #B3261E; background: #FBE1DF; padding: 0.75rem 1rem; border-radius: 6px; margin-top: 1rem; }
+.success { color: #17805F; background: #DCF0E8; padding: 0.75rem 1rem; border-radius: 6px; margin-top: 1rem; }
+
+.stat-row { display: flex; gap: 1.2rem; flex-wrap: wrap; margin-top: 0.75rem; }
+.stat { background: var(--ice); border-radius: 6px; padding: 0.75rem 1rem; min-width: 120px; }
+.stat .n { font-size: 1.5rem; font-weight: 700; color: var(--navy); display: block; }
+.stat .l { font-size: 0.75rem; color: var(--muted); }
+
+.progress-wrap { margin-top: 1.1rem; }
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.82rem;
+  color: var(--navy);
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+.progress-label .pct { font-variant-numeric: tabular-nums; color: var(--accent); }
+.progress-track {
+  position: relative;
+  height: 14px;
+  border-radius: 4px;
+  background: var(--ice);
+  overflow: hidden;
+}
+.progress-fill {
+  position: relative;
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, var(--navy), var(--accent));
+  transition: width 0.35s ease-out;
+  overflow: hidden;
+}
+.progress-fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.28) 0px,
+    rgba(255, 255, 255, 0.28) 10px,
+    transparent 10px,
+    transparent 20px
+  );
+  background-size: 28px 28px;
+  animation: progress-stripes 1s linear infinite;
+}
+@keyframes progress-stripes {
+  from { background-position: 0 0; }
+  to { background-position: 28px 0; }
+}

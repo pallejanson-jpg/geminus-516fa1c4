@@ -113,33 +113,71 @@ function findDataSectionEnd(lines) {
 }
 
 /**
- * Ensure the element with `globalId` has an `FmGuid` property set to
- * `fmguid`. Mutates `entities` (in place, appending new ones as needed) and
- * returns { created: boolean } for reporting.
+ * Build O(1)-lookup indices over `entities` once, up front, instead of
+ * re-scanning the whole entity list for every write. A real IFC file easily
+ * has tens of thousands of entities; without this, `ensureFmGuid` scanning
+ * `entities` (and every IFCRELDEFINESBYPROPERTIES in it) per assignment made
+ * a full federation-wide write pass effectively O(elements × entities) —
+ * confirmed to hang for minutes on a single real 2.2 MB / ~1,100-element
+ * discipline file before this fix. With the index this is O(entities) to
+ * build plus O(1) (amortized) per write.
  */
-function ensureFmGuid(entities, globalId, fmguid) {
-  const element = entities.find(e => splitAttrs(e.attrsText)[0] && unquote(splitAttrs(e.attrsText)[0]) === globalId);
-  if (!element) return { created: false, error: `No entity found with GlobalId ${globalId}` };
+function buildIndex(entities) {
+  const byLineId = new Map(entities.map(e => [e.lineId, e]));
+  // globalId -> entity[], NOT a single entity: confirmed against a real
+  // Science Tower export that the same native IFC GlobalId can legitimately
+  // appear on two distinct entities (e.g. two separate IFCFLOWTERMINAL lines,
+  // different line numbers, identical GlobalId — 147 such pairs in one real
+  // 2.4 MB file alone). A single-entity map silently picked one arbitrarily,
+  // leaving the other with no FmGuid written at all — a real data-loss bug,
+  // not a hypothetical one.
+  const byGlobalId = new Map();
+  const relsByElementLineId = new Map();
 
+  for (const e of entities) {
+    const firstAttr = splitAttrs(e.attrsText)[0];
+    if (firstAttr) {
+      const gid = unquote(firstAttr);
+      if (gid && gid !== firstAttr) { // only real quoted GlobalIds, not e.g. "$"
+        if (!byGlobalId.has(gid)) byGlobalId.set(gid, []);
+        byGlobalId.get(gid).push(e);
+      }
+    }
+
+    if (e.ifcType === 'IFCRELDEFINESBYPROPERTIES') {
+      const relAttrs = splitAttrs(e.attrsText);
+      if (relAttrs.length < 6) continue;
+      const objRefs = [...relAttrs[4].matchAll(/#(\d+)/g)].map(m => m[1]);
+      for (const objRef of objRefs) {
+        if (!relsByElementLineId.has(objRef)) relsByElementLineId.set(objRef, []);
+        relsByElementLineId.get(objRef).push(e);
+      }
+    }
+  }
+
+  return { entities, byLineId, byGlobalId, relsByElementLineId, nextId: nextLineId(entities) };
+}
+
+/**
+ * Ensure ONE specific entity has an `FmGuid` property set to `fmguid`.
+ * Mutates `index` in place (including appending new entities and indexing
+ * them) and returns { created: boolean }.
+ */
+function ensureFmGuidOnEntity(index, element, fmguid) {
   // Walk IFCRELDEFINESBYPROPERTIES -> IFCPROPERTYSET -> IFCPROPERTYSINGLEVALUE
   // to see if an FmGuid property is already wired to this element.
-  for (const rel of entities.filter(e => e.ifcType === 'IFCRELDEFINESBYPROPERTIES')) {
+  for (const rel of index.relsByElementLineId.get(element.lineId) ?? []) {
     const relAttrs = splitAttrs(rel.attrsText);
-    if (relAttrs.length < 6) continue;
-    const objRefs = [...relAttrs[4].matchAll(/#(\d+)/g)].map(m => m[1]);
-    if (!objRefs.includes(element.lineId)) continue;
-
     const psetRef = relAttrs[5].replace(/^#/, '');
-    const pset = entities.find(e => e.lineId === psetRef && e.ifcType === 'IFCPROPERTYSET');
-    if (!pset) continue;
+    const pset = index.byLineId.get(psetRef);
+    if (!pset || pset.ifcType !== 'IFCPROPERTYSET') continue;
 
-    const psetAttrs = splitAttrs(pset.attrsText);
     const refMatch = pset.attrsText.match(/\(([^)]*)\)\s*$/);
     const propRefs = refMatch ? refMatch[1].split(',').map(r => r.trim().replace(/^#/, '')).filter(Boolean) : [];
 
     for (const propRef of propRefs) {
-      const prop = entities.find(e => e.lineId === propRef && e.ifcType === 'IFCPROPERTYSINGLEVALUE');
-      if (!prop) continue;
+      const prop = index.byLineId.get(propRef);
+      if (!prop || prop.ifcType !== 'IFCPROPERTYSINGLEVALUE') continue;
       const propAttrs = splitAttrs(prop.attrsText);
       if (unquote(propAttrs[0]).toLowerCase() !== 'fmguid') continue;
 
@@ -156,27 +194,57 @@ function ensureFmGuid(entities, globalId, fmguid) {
   const elementAttrs = splitAttrs(element.attrsText);
   const ownerHistoryRef = elementAttrs[1] ?? '$';
 
-  let nextId = nextLineId(entities);
-  const propId = String(++nextId);
-  const psetId = String(++nextId);
-  const relId = String(++nextId);
+  const propId = String(++index.nextId);
+  const psetId = String(++index.nextId);
+  const relId = String(++index.nextId);
 
-  entities.push({ lineId: propId, ifcType: 'IFCPROPERTYSINGLEVALUE', attrsText: `${quote('FmGuid')},$,IFCTEXT(${quote(fmguid)}),$` });
-  entities.push({ lineId: psetId, ifcType: 'IFCPROPERTYSET', attrsText: `${quote(randomUUID())},${ownerHistoryRef},${quote('FM_Pset')},'',(#${propId})` });
-  entities.push({ lineId: relId, ifcType: 'IFCRELDEFINESBYPROPERTIES', attrsText: `${quote(randomUUID())},${ownerHistoryRef},$,$,(#${element.lineId}),#${psetId}` });
+  const propEntity = { lineId: propId, ifcType: 'IFCPROPERTYSINGLEVALUE', attrsText: `${quote('FmGuid')},$,IFCTEXT(${quote(fmguid)}),$` };
+  const psetEntity = { lineId: psetId, ifcType: 'IFCPROPERTYSET', attrsText: `${quote(randomUUID())},${ownerHistoryRef},${quote('FM_Pset')},'',(#${propId})` };
+  const relEntity = { lineId: relId, ifcType: 'IFCRELDEFINESBYPROPERTIES', attrsText: `${quote(randomUUID())},${ownerHistoryRef},$,$,(#${element.lineId}),#${psetId}` };
+
+  index.entities.push(propEntity, psetEntity, relEntity);
+  index.byLineId.set(propId, propEntity);
+  index.byLineId.set(psetId, psetEntity);
+  index.byLineId.set(relId, relEntity);
+  if (!index.relsByElementLineId.has(element.lineId)) index.relsByElementLineId.set(element.lineId, []);
+  index.relsByElementLineId.get(element.lineId).push(relEntity);
 
   return { created: true };
 }
 
-/** Set the Name attribute (3rd, index 2) on the element with `globalId`. */
-function setName(entities, globalId, name) {
-  const element = entities.find(e => splitAttrs(e.attrsText)[0] && unquote(splitAttrs(e.attrsText)[0]) === globalId);
-  if (!element) return { error: `No entity found with GlobalId ${globalId}` };
+/**
+ * Ensure EVERY entity with `globalId` has an `FmGuid` property set to
+ * `fmguid` — plural because a native IFC GlobalId can legitimately be shared
+ * by more than one entity in a real file (see `buildIndex`'s note). Applying
+ * the same value to all of them is the safe default: it guarantees no entity
+ * silently ends up with nothing written, at the cost of those entities then
+ * sharing an FMGUID the same way storeys intentionally do — an acceptable
+ * trade-off for a case business rule 3 didn't anticipate (that rule assumes
+ * "same GlobalId" implies "same object", which usually holds but isn't
+ * guaranteed by the IFC spec).
+ */
+function ensureFmGuid(index, globalId, fmguid) {
+  const matches = index.byGlobalId.get(globalId);
+  if (!matches || matches.length === 0) return { created: false, error: `No entity found with GlobalId ${globalId}` };
 
-  const attrs = splitAttrs(element.attrsText);
-  if (attrs.length < 3) return { error: `Entity ${globalId} has too few attributes to hold a Name` };
-  attrs[2] = quote(name);
-  element.attrsText = attrs.join(',');
+  let created = false;
+  for (const element of matches) {
+    if (ensureFmGuidOnEntity(index, element, fmguid).created) created = true;
+  }
+  return { created };
+}
+
+/** Set the Name attribute (3rd, index 2) on every entity with `globalId`. */
+function setName(index, globalId, name) {
+  const matches = index.byGlobalId.get(globalId);
+  if (!matches || matches.length === 0) return { error: `No entity found with GlobalId ${globalId}` };
+
+  for (const element of matches) {
+    const attrs = splitAttrs(element.attrsText);
+    if (attrs.length < 3) return { error: `Entity ${globalId} has too few attributes to hold a Name` };
+    attrs[2] = quote(name);
+    element.attrsText = attrs.join(',');
+  }
   return {};
 }
 
@@ -194,19 +262,20 @@ function setName(entities, globalId, name) {
  */
 function applyFederationWrites(ifcText, { storeyWrites = [], guidAssignments = [] } = {}) {
   const { lines, entities } = locateEntities(ifcText);
+  const index = buildIndex(entities);
   const report = { storeysWritten: 0, guidsWritten: 0, guidsCreated: 0, errors: [] };
 
   for (const write of storeyWrites) {
-    const nameResult = setName(entities, write.globalId, write.canonicalName ?? '');
+    const nameResult = setName(index, write.globalId, write.canonicalName ?? '');
     if (nameResult.error) { report.errors.push(nameResult.error); continue; }
-    const guidResult = ensureFmGuid(entities, write.globalId, write.canonicalFmguid);
+    const guidResult = ensureFmGuid(index, write.globalId, write.canonicalFmguid);
     if (guidResult.error) { report.errors.push(guidResult.error); continue; }
     if (guidResult.created) report.guidsCreated++;
     report.storeysWritten++;
   }
 
   for (const assignment of guidAssignments) {
-    const result = ensureFmGuid(entities, assignment.globalId, assignment.fmguid);
+    const result = ensureFmGuid(index, assignment.globalId, assignment.fmguid);
     if (result.error) { report.errors.push(result.error); continue; }
     if (result.created) report.guidsCreated++;
     report.guidsWritten++;
@@ -232,12 +301,21 @@ function applyFederationWrites(ifcText, { storeyWrites = [], guidAssignments = [
   }
 
   const newEntities = entities.filter(e => e.startLineIdx === undefined);
+  let finalLines = outputLines;
   if (newEntities.length > 0) {
+    // Real federations can generate tens of thousands of brand-new entities
+    // (e.g. every element in a file with zero pre-existing FmGuid properties
+    // needs a new property/pset/rel triplet). `Array.prototype.splice(i, 0,
+    // ...items)` passes each item as a call argument — confirmed to throw
+    // "Maximum call stack size exceeded" once `newEntities` reaches roughly
+    // this order of magnitude. `concat` takes whole arrays as arguments
+    // instead of spreading their contents onto the call stack, so it has no
+    // such limit.
     const insertAt = findDataSectionEnd(outputLines);
-    outputLines.splice(insertAt, 0, ...newEntities.map(serializeEntity));
+    finalLines = outputLines.slice(0, insertAt).concat(newEntities.map(serializeEntity), outputLines.slice(insertAt));
   }
 
-  return { ifcText: outputLines.join('\n'), report };
+  return { ifcText: finalLines.join('\n'), report };
 }
 
 export { applyFederationWrites, locateEntities };

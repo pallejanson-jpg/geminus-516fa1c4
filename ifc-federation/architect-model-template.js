@@ -23,6 +23,7 @@
 
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
+import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
 
 // Same first-attribute / name-attribute extraction as ifc-fmguid-prep/index.ts.
 function extractFirstAttr(attrs) {
@@ -63,7 +64,7 @@ function extractNameAttr(attrs) {
  * which property sets are attached to which element via
  * IFCRELDEFINESBYPROPERTIES, then resolve FmGuid per storey.
  */
-function parseStoreys(ifcText) {
+async function parseStoreys(ifcText, onProgress) {
   const storeys = [];
   const propMap = new Map();       // prop line id -> { name, value }
   const psetProps = new Map();     // pset line id -> [prop line ids]
@@ -73,7 +74,26 @@ function parseStoreys(ifcText) {
   let buffer = '';
   const entities = [];
 
-  for (const line of lines) {
+  // This loop is the dominant cost for a multi-million-line architect export
+  // (confirmed: ~13-25s for a 4.18M-line real file). Two things happen at
+  // the same ~100-times-total cadence, regardless of file size:
+  //  - onProgress(fraction), for UI feedback (optional, see other callers).
+  //  - yielding to the event loop (`await yieldToEventLoop()`), WITHOUT
+  //    which this synchronous loop starves Node's single thread for the
+  //    entire ~13-25s, and an HTTP server calling this can't even respond
+  //    to a "how's it going?" status request in the meantime. Confirmed in
+  //    practice: polling a progress endpoint during this exact loop (before
+  //    this fix) returned nothing until the whole parse finished, because
+  //    the process was too busy to service the request at all.
+  const total = lines.length;
+  const reportEvery = Math.max(1, Math.floor(total / 100));
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (i % reportEvery === 0) {
+      onProgress?.(i / total);
+      await yieldToEventLoop();
+    }
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('/*') || trimmed.startsWith('//')) continue;
     buffer += ' ' + trimmed;
@@ -84,6 +104,7 @@ function parseStoreys(ifcText) {
       if (m) entities.push({ lineId: m[1], rest: `${m[2]}|${m[3]}` });
     }
   }
+  onProgress?.(1);
 
   for (const { lineId, rest } of entities) {
     const pipeIdx = rest.indexOf('|');
@@ -154,8 +175,8 @@ function parseStoreys(ifcText) {
  * `sequence` is always `null` here, matching the shape from
  * geminus-plus-lookup.js's getStoreysForBuilding().
  */
-function buildCanonicalStoreys(ifcText) {
-  const parsed = parseStoreys(ifcText);
+async function buildCanonicalStoreys(ifcText, onProgress) {
+  const parsed = await parseStoreys(ifcText, onProgress);
   return parsed.map(s => ({
     fmguid: s.fmguid ?? randomUUID(),
     name: s.name || null,
