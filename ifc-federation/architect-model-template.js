@@ -22,8 +22,8 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import { randomUUID } from 'node:crypto';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
+import { deriveFmGuidFromIfcGuid } from './deterministic-guid.js';
 
 // Same first-attribute / name-attribute extraction as ifc-fmguid-prep/index.ts.
 function extractFirstAttr(attrs) {
@@ -178,7 +178,11 @@ async function parseStoreys(ifcText, onProgress) {
 async function buildCanonicalStoreys(ifcText, onProgress) {
   const parsed = await parseStoreys(ifcText, onProgress);
   return parsed.map(s => ({
-    fmguid: s.fmguid ?? randomUUID(),
+    // Derived from the storey's own IfcGuid, not random: if this same
+    // architect model is re-exported later with the same IfcGuid on this
+    // storey, the same FMGUID must come out again, or downstream systems
+    // will think it's a new storey. See deterministic-guid.js.
+    fmguid: s.fmguid ?? deriveFmGuidFromIfcGuid(s.globalId),
     name: s.name || null,
     sequence: null,
   }));

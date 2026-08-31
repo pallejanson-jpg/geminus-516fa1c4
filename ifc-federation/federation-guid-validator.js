@@ -19,9 +19,9 @@
  *    Duplicate -> hard blocker, re-minted (never treated as legitimate in v1).
  */
 
-import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { setImmediate as yieldToEventLoop } from 'node:timers/promises';
+import { deriveFmGuidFromIfcGuid } from './deterministic-guid.js';
 
 // Same product-type allowlist as ifc-fmguid-prep/index.ts.
 const IFC_PRODUCT_TYPES = new Set([
@@ -258,6 +258,19 @@ async function validateFederation(models, opts = {}) {
  *   non-storey object regardless of what it already had — for the case
  *   where existing FMGUIDs in the source files are not trusted and a clean
  *   slate is wanted instead of a minimal patch.
+ *
+ *   Every freshly-minted FMGUID (missing, forced-regenerate, or a
+ *   duplicate's later occurrence) is derived from that element's own
+ *   IfcGuid (see deterministic-guid.js), not random: if this same model
+ *   comes back later re-exported with the same IfcGuid on this object, the
+ *   same FMGUID must come out again, or downstream systems will think it's
+ *   a new object. This also means a duplicate caused by two DIFFERENT
+ *   elements accidentally sharing one existing FMGUID value resolves
+ *   correctly (each keeps/gets its own IfcGuid-derived identity), while a
+ *   duplicate caused by two elements sharing the same native IfcGuid (a
+ *   real, confirmed case — see ifc-writer.js's buildIndex note) consistently
+ *   derives the same value for both, matching how the writer already treats
+ *   that situation.
  * Returns the same `elements` array, now with every non-storey FMGUID unique
  * and every missing FMGUID filled in.
  */
@@ -269,8 +282,9 @@ function repairFederation({ elements }, opts = {}) {
     if (el.isStorey) continue;
 
     if (regenerateAll || !el.fmguid || seenNonStorey.has(el.fmguid)) {
-      // Missing, forced-regenerate, or a duplicate's later occurrence — mint fresh.
-      el.fmguid = randomUUID();
+      // Missing, forced-regenerate, or a duplicate's later occurrence — mint
+      // deterministically from this element's own IfcGuid.
+      el.fmguid = deriveFmGuidFromIfcGuid(el.globalId);
     }
     seenNonStorey.add(el.fmguid);
   }
