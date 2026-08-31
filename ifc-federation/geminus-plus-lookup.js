@@ -113,6 +113,33 @@ async function getBuildingByIdentifier(identifier) {
   return null;
 }
 
+/**
+ * List every building in Geminus Plus — for a UI dropdown, so the user picks
+ * a building by name instead of having to already know/type its FMGUID.
+ * Returns [{ fmguid, name }], sorted by name for a usable dropdown.
+ */
+async function getAllBuildings() {
+  assertConfigured();
+
+  const buildings = [];
+  let skip = 0;
+  const take = 200;
+
+  while (true) {
+    const page = await queryGeminusPlus([
+      ['objectType', '=', OBJECT_TYPE.BUILDING],
+    ], { skip, take });
+
+    if (page.length === 0) break;
+    buildings.push(...page.map(mapBuilding));
+    skip += page.length;
+    if (page.length < take) break;
+  }
+
+  buildings.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'sv'));
+  return buildings;
+}
+
 function mapBuilding(item) {
   return {
     fmguid: item.fmGuid,
@@ -187,7 +214,7 @@ function mapStorey(item) {
   };
 }
 
-export { getBuildingByIdentifier, getStoreysForBuilding };
+export { getBuildingByIdentifier, getStoreysForBuilding, getAllBuildings };
 
 // ── Manual CLI check: node ifc-federation/geminus-plus-lookup.js <buildingIdentifier> ──
 import { pathToFileURL } from 'node:url';

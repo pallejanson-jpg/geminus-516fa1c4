@@ -36,7 +36,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { getBuildingByIdentifier, getStoreysForBuilding } from '../ifc-federation/geminus-plus-lookup.js';
+import { getBuildingByIdentifier, getStoreysForBuilding, getAllBuildings } from '../ifc-federation/geminus-plus-lookup.js';
 import { buildCanonicalStoreys } from '../ifc-federation/architect-model-template.js';
 import { buildMatrix, applyReconciliation } from '../ifc-federation/storey-reconciliation.js';
 import { validateFederation, repairFederation } from '../ifc-federation/federation-guid-validator.js';
@@ -98,6 +98,17 @@ app.post('/api/lookup-building', async (req, res) => {
 
     const storeys = await getStoreysForBuilding(building.fmguid);
     res.json({ found: true, building, storeys });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── List every Geminus Plus building, for a dropdown instead of requiring
+//    the user to already know/type a building's FMGUID. ────────────────────
+app.get('/api/buildings', async (req, res) => {
+  try {
+    const buildings = await getAllBuildings();
+    res.json({ buildings });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 interface DisciplineRow {
   id: number;
@@ -65,15 +65,43 @@ interface BuildingCheckResult {
   storeys?: CanonicalStorey[];
 }
 
+interface BuildingOption {
+  fmguid: string;
+  name: string | null;
+}
+
+const NEW_BUILDING = '__new__';
+
 export default function App() {
   const [buildingIdentifier, setBuildingIdentifier] = useState('');
   const [architectFile, setArchitectFile] = useState<File | null>(null);
   const [disciplines, setDisciplines] = useState<DisciplineRow[]>([{ id: rowId++, name: '', file: null }]);
   const [regenerateAllGuids, setRegenerateAllGuids] = useState(false);
 
+  const [buildings, setBuildings] = useState<BuildingOption[]>([]);
+  const [buildingsLoading, setBuildingsLoading] = useState(true);
+  const [buildingsError, setBuildingsError] = useState<string | null>(null);
+
   const [buildingCheck, setBuildingCheck] = useState<BuildingCheckResult | null>(null);
   const [checkingBuilding, setCheckingBuilding] = useState(false);
   const [buildingCheckError, setBuildingCheckError] = useState<string | null>(null);
+
+  // Load the Geminus Plus building list once, so the user picks from a
+  // dropdown instead of needing to already know a building's FMGUID.
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch('/api/buildings');
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || 'Kunde inte hämta byggnadslistan.');
+        setBuildings(json.buildings);
+      } catch (err: any) {
+        setBuildingsError(err.message ?? String(err));
+      } finally {
+        setBuildingsLoading(false);
+      }
+    })();
+  }, []);
 
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0); // 0-100, combined upload+processing
@@ -94,24 +122,24 @@ export default function App() {
     setDisciplines(prev => prev.map(r => (r.id === id ? { ...r, ...patch } : r)));
   }
 
-  // Lets the user confirm, before running a full analysis, whether Geminus
-  // Plus will actually take over as the source of truth for storeys — this
-  // already happens automatically in /api/ingest whenever the building is
-  // found (Geminus Plus wins over an uploaded architect model regardless),
-  // but that only becomes visible after the full upload+analysis completes.
-  // Checking it up front removes the guesswork, especially for a large
-  // architect file that's slow to upload/parse for no reason if Geminus
-  // Plus was going to be authoritative anyway.
-  async function checkBuilding() {
+  // Shows the selected building's storey count immediately after picking it
+  // from the dropdown — Geminus Plus wins over an uploaded architect model
+  // as the source of truth automatically in /api/ingest whenever a building
+  // is selected, but that would otherwise only become visible after the
+  // full upload+analysis completes. Runs automatically on selection change
+  // (see the <select> below), not behind a separate button — the dropdown
+  // itself already proves the building exists, so there's nothing left to
+  // "check" except how many storeys it has.
+  async function checkBuilding(fmguid: string) {
     setBuildingCheckError(null);
     setBuildingCheck(null);
-    if (!buildingIdentifier.trim()) return;
+    if (!fmguid || fmguid === NEW_BUILDING) return;
     setCheckingBuilding(true);
     try {
       const res = await fetch('/api/lookup-building', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: buildingIdentifier.trim() }),
+        body: JSON.stringify({ identifier: fmguid }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Kunde inte slå upp byggnaden.');
@@ -271,29 +299,29 @@ export default function App() {
 
       <div className="card">
         <h2>1. Ladda upp modeller</h2>
-        <label>Byggnads-ID i Geminus Plus (FMGUID eller namn, valfritt)</label>
-        <div className="discipline-row" style={{ gridTemplateColumns: '1fr auto' }}>
-          <input
-            type="text"
-            value={buildingIdentifier}
-            onChange={e => { setBuildingIdentifier(e.target.value); setBuildingCheck(null); setBuildingCheckError(null); }}
-            placeholder="Lämna tomt om byggnaden är ny"
-          />
-          <button className="secondary" onClick={checkBuilding} disabled={checkingBuilding || !buildingIdentifier.trim()} type="button">
-            {checkingBuilding ? 'Kontrollerar…' : 'Kontrollera byggnad'}
-          </button>
-        </div>
+        <label>Byggnad i Geminus Plus</label>
+        <select
+          value={buildingIdentifier || NEW_BUILDING}
+          disabled={buildingsLoading}
+          onChange={e => {
+            const fmguid = e.target.value;
+            setBuildingIdentifier(fmguid === NEW_BUILDING ? '' : fmguid);
+            checkBuilding(fmguid);
+          }}
+        >
+          <option value={NEW_BUILDING}>{buildingsLoading ? 'Laddar byggnader…' : '— Ny byggnad (finns inte i Geminus Plus) —'}</option>
+          {buildings.map(b => (
+            <option key={b.fmguid} value={b.fmguid}>{b.name ?? b.fmguid}</option>
+          ))}
+        </select>
+        {buildingsError && <div className="error" style={{ marginTop: '0.6rem' }}>Kunde inte hämta byggnadslistan: {buildingsError}</div>}
 
+        {checkingBuilding && <p className="muted" style={{ marginTop: '0.5rem' }}>Hämtar våningar…</p>}
         {buildingCheckError && <div className="error" style={{ marginTop: '0.6rem' }}>{buildingCheckError}</div>}
         {buildingCheck?.found && (
           <div className="success" style={{ marginTop: '0.6rem' }}>
-            Hittad i Geminus Plus: <strong>{buildingCheck.building?.name ?? buildingCheck.building?.fmguid}</strong> ({buildingCheck.storeys?.length ?? 0} våningar).
+            <strong>{buildingCheck.building?.name ?? buildingCheck.building?.fmguid}</strong> har {buildingCheck.storeys?.length ?? 0} registrerade våningar i Geminus Plus.
             Dessa våningsnamn och FMGUID används som facit — en eventuellt uppladdad arkitektmodell används då bara som en disciplin bland andra, inte som master.
-          </div>
-        )}
-        {buildingCheck && !buildingCheck.found && (
-          <div className="error" style={{ marginTop: '0.6rem' }}>
-            Byggnaden hittades inte i Geminus Plus. Ladda upp en arkitektmodell nedan — den används då som master för våningsstrukturen.
           </div>
         )}
 
