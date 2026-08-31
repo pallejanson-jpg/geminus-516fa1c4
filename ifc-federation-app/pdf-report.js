@@ -32,6 +32,9 @@ const GREEN = '#17805F';
 const RED = '#B3261E';
 const NAVY = '#203B35';
 const MUTED = '#666660';
+const HEADER_BG = '#E9F1EC';
+const ROW_ALT_BG = '#F5F5F2';
+const BORDER = '#E0E0D8';
 
 const LEFT = 50;
 const RIGHT = 545; // A4 width 595pt - 50pt margin
@@ -132,17 +135,9 @@ async function generateIdsReportPdf(idsResults) {
                 .text(requirement.description, LEFT + 16, doc.y, { width: CONTENT_WIDTH - 16 });
             });
           }
-          for (const failed of requirement.failed_entities ?? []) {
-            ensureSpace(doc, 24);
-            markedLine(doc, LEFT + 16, false, () => {
-              doc.fontSize(8.5).fillColor(NAVY).font('Helvetica')
-                .text(`${failed.class} "${failed.name ?? '(unnamed)'}" - ${failed.global_id}`, LEFT + 32, doc.y, { width: CONTENT_WIDTH - 32 });
-            });
-            if (failed.reason) {
-              row(doc, LEFT + 32, () => {
-                doc.fontSize(8).fillColor(MUTED).font('Helvetica-Oblique').text(failed.reason, LEFT + 32, doc.y, { width: CONTENT_WIDTH - 32 });
-              });
-            }
+          const failedEntities = requirement.failed_entities ?? [];
+          if (failedEntities.length > 0) {
+            drawFailedEntitiesTable(doc, LEFT + 16, CONTENT_WIDTH - 16, failedEntities);
           }
         }
         doc.moveDown(0.5);
@@ -165,6 +160,73 @@ async function generateIdsReportPdf(idsResults) {
 
 function ensureSpace(doc, needed) {
   if (doc.y + needed > PAGE_BOTTOM) doc.addPage();
+}
+
+const TABLE_COLS = [
+  { key: 'class', header: 'Type', widthFrac: 0.16 },
+  { key: 'name', header: 'Name', widthFrac: 0.24 },
+  { key: 'global_id', header: 'Global ID', widthFrac: 0.26 },
+  { key: 'reason', header: 'Reason', widthFrac: 0.34 },
+];
+const TABLE_CELL_PAD = 4;
+const TABLE_HEADER_HEIGHT = 18;
+
+/**
+ * Bordered table of failing entities for one requirement: Type / Name /
+ * Global ID / Reason. Repeats its header row on every page it spans, since
+ * a failure list can run to hundreds of rows on a real building.
+ */
+function drawFailedEntitiesTable(doc, x, width, entities) {
+  const cols = TABLE_COLS.map(c => ({ ...c, width: width * c.widthFrac }));
+
+  function drawHeader() {
+    ensureSpace(doc, TABLE_HEADER_HEIGHT + 4);
+    const y = doc.y;
+    doc.rect(x, y, width, TABLE_HEADER_HEIGHT).fill(HEADER_BG);
+    let cx = x;
+    doc.fontSize(8).fillColor(NAVY).font('Helvetica-Bold');
+    for (const col of cols) {
+      doc.text(col.header, cx + TABLE_CELL_PAD, y + 5, { width: col.width - TABLE_CELL_PAD * 2 });
+      cx += col.width;
+    }
+    doc.rect(x, y, width, TABLE_HEADER_HEIGHT).stroke(BORDER);
+    doc.y = y + TABLE_HEADER_HEIGHT;
+    doc.x = x;
+  }
+
+  drawHeader();
+
+  entities.forEach((failed, i) => {
+    const values = [
+      failed.class ?? '',
+      failed.name ?? '(unnamed)',
+      failed.global_id ?? '',
+      failed.reason ?? '',
+    ];
+    doc.fontSize(8).font('Helvetica');
+    const rowHeight = Math.max(
+      ...cols.map((col, ci) => doc.heightOfString(values[ci], { width: col.width - TABLE_CELL_PAD * 2 }))
+    ) + TABLE_CELL_PAD * 2;
+
+    if (doc.y + rowHeight > PAGE_BOTTOM) {
+      doc.addPage();
+      drawHeader();
+    }
+
+    const y = doc.y;
+    if (i % 2 === 1) doc.rect(x, y, width, rowHeight).fill(ROW_ALT_BG);
+    let cx = x;
+    doc.fillColor(NAVY);
+    for (let ci = 0; ci < cols.length; ci++) {
+      doc.text(values[ci], cx + TABLE_CELL_PAD, y + TABLE_CELL_PAD, { width: cols[ci].width - TABLE_CELL_PAD * 2 });
+      cx += cols[ci].width;
+    }
+    doc.rect(x, y, width, rowHeight).stroke(BORDER);
+    doc.y = y + rowHeight;
+    doc.x = x;
+  });
+
+  doc.moveDown(0.3);
 }
 
 /** Run `draw` with doc.x/doc.y reset to a known (x, current y) so text calls inside it don't drift. */

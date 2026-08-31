@@ -1,28 +1,27 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Layers, ChevronDown, ChevronUp, Eye, EyeOff } from 'lucide-react';
+import * as WebIFC from 'web-ifc';
 
 /**
- * FederationViewer — ported from the main Geminus app's
- * src/components/geminus-tools/FederationViewer.tsx (Phase 6 of
- * docs/plans/ifc-federation-plan.md), rewritten against this app's plain
- * CSS instead of Tailwind/shadcn so it has no dependency on the main app's
- * design system. Behavior is otherwise identical — same xeokit SDK
- * bootstrap, same per-entity `.colorize`/`.xrayed`/`.opacity` API, same
- * model-level (not per-object) focus/fade linked to the matrix.
+ * FederationViewer — loads raw uploaded IFC files directly via xeokit's
+ * WebIFCLoaderPlugin (backed by the `web-ifc` WASM module), instead of
+ * requiring a pre-converted .xkt file. This trades some load-time
+ * performance on very large files (parsing + tessellation happens in the
+ * browser, not pre-baked on a server) for skipping the IFC->XKT conversion
+ * pipeline entirely — the standalone app has no such pipeline, and building
+ * one is a separate, bigger piece of work than just wiring this in.
  *
- * Requires real .xkt files to show anything. This app has no IFC->XKT
- * conversion step yet (the main Geminus app has one, `ifc-to-xkt`, as a
- * Supabase edge function) — until that's wired in here too, `models` will
- * be empty and this renders its "no models yet" placeholder. Porting the
- * viewer and porting the conversion pipeline are two separate pieces of
- * work; this is only the former.
+ * `models[].file` is the same File object the user picked in the upload
+ * form (App.tsx) — turned into a blob URL here and fed straight to the
+ * loader, so no server round-trip is needed to view a model.
  */
 
 const XEOKIT_SDK_PATH = '/lib/xeokit/xeokit-sdk.es.js';
+const WEB_IFC_WASM_PATH = '/lib/xeokit/';
 
 export interface FederationViewerModel {
   modelName: string;
-  xktUrl: string;
+  file: File;
   /** RGB, 0-1 range. */
   color: [number, number, number];
 }
@@ -52,12 +51,14 @@ export default function FederationViewer({ models, focusedModelName }: Federatio
 
   useEffect(() => {
     let cancelled = false;
+    const blobUrls: string[] = [];
 
     async function bootstrap() {
       if (!canvasRef.current || models.length === 0) return;
 
       setLoadState({ status: 'loading-sdk' });
       let sdk: any;
+      let ifcApi: any;
       try {
         if ((window as any).__xeokitSdk) {
           sdk = (window as any).__xeokitSdk;
@@ -65,8 +66,11 @@ export default function FederationViewer({ models, focusedModelName }: Federatio
           sdk = await import(/* @vite-ignore */ `${XEOKIT_SDK_PATH}?v=3`);
           (window as any).__xeokitSdk = sdk;
         }
+        ifcApi = new WebIFC.IfcAPI();
+        ifcApi.SetWasmPath(WEB_IFC_WASM_PATH);
+        await ifcApi.Init();
       } catch (err: any) {
-        if (!cancelled) setLoadState({ status: 'error', error: `Kunde inte ladda xeokit-SDK: ${err?.message ?? err}` });
+        if (!cancelled) setLoadState({ status: 'error', error: `Could not load the 3D engine: ${err?.message ?? err}` });
         return;
       }
       if (cancelled) return;
@@ -82,13 +86,28 @@ export default function FederationViewer({ models, focusedModelName }: Federatio
       viewer.camera.up = [0, 1, 0];
       viewerRef.current = viewer;
 
-      const xktLoader = new sdk.XKTLoaderPlugin(viewer, { reuseGeometries: true });
+      // WebIFCDefaultDataSource isn't exported by this SDK build, and its
+      // default cache-busting (appending `?_=<timestamp>` to every src URL)
+      // silently breaks blob: URLs, which don't support query strings --
+      // confirmed by a failed XHR (status 0) purely from that suffix. This
+      // minimal custom data source just fetches the blob URL as-is.
+      const ifcLoader = new sdk.WebIFCLoaderPlugin(viewer, {
+        WebIFC,
+        IfcAPI: ifcApi,
+        dataSource: {
+          getIFC(src: string, ok: (buf: ArrayBuffer) => void, error: (msg: any) => void) {
+            fetch(src).then(r => r.arrayBuffer()).then(ok).catch(error);
+          },
+        },
+      });
 
       setLoadState({ status: 'loading-models' });
       try {
-        await Promise.all(models.map(({ modelName, xktUrl, color }) =>
-          new Promise<void>((resolve, reject) => {
-            const entity = xktLoader.load({ id: modelName, src: xktUrl, edges: true });
+        await Promise.all(models.map(({ modelName, file, color }) => {
+          const blobUrl = URL.createObjectURL(file);
+          blobUrls.push(blobUrl);
+          return new Promise<void>((resolve, reject) => {
+            const entity = ifcLoader.load({ id: modelName, src: blobUrl, edges: true });
             entity.on('loaded', () => {
               if (cancelled) return resolve();
               entity.colorize = [color[0] * 255, color[1] * 255, color[2] * 255];
@@ -96,8 +115,8 @@ export default function FederationViewer({ models, focusedModelName }: Federatio
               resolve();
             });
             entity.on('error', (msg: string) => reject(new Error(`${modelName}: ${msg}`)));
-          })
-        ));
+          });
+        }));
         if (!cancelled) {
           viewer.cameraFlight.flyTo({ aabb: viewer.scene.aabb, duration: 0 });
           setLoadState({ status: 'ready' });
@@ -111,12 +130,13 @@ export default function FederationViewer({ models, focusedModelName }: Federatio
 
     return () => {
       cancelled = true;
+      blobUrls.forEach(url => URL.revokeObjectURL(url));
       viewerRef.current?.destroy?.();
       viewerRef.current = null;
       loadedEntitiesRef.current.clear();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [models.map(m => m.xktUrl).join('|')]);
+  }, [models.map(m => `${m.modelName}:${m.file.name}:${m.file.size}`).join('|')]);
 
   useEffect(() => {
     for (const [modelName, entity] of loadedEntitiesRef.current) {
@@ -144,7 +164,7 @@ export default function FederationViewer({ models, focusedModelName }: Federatio
 
       {models.length === 0 && (
         <div className="viewer-overlay viewer-overlay-muted">
-          No models to show yet — requires converted .xkt files (see README).
+          No models to show yet — upload and analyze at least one IFC file above.
         </div>
       )}
 
@@ -162,7 +182,7 @@ export default function FederationViewer({ models, focusedModelName }: Federatio
         <div className="viewer-legend">
           <button className="viewer-legend-toggle" onClick={() => setLegendOpen(p => !p)} aria-expanded={legendOpen} type="button">
             <Layers size={12} style={{ opacity: 0.7 }} />
-            <span>Discipliner</span>
+            <span>Disciplines</span>
             {legendOpen ? <ChevronUp size={12} style={{ marginLeft: 'auto', opacity: 0.6 }} /> : <ChevronDown size={12} style={{ marginLeft: 'auto', opacity: 0.6 }} />}
           </button>
           {legendOpen && (

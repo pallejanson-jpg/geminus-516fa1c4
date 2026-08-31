@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--", "--port", "8080"],
       "port": 8080
+    },
+    {
+      "name": "ifc-federation-client",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "ifc-federation-app/client", "run", "dev", "--", "--port", "5180"],
+      "port": 5180
     }
   ]
 }

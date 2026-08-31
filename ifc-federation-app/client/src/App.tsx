@@ -88,6 +88,17 @@ interface BuildingOption {
 
 const NEW_BUILDING = '__new__';
 
+// RGB (0-1 range) per model, cycled by upload order — architect first.
+const VIEWER_PALETTE: Array<[number, number, number]> = [
+  [0.72, 0.72, 0.80], // architect
+  [0.95, 0.85, 0.10],
+  [0.10, 0.42, 0.90],
+  [0.10, 0.75, 0.65],
+  [0.90, 0.18, 0.18],
+  [0.65, 0.22, 0.85],
+  [0.62, 0.52, 0.38],
+];
+
 export default function App() {
   const [buildingIdentifier, setBuildingIdentifier] = useState('');
   const [architectFile, setArchitectFile] = useState<File | null>(null);
@@ -129,11 +140,21 @@ export default function App() {
   const [exporting, setExporting] = useState(false);
   const [focusedModelName, setFocusedModelName] = useState<string | null>(null);
 
-  // Empty until IFC->XKT conversion exists in this app (the main Geminus app
-  // has one, `ifc-to-xkt`, as a Supabase edge function — porting that is
-  // separate work from porting the viewer itself). Placeholder colours are
-  // ready to use the moment real xktUrls are available per model.
-  const viewerModels: FederationViewerModel[] = [];
+  // Built from the same File objects already sitting in this component's
+  // upload state — the viewer loads IFC directly via WebIFCLoaderPlugin, so
+  // no server-side XKT conversion step is needed. Only populated once an
+  // analysis has actually run, so the model names line up with the matrix.
+  const viewerModels: FederationViewerModel[] = React.useMemo(() => {
+    if (!result) return [];
+    const models: FederationViewerModel[] = [];
+    if (architectFile) models.push({ modelName: 'architect', file: architectFile, color: VIEWER_PALETTE[0] });
+    disciplines.forEach((row, i) => {
+      if (row.file && row.name.trim()) {
+        models.push({ modelName: row.name.trim(), file: row.file, color: VIEWER_PALETTE[(i + 1) % VIEWER_PALETTE.length] });
+      }
+    });
+    return models;
+  }, [result, architectFile, disciplines]);
 
   const [idsResults, setIdsResults] = useState<IdsResults | null>(null);
   const [validatingIds, setValidatingIds] = useState(false);
@@ -513,10 +534,13 @@ export default function App() {
 
           <div className="card">
             <h2>3. Storey matching</h2>
+            <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
+              Source of truth: <strong>{result.canonicalSource === 'geminus-plus' ? `Geminus Plus (${result.building?.name ?? result.building?.fmguid})` : 'architect model'}</strong> — every other model is matched against its storeys below.
+            </p>
             <table>
               <thead>
                 <tr>
-                  <th>Canonical storey</th>
+                  <th>Canonical storey (source of truth)</th>
                   {result.matrix.models.map(m => (
                     <th key={m} onMouseEnter={() => setFocusedModelName(m)} onMouseLeave={() => setFocusedModelName(null)}>{m}</th>
                   ))}

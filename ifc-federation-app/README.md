@@ -34,15 +34,34 @@ Phase 2 (arkitektmodell-fallback), Phase 4 (matchningsmatris), Phase 5
 
 **Phase 6 (3D-viewer, xeokit) är nu porterad** från huvudappens
 `FederationViewer.tsx`/`FederationWorkspace.tsx` — [`client/src/FederationViewer.tsx`](client/src/FederationViewer.tsx),
-omskriven mot denna apps vanliga CSS istället för Tailwind/shadcn, i övrigt
-identisk logik (samma xeokit-SDK-bootstrap, samma per-disciplin-färgläggning,
-samma fokus/tona-ner kopplat till matrisen via hover). **Kräver dock
-konverterade `.xkt`-filer för att visa något** — den här appen har ingen
-IFC→XKT-konvertering ännu (huvudappen har en, `ifc-to-xkt`, som Supabase
-edge function). Att portera viewern och att portera konverteringssteget är
-två separata jobb; bara det förra är gjort. Tills konverteringen finns
-visar viewer-sektionen ett tydligt "inga modeller ännu"-läge istället för
-att krascha eller låtsas fungera.
+omskriven mot denna apps vanliga CSS istället för Tailwind/shadcn.
+
+**Laddar IFC direkt i webbläsaren via xeokits `WebIFCLoaderPlugin`** (backad
+av `web-ifc`/WASM), istället för att kräva en förkonverterad `.xkt`-fil —
+samma `File`-objekt som redan valts i uppladdningsformuläret återanvänds
+direkt (blob-URL), ingen serveromväg eller konverteringssteg behövs. Detta
+är en medveten avvägning: tolkning + tesselering sker i webbläsaren istället
+för i förväg på en server, vilket är långsammare för mycket stora filer
+(100+ MB) än förkonverterad XKT skulle vara — men det sparar hela
+konverteringspipelinen, som annars vore ett separat, stort jobb.
+
+Kräver att `client/public/lib/xeokit/web-ifc.wasm` och `web-ifc-mt.wasm`
+**exakt matchar** versionen av `web-ifc`-npm-paketet i `client/package.json`
+— annars kastar `WebAssembly.instantiate()` ett `LinkError` (verifierat i
+praktiken: en wasm-fil kopierad från huvudappens `public/lib/xeokit/`, som
+råkade vara byggd mot en annan `web-ifc`-version, gav exakt detta fel). Vid
+uppgradering av `web-ifc`, kopiera de nya `.wasm`-filerna från
+`client/node_modules/web-ifc/` efter `npm install`.
+
+**Kräver även att cache-buster stängs av för dataSource** — SDK-bundlens
+standard-datakälla för denna loader (`WebIFCDefaultDataSource`) lägger
+annars till `?_=<timestamp>` på varje `src`-URL, vilket är ofarligt för
+riktiga HTTP-URL:er men gör `blob:`-URL:er ogiltiga (de stödjer inte
+query-strängar) — verifierat i praktiken: gav ett förvirrande
+`"getXKT error : null"`-fel (ett copy-paste-kvarleva i SDK-bundlens
+felmeddelande — det är faktiskt `getIFC()` som misslyckas, inte `getXKT()`).
+Lösning: en egen minimal `dataSource`-config som bara gör `fetch(src)` utan
+cache-busting, se kommentaren i `FederationViewer.tsx`.
 
 ## Köra lokalt
 
