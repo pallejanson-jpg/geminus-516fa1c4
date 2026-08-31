@@ -88,30 +88,30 @@ export const AI_FILTER_SYNC_EVENT = 'AI_FILTER_SYNC';
 
 function getContextualGreeting(context?: GeminusAIContext): string {
   if (context?.currentBuilding?.name) {
-    return `Hej! Jag ser att du tittar på **${context.currentBuilding.name}**. Fråga mig om utrustning, system, rum eller be mig markera objekt i 3D-viewern!`;
+    return `Hi! I can see you're looking at **${context.currentBuilding.name}**. Ask me about equipment, systems, rooms, or ask me to highlight objects in the 3D viewer!`;
   }
-  return `Hej! Jag är Geminus AI, din digitala tvillingassistent. Jag kan:\n\n• Söka utrustning och system\n• Markera objekt i 3D-viewern\n• Ge byggnadsöversikter\n• Visa sensordata och inomhusklimat\n• Svara på frågor om underhållsdokumentation\n\nVad vill du veta?`;
+  return `Hi! I'm Geminus AI, your digital twin assistant. I can:\n\n• Search equipment and systems\n• Highlight objects in the 3D viewer\n• Give building overviews\n• Show sensor data and indoor climate\n• Answer questions about maintenance documentation\n\nWhat would you like to know?`;
 }
 
 function getStarterQuestions(context?: GeminusAIContext): string[] {
   if (context?.currentBuilding?.name) {
     const b = context.currentBuilding.name;
     return [
-      `Hur många rum finns i ${b}?`,
-      "Visa ventilationen i 3D",
-      "Vilket rum har högst temperatur?",
-      "Finns det öppna ärenden?",
-      "Vad säger skötseldokumentet?",
-      "Visa arbetsordrar",
+      `How many rooms are in ${b}?`,
+      "Show ventilation in 3D",
+      "Which room has the highest temperature?",
+      "Are there any open work orders?",
+      "What does the maintenance manual say?",
+      "Show work orders",
     ];
   }
   return [
-    "Vilka byggnader finns?",
-    "Visa ventilationen",
-    "Hur många rum finns det?",
-    "Vilka arbetsordrar är öppna?",
-    "Visa underhållsdokumentation",
-    "Vilket rum är varmast?",
+    "Which buildings are available?",
+    "Show ventilation",
+    "How many rooms are there?",
+    "Which work orders are open?",
+    "Show maintenance documentation",
+    "Which room is the warmest?",
   ];
 }
 
@@ -358,12 +358,12 @@ const GeminusAIChat = React.forwardRef<HTMLDivElement, GeminusAIChatProps>(funct
     if (response.action === 'colorize' && response.color_map && Object.keys(response.color_map).length > 0) {
       viewerCommand = { action: 'colorize', colorMap: response.color_map, sensorData: response.sensor_data };
       const sensorCount = response.sensor_data?.length || Object.keys(response.color_map).length;
-      toastMsg = `Visar sensordata för ${sensorCount} objekt`;
+      toastMsg = `Showing sensor data for ${sensorCount} objects`;
     } else if (response.external_entity_ids?.length) {
       switch (response.action) {
         case 'highlight':
           viewerCommand = { action: 'highlight', entityIds: response.external_entity_ids };
-          toastMsg = `Markerar ${response.external_entity_ids.length} objekt i viewern`;
+          toastMsg = `Highlighting ${response.external_entity_ids.length} objects in viewer`;
           break;
         case 'filter':
           viewerCommand = { action: 'filter', entityIds: response.external_entity_ids };
@@ -674,7 +674,7 @@ const GeminusAIChat = React.forwardRef<HTMLDivElement, GeminusAIChatProps>(funct
       {/* Starter questions — shown only on the initial greeting */}
       {messages.length === 1 && !isLoading && (
         <div className="space-y-1.5 pt-1">
-          <p className="text-xs text-muted-foreground px-0.5">{t("Prova att fråga:", "Try asking:")}</p>
+          <p className="text-xs text-muted-foreground px-0.5">{"Try asking:"}</p>
           <div className="flex flex-wrap gap-1.5">
             {getStarterQuestions(context).map((q, i) => (
               <button
