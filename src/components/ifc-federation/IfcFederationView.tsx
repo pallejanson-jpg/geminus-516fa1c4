@@ -1,11 +1,13 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, lazy, Suspense } from 'react';
 import {
   Upload, FileText, X, ChevronRight, AlertTriangle,
-  CheckCircle2, Wrench, Download, RotateCcw, Info,
+  CheckCircle2, Wrench, Download, RotateCcw, Info, Cuboid,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Spinner } from '@/components/ui/spinner';
+
+const FederationXeokitView = lazy(() => import('./FederationXeokitView'));
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -60,7 +62,7 @@ const DISCIPLINE_COLORS: Record<string, string> = {
   'Okänd':        'bg-muted text-muted-foreground',
 };
 
-type Step = 'upload' | 'processing' | 'matrix';
+type Step = 'upload' | 'processing' | 'matrix' | 'viewer';
 
 // ── Upload step ───────────────────────────────────────────────────────────────
 
@@ -504,6 +506,25 @@ export default function IfcFederationView() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  if (step === 'viewer' && matrix) {
+    return (
+      <div className="flex flex-col min-h-full h-full bg-background">
+        <Suspense fallback={
+          <div className="flex flex-1 items-center justify-center gap-3">
+            <Spinner size="lg" />
+            <span className="text-sm text-muted-foreground">Laddar 3D-visaren…</span>
+          </div>
+        }>
+          <FederationXeokitView
+            models={models}
+            matrix={matrix}
+            onBack={() => setStep('matrix')}
+          />
+        </Suspense>
+      </div>
+    );
+  }
+
   if (step === 'processing') {
     return (
       <div className="flex flex-col min-h-full bg-background items-center justify-center gap-4">
@@ -548,6 +569,9 @@ export default function IfcFederationView() {
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { setStep('upload'); setMatrix(null); setValidation(null); }}>
             <RotateCcw className="h-3.5 w-3.5" /> Börja om
+          </Button>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setStep('viewer')}>
+            <Cuboid className="h-3.5 w-3.5" /> Öppna i 3D
           </Button>
           <Button size="sm" className="gap-1.5" onClick={handleConfirm}>
             <Download className="h-3.5 w-3.5" /> Bekräfta & exportera
