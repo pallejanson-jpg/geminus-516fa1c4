@@ -62,15 +62,20 @@ const AiChat = () => {
   }, []);
 
   return (
-    <div className="h-screen w-screen bg-background">
-      <GeminusAIChat
-        open={true}
-        onClose={handleClose}
-        context={context}
-        embedded
-        autoVoice={autoVoice}
-        onAutoVoiceConsumed={handleAutoVoiceConsumed}
-      />
+    <div className="h-screen w-screen bg-black/90 flex items-center justify-center">
+      <div
+        className="relative flex flex-col overflow-hidden rounded-2xl shadow-2xl border border-white/10 bg-background"
+        style={{ width: "min(440px, 100vw)", height: "min(720px, 100vh)" }}
+      >
+        <GeminusAIChat
+          open={true}
+          onClose={handleClose}
+          context={context}
+          embedded
+          autoVoice={autoVoice}
+          onAutoVoiceConsumed={handleAutoVoiceConsumed}
+        />
+      </div>
     </div>
   );
 };
