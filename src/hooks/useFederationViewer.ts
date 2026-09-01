@@ -142,7 +142,7 @@ export function useFederationViewer(canvasRef: React.RefObject<HTMLCanvasElement
     // Lazy-load SDK
     let sdk: any;
     try {
-      sdk = await import('/lib/xeokit/xeokit-sdk.es.js' as string);
+      sdk = await import(/* @vite-ignore */ '/lib/xeokit/xeokit-sdk.es.js');
     } catch (e) {
       setState(s => ({ ...s, status: 'error', error: 'Kunde inte ladda xeokit SDK' }));
       return;

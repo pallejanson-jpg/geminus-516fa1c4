@@ -167,5 +167,11 @@ export default defineConfig(({ mode }) => {
     global: 'globalThis',
     CESIUM_BASE_URL: JSON.stringify('/cesiumStatic'),
   },
+  build: {
+    rollupOptions: {
+      // xeokit SDK is served as a public asset at /lib/xeokit/ — not bundled
+      external: ['/lib/xeokit/xeokit-sdk.es.js'],
+    },
+  },
   };
 });
