@@ -1260,8 +1260,8 @@ function buttonFromLabel(label: string, context: any): ActionButton {
   const lower = label.toLowerCase().trim();
   const buildingGuid = context?.currentBuilding?.fmGuid;
 
-  // Building overview — capture a named building if present ("Översikt Akerselva Atrium")
-  const ovMatch = lower.match(/^(?:byggnadsöversikt|översikt|building overview|overview|sammanfattning)\s+(.+)$/i);
+  // Building overview — capture a named building if present ("Overview of Akerselva Atrium")
+  const ovMatch = lower.match(/^(?:byggnadsöversikt|översikt|building overview|overview|sammanfattning)\s+(?:of|for|för|av)?\s*(.+)$/i);
   if (ovMatch) {
     return { label, action: "building_summary", payload: { name: ovMatch[1].trim() } };
   }
@@ -1400,7 +1400,7 @@ function detectButtonAction(messages: any[], context: any): ButtonActionIntent |
   const buildingGuid = context?.currentBuilding?.fmGuid;
 
   // Exact or near-exact matches for common button texts
-  const ovMatch2 = lower.match(/^(?:byggnadsöversikt|översikt|overview|building overview)\s+(.+)$/i);
+  const ovMatch2 = lower.match(/^(?:byggnadsöversikt|översikt|overview|building overview)\s+(?:of|for|för|av)?\s*(.+)$/i);
   if (ovMatch2) return { action: "building_summary", payload: { name: ovMatch2[1].trim() } };
   if (/^byggnadsöversikt/i.test(lower) || /^översikt$/i.test(lower)) return { action: "building_summary", payload: {} };
   if (/^visa alla rum$/i.test(lower) || /^show all rooms$/i.test(lower)) return { action: "category_query", payload: { category: "Space" } };
