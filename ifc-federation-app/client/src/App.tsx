@@ -118,6 +118,14 @@ const VIEWER_PALETTE: Array<[number, number, number]> = [
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>('upload');
+  // The 3D view tab's content stays display:none until visited, so its
+  // FederationViewer must be mounted lazily on first visit rather than
+  // whenever `result` becomes available -- mounting it while the tab is
+  // still hidden meant xeokit measured a 0x0 canvas at bootstrap time and
+  // never recovered even after switching to the tab (confirmed: canvas
+  // stuck permanently at width=0/height=0, models never rendered).
+  const [viewerVisited, setViewerVisited] = useState(false);
+  useEffect(() => { if (activeTab === 'viewer') setViewerVisited(true); }, [activeTab]);
   const [buildingIdentifier, setBuildingIdentifier] = useState('');
   const [architectFile, setArchitectFile] = useState<File | null>(null);
   const [disciplines, setDisciplines] = useState<DisciplineRow[]>([{ id: rowId++, name: '', file: null }]);
@@ -693,7 +701,7 @@ export default function App() {
             <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
               Hover a discipline in the matrix above (on the Storey matching tab) to focus it here and fade out the others — useful for checking whether the models actually align with each other.
             </p>
-            <FederationViewer models={viewerModels} focusedModelName={focusedModelName} />
+            {viewerVisited && <FederationViewer models={viewerModels} focusedModelName={focusedModelName} />}
           </div>
       )}
       </div>
