@@ -1,8 +1,8 @@
 node_modules
 dist
 .claude
-ifc-federation-app
-mcp
-supabase
-faciliate-connector
+/ifc-federation-app
+/mcp
+/supabase
+/faciliate-connector
 *.log
