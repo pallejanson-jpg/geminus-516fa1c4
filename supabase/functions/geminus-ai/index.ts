@@ -291,11 +291,11 @@ const tools = [
     type: "function",
     function: {
       name: "query_faciliate",
-      description: "Query Faciliate FM data: work orders (arbetsorder), fault reports (felanmälan), rental contracts (hyreskontrakt, object_type 'rentlandlord') and planned maintenance (planerat underhåll, 'maintenance'). Data is a cached copy synced from Faciliate. Use for questions about work order status, open issues, contracts, and maintenance plans.",
+      description: "Query Faciliate FM data: work orders/fault reports (arbetsorder/felanmälan, object_type 'workorder'), buildings (byggnader, object_type 'building'), rental contracts (hyreskontrakt, object_type 'RentContract'), preventive maintenance routines (förebyggande underhåll, object_type 'PreventiveRoutine'). Data is a cached copy synced from Faciliate. Use for questions about work order status, open issues, buildings, contracts, and maintenance plans.",
       parameters: {
         type: "object",
         properties: {
-          object_type: { type: "string", enum: ["workorder", "rentlandlord", "maintenance"], description: "Which Faciliate object type to query" },
+          object_type: { type: "string", enum: ["workorder", "building", "RentContract", "PreventiveRoutine"], description: "Which Faciliate object type to query" },
           status: { type: "string", description: "Optional status filter, partial match on the status title (e.g. 'Öppen', 'Avslutad')" },
           building: { type: "string", description: "Optional building filter — matches building name (e.g. 'Småviken') or Faciliate building ID. If the cache has no building info yet, the result flags building_filter_unavailable." },
           fm_guid: { type: "string", description: "Optional FM GUID filter — matches room_cad_key, floor_cad_key, or building_cad_key. Use to find work orders for a specific room, floor, or building selected in the viewer." },
@@ -876,7 +876,7 @@ async function execQueryFaciliate(supabase: any, args: any) {
   const { data, error } = await query.limit(100);
   if (error) throw error;
   const rows = data || [];
-  const label = objectType === "rentlandlord" ? "rental contracts" : objectType === "maintenance" ? "planned maintenance" : "work orders";
+  const label = objectType === "RentContract" ? "rental contracts" : objectType === "PreventiveRoutine" ? "preventive maintenance routines" : objectType === "building" ? "buildings" : "work orders";
   if (rows.length === 0) {
     return {
       object_type: objectType,
@@ -1909,7 +1909,7 @@ async function executeButtonAction(supabase: any, intent: ButtonActionIntent, co
 
     case "faciliate_count": {
       const objectType = intent.payload.object_type || "workorder";
-      const label = objectType === "rentlandlord" ? "rental contracts" : objectType === "maintenance" ? "planned maintenance records" : "work orders";
+      const label = objectType === "RentContract" ? "rental contracts" : objectType === "PreventiveRoutine" ? "maintenance routines" : objectType === "building" ? "buildings" : "work orders";
       const res: any = await execQueryFaciliate(supabase, { object_type: objectType, mode: "count" });
       if (res.hint) {
         return {
@@ -2126,8 +2126,8 @@ function detectViewerIntent(messages: any[], context: any): ButtonActionIntent |
   if (facMatch) {
     const buildingScoped = /\b(for|i|pa)\s+\S/.test(folded) || !!context?.currentBuilding?.fmGuid;
     if (buildingScoped) return null; // let the AI handle building-scoped Faciliate questions
-    const obj = /hyreskontrakt|kontrakt|rentlandlord/.test(folded) ? "rentlandlord"
-      : /underhall|maintenance/.test(folded) ? "maintenance" : "workorder";
+    const obj = /hyreskontrakt|kontrakt|rentlandlord/.test(folded) ? "RentContract"
+      : /underhall|maintenance|preventive/.test(folded) ? "PreventiveRoutine" : "workorder";
     return { action: "faciliate_count", payload: { object_type: obj } };
   }
 
@@ -2322,14 +2322,16 @@ VIEWER VISUALIZATION (colorize):
 - To color specific objects (e.g. "visa alla innerdörrar blåa i 3D"): query_assets(mode="list", category="Instance", asset_type="IfcDoor", name_search="innerdörr") → present_results with action="colorize" and color_map mapping EACH matching asset fm_guid to [R,G,B] (0-255). fm_guids are auto-resolved to viewer entity ids.
 - RGB examples: blå=[0,100,255], röd=[255,60,60], grön=[0,200,0], gul=[255,220,0], orange=[255,150,0].
 
-FACILIATE FM DATA (work orders, contracts, maintenance):
-- For questions about work orders/fault reports (arbetsorder, felanmälan), rental contracts (hyreskontrakt) or planned maintenance (planerat underhåll), use query_faciliate.
-- object_type: "workorder" (work orders & fault reports), "rentlandlord" (contracts), "maintenance" (planned maintenance).
+FACILIATE FM DATA (work orders, buildings, contracts, maintenance):
+- For questions about work orders/fault reports (arbetsorder, felanmälan), buildings (byggnader), rental contracts (hyreskontrakt) or preventive maintenance (förebyggande underhåll), use query_faciliate.
+- object_type values: "workorder" (work orders & fault reports), "building" (buildings in Faciliate), "RentContract" (rental contracts), "PreventiveRoutine" (preventive maintenance routines).
 - status filter matches the status TITLE: use "Öppen" for open, "Avslutad" for closed (not numbers).
 - BUILDING SCOPE: when the user asks about a specific building (e.g. "för Småviken"), pass building="<name>" to query_faciliate. If the result has building_filter_unavailable=true, give the TOTAL and add a brief plain note that you can't break it down per building right now. NEVER present a global total as if it were the building's count.
 - Example "hur många öppna arbetsordrar finns?": query_faciliate(object_type="workorder", status="Öppen", mode="count").
+- Example "vilka byggnader finns i Faciliate?": query_faciliate(object_type="building", mode="list").
+- Example "visa hyreskontrakt": query_faciliate(object_type="RentContract", mode="list").
 - TONE ON MISSING DATA: if a tool returns a hint/note that you have no information, relay it in plain everyday language. NEVER mention internal plumbing — no "cache", "synk", "connector", "databas", "administratör". Just say e.g. "Jag har ingen information om planerat underhåll just nu." Do NOT state as fact that there are zero records.
-- When listing work orders, format as a clean numbered/bulleted list (not a wide table): "**Titel** — status" per line. Suggest concrete follow-ups (e.g. "Visa bara öppna", "Visa felanmälningar").
+- When listing work orders or buildings, format as a clean numbered/bulleted list (not a wide table): "**Titel** — status/ID" per line. Suggest concrete follow-ups.
 
 PREDICTIVE MAINTENANCE & SPACE OPTIMIZATION (Insights AI):
 - For questions about maintenance risks, equipment health, upcoming failures, or "vilket underhåll behövs" / "vilken utrustning är i riskzonen": call run_predictive_maintenance(building_guid). It returns predictions with riskLevel (high/medium/low), category, estimatedTimeToFailure, and an overallRiskScore. Summarize highlights — start with high-risk items.

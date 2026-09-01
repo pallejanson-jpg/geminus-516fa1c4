@@ -41,7 +41,7 @@ const CFG = {
   username: process.env.FACILIATE_USERNAME || '',
   password: process.env.FACILIATE_PASSWORD || '',
   accessToken: process.env.FACILIATE_ACCESS_TOKEN || '',
-  syncObjects: (process.env.FACILIATE_SYNC_OBJECTS || 'workorder,rentlandlord,maintenance').split(',').map(s => s.trim()).filter(Boolean),
+  syncObjects: (process.env.FACILIATE_SYNC_OBJECTS || 'building,workorder,RentContract,PreventiveRoutine').split(',').map(s => s.trim()).filter(Boolean),
   pageSize: Number(process.env.FACILIATE_PAGE_SIZE || 200),
   supabaseUrl: (process.env.SUPABASE_URL || '').replace(/\/+$/, ''),
   serviceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
@@ -99,12 +99,16 @@ async function apiFetch(method, path, { body, query } = {}) {
   return data;
 }
 
+// Object types that need fullprimary loadlevel to get nested building/room/floor data.
+const FULLPRIMARY_TYPES = new Set(['workorder', 'Workorder', 'RentContract', 'PreventiveOccasionHead']);
+
 /** Fetch all records of an object type, paging through with take/skip. Optional filter (e.g. `BuildingID eq "S1"`). */
 async function fetchAll(objectType, filter) {
   const all = [];
   let skip = 0;
+  const loadlevel = FULLPRIMARY_TYPES.has(objectType) ? 'fullprimary' : 'simple';
   for (;;) {
-    const query = { take: String(CFG.pageSize), skip: String(skip), loadlevel: 'simple' };
+    const query = { take: String(CFG.pageSize), skip: String(skip), loadlevel };
     if (filter) query.filter = filter;
     const data = await apiFetch('GET', `/api/v2/${objectType}`, { query });
     const items = Array.isArray(data) ? data : (data?.data || data?.items || []);
@@ -133,19 +137,27 @@ function parseCadKey(v) {
 }
 
 function toRow(objectType, r) {
+  // For building objects, ID and Title are at the top level.
+  // For workorders, building info is in the nested Building object (fullprimary loadlevel).
+  const buildingObj = r.Building && typeof r.Building === 'object' ? r.Building : null;
+  const floorObj    = r.Floor    && typeof r.Floor    === 'object' ? r.Floor    : null;
+  const roomObj     = r.Room     && typeof r.Room     === 'object' ? r.Room     : null;
+
   return {
     object_type: objectType,
     source_guid: String(pick(r, 'guid', 'Guid', 'GUID', 'id', 'ID') ?? cryptoRandom()),
     title: pick(r, 'title', 'Title', 'WorkorderDescriptionPlain', 'Description', 'name', 'Name'),
-    // Prefer the human-readable status title ("Avslutad"/"Öppen") over the numeric code.
+    // Prefer the human-readable status title over numeric codes.
     status: pick(r, 'WorkorderStatusTitle', 'StatusTitle', 'status', 'Status', 'WorkorderStatus') != null
       ? String(pick(r, 'WorkorderStatusTitle', 'StatusTitle', 'status', 'Status', 'WorkorderStatus')) : null,
-    building_id: String(nestedVal(r, 'Building', 'ID', 'Id', 'id') ?? pick(r, 'BuildingID', 'BuildingCadKey') ?? '') || null,
-    building_name: nestedVal(r, 'Building', 'Title', 'Name', 'title') ?? nestedVal(r, 'Property', 'Title', 'Name') ?? null,
-    // BIM cross-reference keys — link work orders to Geminus Plus assets by FM GUID.
-    building_cad_key: parseCadKey(pick(r, 'BuildingCadKey')),
-    floor_cad_key:    parseCadKey(pick(r, 'FloorCadKey')),
-    room_cad_key:     parseCadKey(pick(r, 'RoomCadKey')),
+    // Building info: from nested Building object (workorders) or top-level ID (building records).
+    building_id:   buildingObj ? String(pick(buildingObj, 'ID', 'Id', 'id') ?? '') || null
+                               : String(pick(r, 'ID', 'BuildingID') ?? '') || null,
+    building_name: buildingObj ? pick(buildingObj, 'Title', 'Name') : pick(r, 'Title', 'Name'),
+    // BIM cross-reference CadKeys — from nested objects (workorders) or top-level (building records).
+    building_cad_key: parseCadKey(buildingObj?.CadKey ?? pick(r, 'BuildingCadKey', 'CadKey')),
+    floor_cad_key:    parseCadKey(floorObj?.CadKey    ?? pick(r, 'FloorCadKey')),
+    room_cad_key:     parseCadKey(roomObj?.CadKey     ?? pick(r, 'RoomCadKey')),
     raw: r,
   };
 }
