@@ -87,15 +87,31 @@ interface AiStructuredResponse {
 export const AI_FILTER_SYNC_EVENT = 'AI_FILTER_SYNC';
 
 function getContextualGreeting(context?: GeminusAIContext): string {
+  const standalone = context?.activeApp === "ai-standalone";
   if (context?.currentBuilding?.name) {
-    return `Hi! I can see you're looking at **${context.currentBuilding.name}**. Ask me about equipment, systems, rooms, or ask me to highlight objects in the 3D viewer!`;
+    return standalone
+      ? `Hi! I can see you're looking at **${context.currentBuilding.name}**. Ask me about rooms, equipment, work orders, or maintenance.`
+      : `Hi! I can see you're looking at **${context.currentBuilding.name}**. Ask me about equipment, systems, rooms, or ask me to highlight objects in the 3D viewer!`;
   }
-  return `Hi! I'm Geminus AI, your digital twin assistant. I can:\n\n• Search equipment and systems\n• Highlight objects in the 3D viewer\n• Give building overviews\n• Show sensor data and indoor climate\n• Answer questions about maintenance documentation\n\nWhat would you like to know?`;
+  return standalone
+    ? `Hi! I'm Geminus AI. I can answer questions about buildings, rooms, equipment, work orders, contracts, and maintenance.\n\nWhat would you like to know?`
+    : `Hi! I'm Geminus AI, your digital twin assistant. I can:\n\n• Search equipment and systems\n• Highlight objects in the 3D viewer\n• Give building overviews\n• Show sensor data and indoor climate\n• Answer questions about maintenance documentation\n\nWhat would you like to know?`;
 }
 
 function getStarterQuestions(context?: GeminusAIContext): string[] {
+  const standalone = context?.activeApp === "ai-standalone";
   if (context?.currentBuilding?.name) {
     const b = context.currentBuilding.name;
+    if (standalone) {
+      return [
+        `How many rooms are in ${b}?`,
+        "Are there any open work orders?",
+        "Show work orders",
+        "Which room has the highest temperature?",
+        "Show rental contracts",
+        "What does the maintenance manual say?",
+      ];
+    }
     return [
       `How many rooms are in ${b}?`,
       "Show ventilation in 3D",
@@ -103,6 +119,16 @@ function getStarterQuestions(context?: GeminusAIContext): string[] {
       "Are there any open work orders?",
       "What does the maintenance manual say?",
       "Show work orders",
+    ];
+  }
+  if (standalone) {
+    return [
+      "Which buildings are available?",
+      "How many work orders are there?",
+      "Show rental contracts",
+      "Show maintenance routines",
+      "Which work orders are open?",
+      "Show maintenance documentation",
     ];
   }
   return [
@@ -428,7 +454,7 @@ const GeminusAIChat = React.forwardRef<HTMLDivElement, GeminusAIChatProps>(funct
 
       const controller = new AbortController();
       abortRef.current = controller;
-      const timeout = setTimeout(() => controller.abort(), 60000);
+      const timeout = setTimeout(() => controller.abort(), 120000);
 
       try {
         const apiMessages = trimHistory(newMessages);
@@ -504,7 +530,7 @@ const GeminusAIChat = React.forwardRef<HTMLDivElement, GeminusAIChatProps>(funct
 
         const controller = new AbortController();
         abortRef.current = controller;
-        const timeout = setTimeout(() => controller.abort(), 60000);
+        const timeout = setTimeout(() => controller.abort(), 120000);
 
         try {
           const apiMessages = trimHistory(newMessages);
