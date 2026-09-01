@@ -205,6 +205,17 @@ async function validateFederation(models, opts = {}) {
   }
   onProgress?.(null, 1);
 
+  return { elements, ...computeValidationStats(elements) };
+}
+
+/**
+ * Recomputes `duplicates`/`stats` from the current state of `elements` —
+ * shared by `validateFederation()` (first pass, after parsing) and callers
+ * that mutate `elements` afterward (e.g. /api/apply-fmguid, after
+ * `repairFederation` scoped to a chosen set of categories) and need fresh
+ * numbers reflecting those mutations.
+ */
+function computeValidationStats(elements) {
   // Global map, storeys excluded — they're allowed (expected) to repeat.
   const byFmguid = new Map();
   for (const el of elements) {
@@ -227,7 +238,6 @@ async function validateFederation(models, opts = {}) {
   const hadFmguid = elements.filter(el => el.fmguid).length;
 
   return {
-    elements,
     duplicates,
     stats: {
       totalElements: elements.length,
@@ -275,11 +285,16 @@ async function validateFederation(models, opts = {}) {
  * and every missing FMGUID filled in.
  */
 function repairFederation({ elements }, opts = {}) {
-  const { regenerateAll = false } = opts;
+  const { regenerateAll = false, includeTypes = null } = opts;
   const seenNonStorey = new Set();
 
   for (const el of elements) {
     if (el.isStorey) continue;
+    // includeTypes lets the caller scope generation to a chosen subset of
+    // categories (e.g. from the IDS validation tab's per-category picker) —
+    // an element outside that set is left exactly as parsed, whether that
+    // means keeping an existing FMGUID or staying missing.
+    if (includeTypes && !includeTypes.has(el.ifcType)) continue;
 
     if (regenerateAll || !el.fmguid || seenNonStorey.has(el.fmguid)) {
       // Missing, forced-regenerate, or a duplicate's later occurrence — mint
@@ -292,7 +307,27 @@ function repairFederation({ elements }, opts = {}) {
   return elements;
 }
 
-export { validateFederation, repairFederation, parseElements };
+/**
+ * Per-IFC-type breakdown of FMGUID coverage, for the "which categories have
+ * FMGUID and which don't" report — storeys excluded (they're handled by the
+ * separate storey-reconciliation flow, not this per-object one).
+ * @returns {Array<{ ifcType: string, total: number, withFmguid: number, missing: number }>}
+ *   Sorted by ifcType.
+ */
+function categoryCounts(elements) {
+  const byType = new Map();
+  for (const el of elements) {
+    if (el.isStorey) continue;
+    if (!byType.has(el.ifcType)) byType.set(el.ifcType, { ifcType: el.ifcType, total: 0, withFmguid: 0, missing: 0 });
+    const c = byType.get(el.ifcType);
+    c.total++;
+    if (el.fmguid) c.withFmguid++;
+    else c.missing++;
+  }
+  return [...byType.values()].sort((a, b) => a.ifcType.localeCompare(b.ifcType));
+}
+
+export { validateFederation, repairFederation, parseElements, categoryCounts, computeValidationStats };
 
 // ── Manual CLI check: node ifc-federation/federation-guid-validator.js <file1.ifc> <file2.ifc> ... ──
 import { pathToFileURL } from 'node:url';

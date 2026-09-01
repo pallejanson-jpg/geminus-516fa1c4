@@ -29,6 +29,13 @@ export interface FederationViewerModel {
 export interface FederationViewerProps {
   models: FederationViewerModel[];
   focusedModelName?: string | null;
+  /**
+   * IFC GlobalIds to highlight (e.g. objects that failed IDS validation).
+   * Works because WebIFCLoaderPlugin sets each Entity/MetaObject id directly
+   * to the IFC entity's own GlobalId (confirmed in the SDK source), so these
+   * values can be passed straight to `viewer.scene.setObjectsHighlighted`.
+   */
+  highlightedGlobalIds?: Set<string>;
 }
 
 interface LoadState {
@@ -41,7 +48,7 @@ function toHex([r, g, b]: [number, number, number]) {
   return `#${h(r)}${h(g)}${h(b)}`;
 }
 
-export default function FederationViewer({ models, focusedModelName }: FederationViewerProps) {
+export default function FederationViewer({ models, focusedModelName, highlightedGlobalIds }: FederationViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<any>(null);
   const loadedEntitiesRef = useRef<Map<string, any>>(new Map());
@@ -149,6 +156,21 @@ export default function FederationViewer({ models, focusedModelName }: Federatio
       entity.opacity = isFocused ? 1 : 0.25;
     }
   }, [focusedModelName, hiddenModels, loadState.status]);
+
+  // Highlight IDS-validation-failed objects, by IFC GlobalId, once the scene
+  // is loaded. Re-applied whenever the failing-id set changes (e.g. after
+  // re-running IDS validation) so it always reflects the latest results.
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || loadState.status !== 'ready') return;
+
+    viewer.scene.setObjectsHighlighted(viewer.scene.highlightedObjectIds, false);
+    if (!highlightedGlobalIds || highlightedGlobalIds.size === 0) return;
+
+    const existing = new Set(viewer.scene.objectIds as string[]);
+    const valid = [...highlightedGlobalIds].filter(id => existing.has(id));
+    if (valid.length > 0) viewer.scene.setObjectsHighlighted(valid, true);
+  }, [highlightedGlobalIds, loadState.status]);
 
   const toggleModelVisibility = useCallback((modelName: string) => {
     setHiddenModels(prev => {

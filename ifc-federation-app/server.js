@@ -41,7 +41,7 @@ import { fileURLToPath } from 'node:url';
 import { getBuildingByIdentifier, getStoreysForBuilding, getAllBuildings } from '../ifc-federation/geminus-plus-lookup.js';
 import { buildCanonicalStoreys } from '../ifc-federation/architect-model-template.js';
 import { buildMatrix, applyReconciliation } from '../ifc-federation/storey-reconciliation.js';
-import { validateFederation, repairFederation } from '../ifc-federation/federation-guid-validator.js';
+import { validateFederation, repairFederation, categoryCounts, computeValidationStats } from '../ifc-federation/federation-guid-validator.js';
 import { applyFederationWrites } from '../ifc-federation/ifc-writer.js';
 import { getAvailableRules, validateFile, runIfctesterBcf } from '../ifc-federation/ids-validator.js';
 import { listRules, getRule, createRule, updateRule, deleteRule } from '../ifc-federation/ids-rules-editor.js';
@@ -156,18 +156,12 @@ app.post('/api/ingest', upload.fields([
       return res.status(400).json({ error: 'disciplineNames must have one entry per disciplineFiles upload.' });
     }
 
-    // Objects (rooms, assets, etc.) that already carry an FMGUID are
-    // respected by default (only missing/duplicate ones are touched) — set
-    // this to regenerate every non-storey FMGUID unconditionally instead,
-    // for when the source files' existing FMGUIDs aren't trusted.
-    const regenerateAllGuids = req.body?.regenerateAllGuids === 'true';
-
     const jobId = makeJob();
     res.json({ jobId });
 
     // Fire-and-forget: errors are captured onto the job, not thrown here —
     // the response has already been sent.
-    runIngestJob(jobId, { buildingIdentifier, architectUpload, disciplineUploads, disciplineNames, regenerateAllGuids }).catch(err => {
+    runIngestJob(jobId, { buildingIdentifier, architectUpload, disciplineUploads, disciplineNames }).catch(err => {
       console.error(err);
       updateJob(jobId, { status: 'error', error: err.message });
     });
@@ -183,7 +177,7 @@ app.get('/api/ingest/:jobId', (req, res) => {
   res.json(job);
 });
 
-async function runIngestJob(jobId, { buildingIdentifier, architectUpload, disciplineUploads, disciplineNames, regenerateAllGuids }) {
+async function runIngestJob(jobId, { buildingIdentifier, architectUpload, disciplineUploads, disciplineNames }) {
   // Stage boundaries (0-100). Canonical-storey resolution and matrix building
   // both re-scan every uploaded file (parseStoreys), and validation scans
   // every file again for every entity type (parseElements) — confirmed by
@@ -257,6 +251,11 @@ async function runIngestJob(jobId, { buildingIdentifier, architectUpload, discip
   });
 
   updateJob(jobId, { stage: 'Validating FMGUIDs…', progress: STAGE.validate[0] });
+  // Parse-only: report what the source files already have, but don't mint
+  // anything yet. FMGUID generation is now a separate, explicit step (see
+  // /api/apply-fmguid) so the user can see the per-category coverage report
+  // and choose which categories to actually generate FMGUIDs for, instead of
+  // every category being silently touched during analysis.
   const validation = await validateFederation(models, {
     onProgress: (modelName, fraction) =>
       updateJob(jobId, {
@@ -264,7 +263,6 @@ async function runIngestJob(jobId, { buildingIdentifier, architectUpload, discip
         stage: modelName ? `Validating FMGUIDs… (${modelName})` : 'Validating FMGUIDs…',
       }),
   });
-  repairFederation(validation, { regenerateAll: regenerateAllGuids }); // mutates validation.elements' fmguid in place
 
   updateJob(jobId, { stage: 'Done', progress: STAGE.finalize[1] });
 
@@ -280,7 +278,7 @@ async function runIngestJob(jobId, { buildingIdentifier, architectUpload, discip
       buildingLookupWarning,
       canonicalStoreys,
       matrix,
-      guidValidation: { stats: validation.stats, duplicates: validation.duplicates },
+      guidValidation: { stats: validation.stats, duplicates: validation.duplicates, categories: categoryCounts(validation.elements) },
     },
   });
 }
@@ -300,16 +298,43 @@ app.post('/api/reconcile', (req, res) => {
   }
 });
 
+// ── FMGUID generation, scoped to chosen categories ──────────────────────────
+// Deliberately a separate step from /api/ingest (which now only parses and
+// reports coverage): lets the user see the per-category breakdown first,
+// then choose which IFC types to actually mint FMGUIDs for, rather than
+// every category being touched unconditionally during analysis. Categories
+// left unselected simply keep whatever they had (missing stays missing).
+app.post('/api/apply-fmguid', (req, res) => {
+  try {
+    const { sessionId, categories, regenerateAll } = req.body ?? {};
+    const session = sessions.get(sessionId);
+    if (!session) return res.status(404).json({ error: 'Unknown session — re-run /api/ingest.' });
+    if (!Array.isArray(categories) || categories.length === 0) {
+      return res.status(400).json({ error: 'Provide at least one category (IFC type) to apply FMGUID to.' });
+    }
+
+    repairFederation(session.validation, { regenerateAll: !!regenerateAll, includeTypes: new Set(categories) });
+    const { stats, duplicates } = computeValidationStats(session.validation.elements);
+    session.validation.stats = stats;
+    session.validation.duplicates = duplicates;
+    res.json({ stats, categories: categoryCounts(session.validation.elements) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Corrected IFC text for one model in a session: same write-back logic used
 // by /api/export, factored out so /api/validate-ids can validate against
 // what actually gets exported instead of the untouched original upload.
-// Object-level FMGUID assignments always apply (repairFederation already ran
-// during /api/ingest); storey FMGUIDs only apply once reconciliation has been
-// confirmed via /api/reconcile (session.storeyWrites is empty until then).
+// Only elements that have actually been assigned an FMGUID (via
+// /api/apply-fmguid) are written -- a category the user never selected stays
+// untouched in the export too. Storey FMGUIDs only apply once reconciliation
+// has been confirmed via /api/reconcile (session.storeyWrites is empty until
+// then).
 function buildCorrectedIfcText(session, modelName, ifcText) {
   const storeyWritesForModel = session.storeyWrites.filter(w => w.modelName === modelName);
   const guidAssignments = session.validation.elements
-    .filter(el => el.modelName === modelName && !el.isStorey)
+    .filter(el => el.modelName === modelName && !el.isStorey && el.fmguid)
     .map(el => ({ globalId: el.globalId, fmguid: el.fmguid }));
   return applyFederationWrites(ifcText, { storeyWrites: storeyWritesForModel, guidAssignments }).ifcText;
 }

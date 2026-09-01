@@ -44,6 +44,13 @@ interface Matrix {
   unmatched: UnmatchedEntry[];
 }
 
+interface CategoryCount {
+  ifcType: string;
+  total: number;
+  withFmguid: number;
+  missing: number;
+}
+
 interface IngestResult {
   sessionId: string;
   canonicalSource: 'geminus-plus' | 'architect-model';
@@ -54,17 +61,29 @@ interface IngestResult {
   guidValidation: {
     stats: { totalElements: number; storeyElements: number; hadFmguid: number; missing: number; duplicateGroups: number; duplicateElements: number };
     duplicates: Array<{ fmguid: string; locations: Array<{ modelName: string; ifcType: string; globalId: string; name: string | null }> }>;
+    categories: CategoryCount[];
   };
 }
 
 type Overrides = Record<string, Record<string, string | null>>;
 
+interface IdsFailedEntity {
+  class: string;
+  name: string | null;
+  global_id: string;
+  reason?: string;
+}
+interface IdsRequirementResult {
+  description?: string;
+  failed_entities?: IdsFailedEntity[];
+}
 interface IdsSpecResult {
   name: string;
   status: boolean;
   total_applicable: number;
   total_applicable_pass: number;
   total_applicable_fail: number;
+  requirements?: IdsRequirementResult[];
 }
 interface IdsRuleResult {
   ruleId: string;
@@ -90,12 +109,12 @@ interface BuildingOption {
 
 const NEW_BUILDING = '__new__';
 
-type TabId = 'upload' | 'match' | 'viewer' | 'ids' | 'rules';
+type TabId = 'upload' | 'match' | 'ids' | 'viewer' | 'rules';
 const TABS: { id: TabId; label: string }[] = [
-  { id: 'upload', label: '1. Upload' },
+  { id: 'upload', label: '1. Upload & analyze' },
   { id: 'match', label: '2. Storey matching' },
-  { id: 'viewer', label: '3. 3D view' },
-  { id: 'ids', label: '4. IDS validation' },
+  { id: 'ids', label: '3. IDS validation' },
+  { id: 'viewer', label: '4. 3D view' },
   { id: 'rules', label: '5. IDS rules' },
 ];
 
@@ -129,7 +148,6 @@ export default function App() {
   const [buildingIdentifier, setBuildingIdentifier] = useState('');
   const [architectFile, setArchitectFile] = useState<File | null>(null);
   const [disciplines, setDisciplines] = useState<DisciplineRow[]>([{ id: rowId++, name: '', file: null }]);
-  const [regenerateAllGuids, setRegenerateAllGuids] = useState(false);
 
   const [buildings, setBuildings] = useState<BuildingOption[]>([]);
   const [buildingsLoading, setBuildingsLoading] = useState(true);
@@ -187,6 +205,36 @@ export default function App() {
   const [idsError, setIdsError] = useState<string | null>(null);
   const [exportingBcf, setExportingBcf] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+
+  // FMGUID generation is a separate, explicit step from analysis (see
+  // /api/apply-fmguid) — the user picks which IFC categories to actually
+  // mint FMGUIDs for, after seeing the per-category coverage report.
+  const [selectedCategories, setSelectedCategories] = useState<Set<string>>(new Set());
+  const [regenerateAllGuids, setRegenerateAllGuids] = useState(false);
+  const [applyingFmguid, setApplyingFmguid] = useState(false);
+  const [applyFmguidError, setApplyFmguidError] = useState<string | null>(null);
+
+  // Every failing entity's IFC GlobalId across all IDS results, flat — the
+  // viewer's metaobject/entity ids ARE the IFC GlobalId (WebIFCLoaderPlugin
+  // sets them directly from IfcRoot.GlobalId, confirmed in the SDK source),
+  // so this set can be passed straight to the viewer to highlight them.
+  const failedGlobalIds: Set<string> = React.useMemo(() => {
+    const ids = new Set<string>();
+    if (!idsResults) return ids;
+    for (const ruleResults of Object.values(idsResults)) {
+      for (const { report } of ruleResults) {
+        if (!report) continue;
+        for (const spec of report.specifications) {
+          for (const requirement of spec.requirements ?? []) {
+            for (const failed of requirement.failed_entities ?? []) {
+              ids.add(failed.global_id);
+            }
+          }
+        }
+      }
+    }
+    return ids;
+  }, [idsResults]);
 
   function addDisciplineRow() {
     setDisciplines(prev => [...prev, { id: rowId++, name: '', file: null }]);
@@ -292,7 +340,6 @@ export default function App() {
       if (buildingIdentifier.trim()) form.append('buildingIdentifier', buildingIdentifier.trim());
       if (architectFile) form.append('architectFile', architectFile);
       form.append('disciplineNames', JSON.stringify(validRows.map(r => r.name.trim())));
-      form.append('regenerateAllGuids', String(regenerateAllGuids));
       for (const r of validRows) form.append('disciplineFiles', r.file as File);
 
       const { jobId } = await uploadWithProgress(form);
@@ -300,6 +347,7 @@ export default function App() {
       setProgressLabel('Processing…');
       const json = await pollJob(jobId);
       setResult(json);
+      setSelectedCategories(new Set(json.guidValidation.categories.map((c: CategoryCount) => c.ifcType)));
       setActiveTab('match');
     } catch (err: any) {
       setError(err.message ?? String(err));
@@ -363,6 +411,38 @@ export default function App() {
       setError(err.message ?? String(err));
     } finally {
       setExporting(false);
+    }
+  }
+
+  function toggleCategory(ifcType: string) {
+    setSelectedCategories(prev => {
+      const next = new Set(prev);
+      if (next.has(ifcType)) next.delete(ifcType); else next.add(ifcType);
+      return next;
+    });
+  }
+
+  // Mints FMGUIDs only for the chosen categories (see /api/apply-fmguid) —
+  // a category left unchecked keeps whatever it already had (missing stays
+  // missing), so this can be re-run incrementally as the user reviews the
+  // coverage report below.
+  async function applyFmguid() {
+    if (!result || selectedCategories.size === 0) return;
+    setApplyingFmguid(true);
+    setApplyFmguidError(null);
+    try {
+      const res = await fetch('/api/apply-fmguid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: result.sessionId, categories: [...selectedCategories], regenerateAll: regenerateAllGuids }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Could not generate FMGUIDs.');
+      setResult(prev => prev ? { ...prev, guidValidation: { ...prev.guidValidation, stats: json.stats, categories: json.categories } } : prev);
+    } catch (err: any) {
+      setApplyFmguidError(err.message ?? String(err));
+    } finally {
+      setApplyingFmguid(false);
     }
   }
 
@@ -522,22 +602,6 @@ export default function App() {
           </div>
         ))}
 
-        <label style={{ marginTop: '1.2rem' }}>Object FMGUID (rooms, assets, etc.)</label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 400, color: 'var(--ink)', fontSize: '0.88rem', marginTop: '0.3rem' }}>
-          <input
-            type="checkbox"
-            style={{ width: 'auto' }}
-            checked={regenerateAllGuids}
-            onChange={e => setRegenerateAllGuids(e.target.checked)}
-          />
-          Regenerate all object FMGUIDs, even existing ones
-        </label>
-        <p className="muted" style={{ marginTop: '0.3rem', fontSize: '0.8rem' }}>
-          {regenerateAllGuids
-            ? 'Every room/object gets a new FMGUID, regardless of what it already had.'
-            : 'Default: existing FMGUIDs on rooms/objects are kept. Only missing or duplicate FMGUIDs are fixed.'}
-        </p>
-
         <div className="row-actions">
           <button className="secondary" onClick={addDisciplineRow} type="button" disabled={loading}>+ Add discipline</button>
           <button onClick={runAnalysis} disabled={loading} type="button">{loading ? 'Analyzing…' : 'Analyze'}</button>
@@ -691,31 +755,64 @@ export default function App() {
       )}
       </div>
 
-      <div style={{ display: activeTab === 'viewer' ? undefined : 'none' }}>
-      {!result && (
-        <div className="card"><p className="muted">Run an analysis on the Upload tab first.</p></div>
-      )}
-      {result && (
-          <div className="card">
-            <h2>3. 3D view</h2>
-            <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
-              Hover a discipline in the matrix above (on the Storey matching tab) to focus it here and fade out the others — useful for checking whether the models actually align with each other.
-            </p>
-            {viewerVisited && <FederationViewer models={viewerModels} focusedModelName={focusedModelName} />}
-          </div>
-      )}
-      </div>
-
       <div style={{ display: activeTab === 'ids' ? undefined : 'none' }}>
       {!result && (
         <div className="card"><p className="muted">Run an analysis on the Upload tab first.</p></div>
       )}
       {result && (
+        <>
           <div className="card">
-            <h2>4. IDS validation</h2>
+            <h2>3a. FMGUID generation</h2>
+            <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
+              Choose which IFC categories should get an FMGUID. A category left unchecked keeps whatever it already
+              had — nothing is generated for it, and it won't appear in the exported files.
+            </p>
+            <table>
+              <thead>
+                <tr><th style={{ width: '2rem' }} /><th>Category</th><th>Total</th><th>Has FMGUID</th><th>Missing</th></tr>
+              </thead>
+              <tbody>
+                {result.guidValidation.categories.map(c => (
+                  <tr key={c.ifcType}>
+                    <td>
+                      <input
+                        type="checkbox"
+                        checked={selectedCategories.has(c.ifcType)}
+                        onChange={() => toggleCategory(c.ifcType)}
+                      />
+                    </td>
+                    <td style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{c.ifcType}</td>
+                    <td>{c.total}</td>
+                    <td>{c.withFmguid}</td>
+                    <td>{c.missing > 0 ? <span className="badge badge-unnamed">{c.missing}</span> : c.missing}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 400, color: 'var(--ink)', fontSize: '0.88rem', marginTop: '0.9rem' }}>
+              <input
+                type="checkbox"
+                style={{ width: 'auto' }}
+                checked={regenerateAllGuids}
+                onChange={e => setRegenerateAllGuids(e.target.checked)}
+              />
+              Regenerate existing FMGUIDs too, not just missing ones
+            </label>
+            {applyFmguidError && <div className="error" style={{ marginTop: '0.75rem' }}>{applyFmguidError}</div>}
+            <div className="row-actions">
+              <button className="secondary" type="button" onClick={() => setSelectedCategories(new Set(result.guidValidation.categories.map(c => c.ifcType)))}>Select all</button>
+              <button className="secondary" type="button" onClick={() => setSelectedCategories(new Set())}>Select none</button>
+              <button onClick={applyFmguid} disabled={applyingFmguid || selectedCategories.size === 0} type="button">
+                {applyingFmguid ? 'Generating…' : `Generate FMGUID for ${selectedCategories.size} categor${selectedCategories.size === 1 ? 'y' : 'ies'}`}
+              </button>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>3b. IDS validation</h2>
             <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
               Checks information requirements (naming, required properties, etc.) against buildingSMART's IDS standard —
-              independent of the FMGUID handling above. Runs against Geminus's shared rule library.
+              runs against the corrected export (including the FMGUID categories generated above) and Geminus's shared rule library.
             </p>
             <div className="row-actions">
               <button onClick={runIdsValidation} disabled={validatingIds} type="button">
@@ -736,33 +833,57 @@ export default function App() {
             {idsError && <div className="error" style={{ marginTop: '0.75rem' }}>{idsError}</div>}
 
             {idsResults && (
-              <table>
-                <thead>
-                  <tr><th>Model</th><th>Rule</th><th>Result</th></tr>
-                </thead>
-                <tbody>
-                  {Object.entries(idsResults).flatMap(([modelName, ruleResults]) =>
-                    ruleResults.map(r => (
-                      <tr key={`${modelName}-${r.ruleId}`}>
-                        <td>{modelName}</td>
-                        <td>{r.ruleTitle}</td>
-                        <td>
-                          {r.error ? (
-                            <span className="badge badge-unnamed">Error: {r.error.split('\n')[0]}</span>
-                          ) : (
-                            r.report!.specifications.map(spec => (
-                              <span key={spec.name} className={`badge ${spec.status ? 'badge-fmguid' : 'badge-unnamed'}`}>
-                                {spec.status ? 'Passed' : 'Failed'} ({spec.total_applicable_pass}/{spec.total_applicable})
-                              </span>
-                            ))
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+              <>
+                <table>
+                  <thead>
+                    <tr><th>Model</th><th>Rule</th><th>Result</th></tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(idsResults).flatMap(([modelName, ruleResults]) =>
+                      ruleResults.map(r => (
+                        <tr key={`${modelName}-${r.ruleId}`}>
+                          <td>{modelName}</td>
+                          <td>{r.ruleTitle}</td>
+                          <td>
+                            {r.error ? (
+                              <span className="badge badge-unnamed">Error: {r.error.split('\n')[0]}</span>
+                            ) : (
+                              r.report!.specifications.map(spec => (
+                                <span key={spec.name} className={`badge ${spec.status ? 'badge-fmguid' : 'badge-unnamed'}`}>
+                                  {spec.status ? 'Passed' : 'Failed'} ({spec.total_applicable_pass}/{spec.total_applicable})
+                                </span>
+                              ))
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+                {failedGlobalIds.size > 0 && (
+                  <p className="muted" style={{ marginTop: '0.75rem' }}>
+                    {failedGlobalIds.size} failing object{failedGlobalIds.size === 1 ? '' : 's'} — see the 3D view tab to highlight them on the model.
+                  </p>
+                )}
+              </>
             )}
+          </div>
+        </>
+      )}
+      </div>
+
+      <div style={{ display: activeTab === 'viewer' ? undefined : 'none' }}>
+      {!result && (
+        <div className="card"><p className="muted">Run an analysis on the Upload tab first.</p></div>
+      )}
+      {result && (
+          <div className="card">
+            <h2>4. 3D view</h2>
+            <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
+              Hover a discipline in the matrix above (on the Storey matching tab) to focus it here and fade out the others — useful for checking whether the models actually align with each other.
+              {failedGlobalIds.size > 0 && ' Objects that failed IDS validation are highlighted in red.'}
+            </p>
+            {viewerVisited && <FederationViewer models={viewerModels} focusedModelName={focusedModelName} highlightedGlobalIds={failedGlobalIds} />}
           </div>
       )}
       </div>
