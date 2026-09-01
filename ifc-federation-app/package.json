@@ -5,8 +5,9 @@
   "type": "module",
   "description": "Standalone app for the IFC federation & normalization pipeline. Runs locally today; intended to move to Render. Backend reuses the tested logic in ../ifc-federation/*.js unchanged.",
   "scripts": {
-    "server": "node server.js",
+    "server": "node --env-file=../.env server.js",
     "client": "npm --prefix client run dev",
+    "dev": "concurrently -n server,client -c blue,green \"npm:server\" \"npm:client\"",
     "build": "npm --prefix client install && npm --prefix client run build",
     "start": "node server.js"
   },
@@ -17,5 +18,8 @@
     "express": "^4.19.2",
     "multer": "^2.3.0",
     "pdfkit": "^0.20.2"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.4"
   }
 }

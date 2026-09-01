@@ -16,7 +16,7 @@
     {
       "name": "ifc-federation-server",
       "runtimeExecutable": "node",
-      "runtimeArgs": ["ifc-federation-app/server.js"],
+      "runtimeArgs": ["--env-file=.env", "ifc-federation-app/server.js"],
       "port": 4500
     }
   ]

@@ -90,6 +90,15 @@ interface BuildingOption {
 
 const NEW_BUILDING = '__new__';
 
+type TabId = 'upload' | 'match' | 'viewer' | 'ids' | 'rules';
+const TABS: { id: TabId; label: string }[] = [
+  { id: 'upload', label: '1. Upload' },
+  { id: 'match', label: '2. Storey matching' },
+  { id: 'viewer', label: '3. 3D view' },
+  { id: 'ids', label: '4. IDS validation' },
+  { id: 'rules', label: '5. IDS rules' },
+];
+
 function masterLabel(result: IngestResult): string {
   return result.canonicalSource === 'geminus-plus'
     ? `Master (Geminus Plus${result.building?.name ? `: ${result.building.name}` : ''})`
@@ -108,6 +117,7 @@ const VIEWER_PALETTE: Array<[number, number, number]> = [
 ];
 
 export default function App() {
+  const [activeTab, setActiveTab] = useState<TabId>('upload');
   const [buildingIdentifier, setBuildingIdentifier] = useState('');
   const [architectFile, setArchitectFile] = useState<File | null>(null);
   const [disciplines, setDisciplines] = useState<DisciplineRow[]>([{ id: rowId++, name: '', file: null }]);
@@ -282,6 +292,7 @@ export default function App() {
       setProgressLabel('Processing…');
       const json = await pollJob(jobId);
       setResult(json);
+      setActiveTab('match');
     } catch (err: any) {
       setError(err.message ?? String(err));
     } finally {
@@ -439,11 +450,26 @@ export default function App() {
     <div className="app">
       <div className="app-header">
         <img src="/geminus-logo.png" alt="Geminus" />
-        <h1>IFC Federation</h1>
+        <h1>Geminus IFC Manager</h1>
       </div>
       <p className="subtitle">Match storeys and assign unique FMGUIDs across multiple discipline models.</p>
 
-      <div className="card">
+      <div className="tab-bar">
+        {TABS.map(tab => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`tab-button ${activeTab === tab.id ? 'active' : ''}`}
+            onClick={() => setActiveTab(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {error && <div className="error">{error}</div>}
+
+      <div className="card" style={{ display: activeTab === 'upload' ? undefined : 'none' }}>
         <h2>1. Upload models</h2>
         <label>Building in Geminus Plus</label>
         <select
@@ -522,8 +548,10 @@ export default function App() {
         )}
       </div>
 
-      {error && <div className="error">{error}</div>}
-
+      <div style={{ display: activeTab === 'match' ? undefined : 'none' }}>
+      {!result && (
+        <div className="card"><p className="muted">Run an analysis on the Upload tab first.</p></div>
+      )}
       {result && (
         <>
           <div className="card">
@@ -651,17 +679,32 @@ export default function App() {
             </div>
             {confirmed && <div className="success">The mapping has been confirmed. You can now export the corrected files.</div>}
           </div>
+        </>
+      )}
+      </div>
 
+      <div style={{ display: activeTab === 'viewer' ? undefined : 'none' }}>
+      {!result && (
+        <div className="card"><p className="muted">Run an analysis on the Upload tab first.</p></div>
+      )}
+      {result && (
           <div className="card">
-            <h2>4. 3D view</h2>
+            <h2>3. 3D view</h2>
             <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
-              Hover a discipline in the matrix above to focus it here and fade out the others — useful for checking whether the models actually align with each other.
+              Hover a discipline in the matrix above (on the Storey matching tab) to focus it here and fade out the others — useful for checking whether the models actually align with each other.
             </p>
             <FederationViewer models={viewerModels} focusedModelName={focusedModelName} />
           </div>
+      )}
+      </div>
 
+      <div style={{ display: activeTab === 'ids' ? undefined : 'none' }}>
+      {!result && (
+        <div className="card"><p className="muted">Run an analysis on the Upload tab first.</p></div>
+      )}
+      {result && (
           <div className="card">
-            <h2>5. IDS validation</h2>
+            <h2>4. IDS validation</h2>
             <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
               Checks information requirements (naming, required properties, etc.) against buildingSMART's IDS standard —
               independent of the FMGUID handling above. Runs against Geminus's shared rule library.
@@ -713,12 +756,14 @@ export default function App() {
               </table>
             )}
           </div>
-        </>
       )}
+      </div>
 
-      <div className="card">
-        <h2>6. IDS rule library</h2>
-        <IdsRuleEditor />
+      <div style={{ display: activeTab === 'rules' ? undefined : 'none' }}>
+        <div className="card">
+          <h2>5. IDS rule library</h2>
+          <IdsRuleEditor />
+        </div>
       </div>
     </div>
   );
