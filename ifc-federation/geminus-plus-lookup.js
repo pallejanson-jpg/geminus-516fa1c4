@@ -136,7 +136,11 @@ async function getAllBuildings() {
     if (page.length < take) break;
   }
 
-  buildings.sort((a, b) => (a.name ?? '').localeCompare(b.name ?? '', 'sv'));
+  // Group by complex first (matching Geminus Plus's own tree view), then by
+  // building name within each complex.
+  buildings.sort((a, b) =>
+    (a.complexName ?? '').localeCompare(b.complexName ?? '', 'sv') ||
+    (a.name ?? '').localeCompare(b.name ?? '', 'sv'));
   return buildings;
 }
 
@@ -146,6 +150,11 @@ function mapBuilding(item) {
     // `designation` is frequently null on Building objects (confirmed against
     // live data); `commonName` is the reliably populated display name.
     name: item.commonName ?? item.designation ?? null,
+    // Every Building record already carries its parent Complex's identity
+    // directly (confirmed against live data) -- no separate query needed to
+    // group buildings by property/complex in a picker UI.
+    complexFmguid: item.complexFmGuid ?? null,
+    complexName: item.complexCommonName ?? item.complexDesignation ?? null,
   };
 }
 

@@ -106,6 +106,8 @@ interface BuildingCheckResult {
 interface BuildingOption {
   fmguid: string;
   name: string | null;
+  complexFmguid: string | null;
+  complexName: string | null;
 }
 
 const NEW_BUILDING = '__new__';
@@ -120,6 +122,22 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'rules', label: '6. IDS rules' },
   { id: 'sync', label: '7. Sync to Geminus Plus' },
 ];
+
+// Buildings arrive pre-sorted by complex then name (server-side), so a
+// single linear pass groups them into consecutive runs -- matches Geminus
+// Plus's own tree view (Complex > Building).
+function groupBuildingsByComplex(buildings: BuildingOption[]): { complexFmguid: string | null; complexName: string | null; buildings: BuildingOption[] }[] {
+  const groups: { complexFmguid: string | null; complexName: string | null; buildings: BuildingOption[] }[] = [];
+  for (const b of buildings) {
+    const last = groups[groups.length - 1];
+    if (last && last.complexFmguid === b.complexFmguid) {
+      last.buildings.push(b);
+    } else {
+      groups.push({ complexFmguid: b.complexFmguid, complexName: b.complexName, buildings: [b] });
+    }
+  }
+  return groups;
+}
 
 function masterLabel(result: IngestResult): string {
   return result.canonicalSource === 'geminus-plus'
@@ -590,8 +608,12 @@ export default function App() {
           }}
         >
           <option value={NEW_BUILDING}>{buildingsLoading ? 'Loading buildings…' : '— New building (not in Geminus Plus) —'}</option>
-          {buildings.map(b => (
-            <option key={b.fmguid} value={b.fmguid}>{b.name ?? b.fmguid}</option>
+          {groupBuildingsByComplex(buildings).map(group => (
+            <optgroup key={group.complexFmguid ?? '__none__'} label={group.complexName ?? '(no property)'}>
+              {group.buildings.map(b => (
+                <option key={b.fmguid} value={b.fmguid}>{b.name ?? b.fmguid}</option>
+              ))}
+            </optgroup>
           ))}
         </select>
         {buildingsError && <div className="error" style={{ marginTop: '0.6rem' }}>Could not fetch the building list: {buildingsError}</div>}
