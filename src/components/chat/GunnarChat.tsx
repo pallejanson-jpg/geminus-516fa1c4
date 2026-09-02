@@ -217,8 +217,15 @@ const GeminusAIChat = React.forwardRef<HTMLDivElement, GeminusAIChatProps>(funct
   }, [context?.currentBuilding?.fmGuid]);
 
   useEffect(() => {
-    if (messagesEndRef.current) messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, proactiveInsights]);
+    // Radix ScrollArea wraps the content in its own viewport div — scrollIntoView
+    // on a child doesn't reach it. Target the viewport directly.
+    const viewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement | null;
+    if (viewport) {
+      viewport.scrollTop = viewport.scrollHeight;
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [messages, proactiveInsights, isLoading]);
 
   useEffect(() => {
     if (open && inputRef.current) setTimeout(() => inputRef.current?.focus(), 100);
@@ -399,7 +406,9 @@ const GeminusAIChat = React.forwardRef<HTMLDivElement, GeminusAIChatProps>(funct
     }
 
     // If we should navigate to viewer even without a specific command
-    if (!viewerCommand && (shouldNavigateToViewer || isViewerAction)) {
+    // Never navigate away from the standalone /ai page — there is no embedded viewer to go to.
+    const isStandalone = context?.activeApp === 'ai-standalone';
+    if (!viewerCommand && !isStandalone && (shouldNavigateToViewer || isViewerAction)) {
       const buildingGuid = context?.currentBuilding?.fmGuid || context?.viewerState?.buildingFmGuid || '';
       if (buildingGuid && !isOnViewerPage()) {
         toast.info(t('Öppnar viewern…', 'Opening viewer…'));
@@ -754,6 +763,12 @@ const GeminusAIChat = React.forwardRef<HTMLDivElement, GeminusAIChatProps>(funct
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>{streamingStatus || t("Tänker...", "Thinking...")}</span>
           </div>
+        </div>
+      )}
+      {isLoading && streamingStatus && isStreaming && (
+        <div className="flex items-center gap-1.5 px-1 pb-0.5">
+          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+          <span className="text-xs text-muted-foreground">{streamingStatus}</span>
         </div>
       )}
       <div ref={messagesEndRef} />
