@@ -232,6 +232,19 @@ tr:nth-child(even) td { background: #FAFCFA; }
   to { background-position: 28px 0; }
 }
 
+/* Indeterminate variant: no known percentage (e.g. IDS validation runs a
+   Python subprocess with no streamed progress) -- a sliding block instead
+   of a width-driven fill. */
+.progress-fill.progress-indeterminate {
+  width: 35% !important;
+  position: absolute;
+  animation: progress-indeterminate-slide 1.3s ease-in-out infinite;
+}
+@keyframes progress-indeterminate-slide {
+  0% { left: -35%; }
+  100% { left: 100%; }
+}
+
 /* ── Federation viewer (xeokit) ────────────────────────────────────────── */
 .viewer-shell {
   position: relative;

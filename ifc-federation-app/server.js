@@ -45,6 +45,7 @@ import { validateFederation, repairFederation, categoryCounts, computeValidation
 import { applyFederationWrites } from '../ifc-federation/ifc-writer.js';
 import { getAvailableRules, validateFile, runIfctesterBcf } from '../ifc-federation/ids-validator.js';
 import { listRules, getRule, createRule, updateRule, deleteRule } from '../ifc-federation/ids-rules-editor.js';
+import { getRelatedModels, createRevision, getSasToken, uploadIfcToBlob, processIfc, pollFileStatus } from '../ifc-federation/geminus-plus-sync.js';
 import { generateIdsReportPdf } from './pdf-report.js';
 
 /**
@@ -553,6 +554,56 @@ app.delete('/api/session/:sessionId', async (req, res) => {
   sessions.delete(req.params.sessionId);
   await Promise.all(session.models.map(m => rm(m.filePath, { force: true }))).catch(() => {});
   res.status(204).end();
+});
+
+// ── Phase 8: Sync to Geminus Plus ───────────────────────────────────────────
+// Matches an uploaded/corrected model against an EXISTING BIM model in
+// Geminus Plus instead of creating a duplicate. Endpoints per the real
+// AssetDB OpenAPI spec (see ifc-federation/geminus-plus-sync.js's file
+// comment) -- getRelatedModels is read-only and safe; the push flow
+// (createRevision + blob upload + processIfc) makes a real, visible change
+// in Geminus Plus and should only be triggered deliberately.
+app.get('/api/sync/related-models', async (req, res) => {
+  try {
+    const { buildingFmguid } = req.query;
+    if (!buildingFmguid) return res.status(400).json({ error: 'buildingFmguid query param required.' });
+    const models = await getRelatedModels(buildingFmguid);
+    res.json({ models });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/sync/push', async (req, res) => {
+  try {
+    const { sessionId, modelName, targetModelId, targetRevisionId } = req.body ?? {};
+    const session = sessions.get(sessionId);
+    if (!session) return res.status(404).json({ error: 'Unknown session — re-run /api/ingest.' });
+    const model = session.models.find(m => m.modelName === modelName);
+    if (!model) return res.status(400).json({ error: `No uploaded model named "${modelName}" in this session.` });
+
+    const correctedText = buildCorrectedIfcText(session, modelName, model.ifcText);
+
+    const revision = await createRevision(targetRevisionId, 0);
+    const sasToken = await getSasToken();
+    const fileId = randomUUID();
+    const fileName = `${modelName}.ifc`;
+    await uploadIfcToBlob(sasToken, fileName, correctedText);
+    await processIfc({
+      fileName,
+      fileId,
+      filePath: fileName,
+      modelId: targetModelId,
+      tenantName: process.env.GEMINUS_PLUS_TENANT_NAME ?? '',
+      revisionId: revision.revisionId,
+    });
+    const file = await pollFileStatus(fileId);
+
+    res.json({ revision, file });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ── Serve the built client in production (Render) as one deployable ────────

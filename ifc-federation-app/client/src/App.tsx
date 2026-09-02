@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import FederationViewer, { FederationViewerModel } from './FederationViewer';
 import IdsRuleEditor from './IdsRuleEditor';
+import SyncTab from './SyncTab';
 
 interface DisciplineRow {
   id: number;
@@ -109,13 +110,15 @@ interface BuildingOption {
 
 const NEW_BUILDING = '__new__';
 
-type TabId = 'upload' | 'match' | 'ids' | 'viewer' | 'rules';
+type TabId = 'upload' | 'match' | 'fmguid' | 'ids' | 'viewer' | 'rules' | 'sync';
 const TABS: { id: TabId; label: string }[] = [
   { id: 'upload', label: '1. Upload & analyze' },
   { id: 'match', label: '2. Storey matching' },
-  { id: 'ids', label: '3. IDS validation' },
-  { id: 'viewer', label: '4. 3D view' },
-  { id: 'rules', label: '5. IDS rules' },
+  { id: 'fmguid', label: '3. FMGUID generation' },
+  { id: 'ids', label: '4. IDS validation' },
+  { id: 'viewer', label: '5. 3D view' },
+  { id: 'rules', label: '6. IDS rules' },
+  { id: 'sync', label: '7. Sync to Geminus Plus' },
 ];
 
 function masterLabel(result: IngestResult): string {
@@ -203,6 +206,7 @@ export default function App() {
   const [idsResults, setIdsResults] = useState<IdsResults | null>(null);
   const [validatingIds, setValidatingIds] = useState(false);
   const [idsError, setIdsError] = useState<string | null>(null);
+  const [idsSuccessMessage, setIdsSuccessMessage] = useState<string | null>(null);
   const [exportingBcf, setExportingBcf] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
 
@@ -213,6 +217,7 @@ export default function App() {
   const [regenerateAllGuids, setRegenerateAllGuids] = useState(false);
   const [applyingFmguid, setApplyingFmguid] = useState(false);
   const [applyFmguidError, setApplyFmguidError] = useState<string | null>(null);
+  const [fmguidSuccessMessage, setFmguidSuccessMessage] = useState<string | null>(null);
 
   // Every failing entity's IFC GlobalId across all IDS results, flat — the
   // viewer's metaobject/entity ids ARE the IFC GlobalId (WebIFCLoaderPlugin
@@ -430,15 +435,21 @@ export default function App() {
     if (!result || selectedCategories.size === 0) return;
     setApplyingFmguid(true);
     setApplyFmguidError(null);
+    setFmguidSuccessMessage(null);
+    const categoriesRequested = [...selectedCategories];
     try {
       const res = await fetch('/api/apply-fmguid', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: result.sessionId, categories: [...selectedCategories], regenerateAll: regenerateAllGuids }),
+        body: JSON.stringify({ sessionId: result.sessionId, categories: categoriesRequested, regenerateAll: regenerateAllGuids }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Could not generate FMGUIDs.');
       setResult(prev => prev ? { ...prev, guidValidation: { ...prev.guidValidation, stats: json.stats, categories: json.categories } } : prev);
+      const touched = (json.categories as { ifcType: string; total: number }[])
+        .filter(c => categoriesRequested.includes(c.ifcType))
+        .reduce((sum, c) => sum + c.total, 0);
+      setFmguidSuccessMessage(`Done — FMGUID generated for ${categoriesRequested.length} categor${categoriesRequested.length === 1 ? 'y' : 'ies'} (${touched} objects).`);
     } catch (err: any) {
       setApplyFmguidError(err.message ?? String(err));
     } finally {
@@ -454,6 +465,7 @@ export default function App() {
     if (!result) return;
     setValidatingIds(true);
     setIdsError(null);
+    setIdsSuccessMessage(null);
     setIdsResults(null);
     try {
       const res = await fetch('/api/validate-ids', {
@@ -464,6 +476,14 @@ export default function App() {
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'IDS validation failed.');
       setIdsResults(json.results);
+      let totalSpecs = 0, totalPass = 0;
+      for (const rules of Object.values(json.results as IdsResults)) {
+        for (const r of rules) {
+          if (!r.report) continue;
+          for (const spec of r.report.specifications) { totalSpecs++; if (spec.status) totalPass++; }
+        }
+      }
+      setIdsSuccessMessage(`Done — ${totalPass} of ${totalSpecs} checks passed.`);
     } catch (err: any) {
       setIdsError(err.message ?? String(err));
     } finally {
@@ -755,14 +775,13 @@ export default function App() {
       )}
       </div>
 
-      <div style={{ display: activeTab === 'ids' ? undefined : 'none' }}>
+      <div style={{ display: activeTab === 'fmguid' ? undefined : 'none' }}>
       {!result && (
         <div className="card"><p className="muted">Run an analysis on the Upload tab first.</p></div>
       )}
       {result && (
-        <>
           <div className="card">
-            <h2>3a. FMGUID generation</h2>
+            <h2>3. FMGUID generation</h2>
             <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
               Choose which IFC categories should get an FMGUID. A category left unchecked keeps whatever it already
               had — nothing is generated for it, and it won't appear in the exported files.
@@ -806,10 +825,25 @@ export default function App() {
                 {applyingFmguid ? 'Generating…' : `Generate FMGUID for ${selectedCategories.size} categor${selectedCategories.size === 1 ? 'y' : 'ies'}`}
               </button>
             </div>
-          </div>
 
+            {applyingFmguid && (
+              <div className="progress-wrap">
+                <div className="progress-label"><span>Generating FMGUID…</span></div>
+                <div className="progress-track"><div className="progress-fill progress-indeterminate" /></div>
+              </div>
+            )}
+            {fmguidSuccessMessage && <div className="success" style={{ marginTop: '0.75rem' }}>{fmguidSuccessMessage}</div>}
+          </div>
+      )}
+      </div>
+
+      <div style={{ display: activeTab === 'ids' ? undefined : 'none' }}>
+      {!result && (
+        <div className="card"><p className="muted">Run an analysis on the Upload tab first.</p></div>
+      )}
+      {result && (
           <div className="card">
-            <h2>3b. IDS validation</h2>
+            <h2>4. IDS validation</h2>
             <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
               Checks information requirements (naming, required properties, etc.) against buildingSMART's IDS standard —
               runs against the corrected export (including the FMGUID categories generated above) and Geminus's shared rule library.
@@ -830,7 +864,14 @@ export default function App() {
               )}
             </div>
 
+            {validatingIds && (
+              <div className="progress-wrap">
+                <div className="progress-label"><span>Running IDS validation — this can take a while on large models…</span></div>
+                <div className="progress-track"><div className="progress-fill progress-indeterminate" /></div>
+              </div>
+            )}
             {idsError && <div className="error" style={{ marginTop: '0.75rem' }}>{idsError}</div>}
+            {idsSuccessMessage && <div className="success" style={{ marginTop: '0.75rem' }}>{idsSuccessMessage}</div>}
 
             {idsResults && (
               <>
@@ -868,7 +909,6 @@ export default function App() {
               </>
             )}
           </div>
-        </>
       )}
       </div>
 
@@ -878,7 +918,7 @@ export default function App() {
       )}
       {result && (
           <div className="card">
-            <h2>4. 3D view</h2>
+            <h2>5. 3D view</h2>
             <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
               Hover a discipline in the matrix above (on the Storey matching tab) to focus it here and fade out the others — useful for checking whether the models actually align with each other.
               {failedGlobalIds.size > 0 && ' Objects that failed IDS validation are highlighted in red.'}
@@ -890,8 +930,24 @@ export default function App() {
 
       <div style={{ display: activeTab === 'rules' ? undefined : 'none' }}>
         <div className="card">
-          <h2>5. IDS rule library</h2>
+          <h2>6. IDS rule library</h2>
           <IdsRuleEditor />
+        </div>
+      </div>
+
+      <div style={{ display: activeTab === 'sync' ? undefined : 'none' }}>
+        <div className="card">
+          <h2>7. Sync to Geminus Plus</h2>
+          {!result ? (
+            <p className="muted">Run an analysis on the Upload tab first.</p>
+          ) : (
+            <SyncTab
+              sessionId={result.sessionId}
+              buildingFmguid={result.canonicalSource === 'geminus-plus' ? (result.building?.fmguid ?? null) : null}
+              buildingName={result.building?.name ?? null}
+              modelNames={result.matrix.models}
+            />
+          )}
         </div>
       </div>
     </div>
