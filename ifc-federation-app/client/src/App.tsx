@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import FederationViewer, { FederationViewerModel } from './FederationViewer';
 import IdsRuleEditor from './IdsRuleEditor';
 import SyncTab from './SyncTab';
+import BuildingPicker, { BuildingOption, NEW_BUILDING } from './BuildingPicker';
 
 interface DisciplineRow {
   id: number;
@@ -103,15 +104,6 @@ interface BuildingCheckResult {
   storeys?: CanonicalStorey[];
 }
 
-interface BuildingOption {
-  fmguid: string;
-  name: string | null;
-  complexFmguid: string | null;
-  complexName: string | null;
-}
-
-const NEW_BUILDING = '__new__';
-
 type TabId = 'upload' | 'match' | 'fmguid' | 'ids' | 'viewer' | 'rules' | 'sync';
 const TABS: { id: TabId; label: string }[] = [
   { id: 'upload', label: '1. Upload & analyze' },
@@ -122,22 +114,6 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'rules', label: '6. IDS rules' },
   { id: 'sync', label: '7. Sync to Geminus Plus' },
 ];
-
-// Buildings arrive pre-sorted by complex then name (server-side), so a
-// single linear pass groups them into consecutive runs -- matches Geminus
-// Plus's own tree view (Complex > Building).
-function groupBuildingsByComplex(buildings: BuildingOption[]): { complexFmguid: string | null; complexName: string | null; buildings: BuildingOption[] }[] {
-  const groups: { complexFmguid: string | null; complexName: string | null; buildings: BuildingOption[] }[] = [];
-  for (const b of buildings) {
-    const last = groups[groups.length - 1];
-    if (last && last.complexFmguid === b.complexFmguid) {
-      last.buildings.push(b);
-    } else {
-      groups.push({ complexFmguid: b.complexFmguid, complexName: b.complexName, buildings: [b] });
-    }
-  }
-  return groups;
-}
 
 function masterLabel(result: IngestResult): string {
   return result.canonicalSource === 'geminus-plus'
@@ -598,24 +574,15 @@ export default function App() {
       <div className="card" style={{ display: activeTab === 'upload' ? undefined : 'none' }}>
         <h2>1. Upload models</h2>
         <label>Building in Geminus Plus</label>
-        <select
+        <BuildingPicker
+          buildings={buildings}
+          loading={buildingsLoading}
           value={buildingIdentifier || NEW_BUILDING}
-          disabled={buildingsLoading}
-          onChange={e => {
-            const fmguid = e.target.value;
+          onChange={fmguid => {
             setBuildingIdentifier(fmguid === NEW_BUILDING ? '' : fmguid);
             checkBuilding(fmguid);
           }}
-        >
-          <option value={NEW_BUILDING}>{buildingsLoading ? 'Loading buildings…' : '— New building (not in Geminus Plus) —'}</option>
-          {groupBuildingsByComplex(buildings).map(group => (
-            <optgroup key={group.complexFmguid ?? '__none__'} label={group.complexName ?? '(no property)'}>
-              {group.buildings.map(b => (
-                <option key={b.fmguid} value={b.fmguid}>{b.name ?? b.fmguid}</option>
-              ))}
-            </optgroup>
-          ))}
-        </select>
+        />
         {buildingsError && <div className="error" style={{ marginTop: '0.6rem' }}>Could not fetch the building list: {buildingsError}</div>}
 
         {checkingBuilding && <p className="muted" style={{ marginTop: '0.5rem' }}>Fetching storeys…</p>}
@@ -965,7 +932,7 @@ export default function App() {
           ) : (
             <SyncTab
               sessionId={result.sessionId}
-              buildingFmguid={result.canonicalSource === 'geminus-plus' ? (result.building?.fmguid ?? null) : null}
+              buildingFmguid={result.building?.fmguid ?? null}
               buildingName={result.building?.name ?? null}
               modelNames={result.matrix.models}
             />

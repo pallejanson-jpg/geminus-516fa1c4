@@ -45,7 +45,7 @@ import { validateFederation, repairFederation, categoryCounts, computeValidation
 import { applyFederationWrites } from '../ifc-federation/ifc-writer.js';
 import { getAvailableRules, validateFile, runIfctesterBcf } from '../ifc-federation/ids-validator.js';
 import { listRules, getRule, createRule, updateRule, deleteRule } from '../ifc-federation/ids-rules-editor.js';
-import { getRelatedModels, createRevision, getSasToken, uploadIfcToBlob, processIfc, pollFileStatus } from '../ifc-federation/geminus-plus-sync.js';
+import { getRelatedModels, pushIfcModel } from '../ifc-federation/geminus-plus-sync.js';
 import { generateIdsReportPdf } from './pdf-report.js';
 
 /**
@@ -206,9 +206,26 @@ async function runIngestJob(jobId, { buildingIdentifier, architectUpload, discip
   }
 
   if (building) {
-    canonicalSource = 'geminus-plus';
-    canonicalStoreys = await getStoreysForBuilding(building.fmguid);
+    const geminusPlusStoreys = await getStoreysForBuilding(building.fmguid);
     updateJob(jobId, { stage: 'Fetched storeys from Geminus Plus', progress: STAGE.canonical[1] });
+    if (geminusPlusStoreys.length === 0 && architectUpload) {
+      // A building can exist in Geminus Plus with zero registered storeys
+      // (e.g. never synced before) -- there's nothing to match discipline
+      // models against in that case, so the architect model becomes master
+      // instead, same as a brand-new building. `building` itself is kept
+      // (still shown to the user), but canonicalSource flips.
+      buildingLookupWarning = buildingLookupWarning
+        ?? `Building "${building.name ?? building.fmguid}" has 0 registered storeys in Geminus Plus — using the architect model as master instead.`;
+      canonicalSource = 'architect-model';
+      const architectIfcText = await readFile(architectUpload.path, 'utf8');
+      updateJob(jobId, { stage: 'Parsing architect model storeys…' });
+      canonicalStoreys = await buildCanonicalStoreys(architectIfcText, (fraction) =>
+        updateJob(jobId, { progress: mapRange(STAGE.canonical, fraction) })
+      );
+    } else {
+      canonicalSource = 'geminus-plus';
+      canonicalStoreys = geminusPlusStoreys;
+    }
   } else {
     if (!architectUpload) {
       throw new Error(
@@ -576,30 +593,24 @@ app.get('/api/sync/related-models', async (req, res) => {
 
 app.post('/api/sync/push', async (req, res) => {
   try {
-    const { sessionId, modelName, targetModelId, targetRevisionId } = req.body ?? {};
+    const { sessionId, modelName, targetBimObjectId, targetName } = req.body ?? {};
     const session = sessions.get(sessionId);
     if (!session) return res.status(404).json({ error: 'Unknown session — re-run /api/ingest.' });
     const model = session.models.find(m => m.modelName === modelName);
     if (!model) return res.status(400).json({ error: `No uploaded model named "${modelName}" in this session.` });
+    if (!targetBimObjectId) return res.status(400).json({ error: 'targetBimObjectId required.' });
 
     const correctedText = buildCorrectedIfcText(session, modelName, model.ifcText);
-
-    const revision = await createRevision(targetRevisionId, 0);
-    const sasToken = await getSasToken();
-    const fileId = randomUUID();
     const fileName = `${modelName}.ifc`;
-    await uploadIfcToBlob(sasToken, fileName, correctedText);
-    await processIfc({
-      fileName,
-      fileId,
-      filePath: fileName,
-      modelId: targetModelId,
-      tenantName: process.env.GEMINUS_PLUS_TENANT_NAME ?? '',
-      revisionId: revision.revisionId,
-    });
-    const file = await pollFileStatus(fileId);
 
-    res.json({ revision, file });
+    const result = await pushIfcModel({
+      bimObjectId: targetBimObjectId,
+      name: targetName ?? modelName,
+      fileName,
+      ifcText: correctedText,
+    });
+
+    res.json(result);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

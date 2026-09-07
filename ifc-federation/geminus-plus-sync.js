@@ -2,30 +2,47 @@
  * geminus-plus-sync.js
  *
  * Phase 8 (not yet in the plan doc) — pushing corrected IFC models back to
- * Geminus Plus, matched against existing BIM models rather than creating
- * duplicates. Endpoints and payload shapes come from the real AssetDB
- * OpenAPI spec + sync docs the user provided (2026-09-02) — not guessed,
- * not decompiled (the user offered decompiling the Revit add-in as a
- * fallback, but the docs covered everything needed).
+ * Geminus Plus, matched against an existing BIM object rather than creating
+ * a duplicate.
+ *
+ * The upload flow below is reverse-engineered from a REAL browser network
+ * capture (2026-09-07) of Geminus Plus's own "upload a new file to a model"
+ * action against a "New"-status BIM object -- not from the AssetDB OpenAPI
+ * spec's documented shape, which turned out to describe a different (or
+ * unavailable in this environment) flow: CreateRevision returned a bare 404
+ * against real staging, so the actually-observed sequence below is what
+ * this code follows instead:
+ *
+ *   1. POST /CreateDirectory  { path: "<dirId>/<subDirId>" }
+ *   2. POST /CreateFile       multipart/form-data: path=<same path>, file=<bytes>
+ *   3. POST /EditObject?hasFileUpload=true   { bimObjectId, objectType: 5, name }
+ *   4. POST /ValidateFile     { RevisionId, ModelId, FileId, FileName, FilePath, ImportType: 0 }
+ *
+ * Key discovery: `ModelId` in the ValidateFile payload is the SAME value as
+ * the BimObject's own `bimObjectId` -- there is no separate "create a
+ * model" or "create a revision" step to call first. `RevisionId` and
+ * `FileId` are fresh, client-generated GUIDs (confirmed: neither matched
+ * any id returned by a prior response in the capture). `objectType: 5` is
+ * the BIM-model object type (not in this app's existing OBJECT_TYPE enum
+ * in geminus-plus-lookup.js, which only covers Complex/Building/Storey/
+ * Space/Instance).
+ *
+ * `path`'s two GUID segments were not fully explained by the capture alone
+ * (both observed CreateDirectory calls used the identical path, which may
+ * just be the real UI firing the request twice) -- generating two fresh
+ * GUIDs per upload and joining them is the simplest reproduction of what
+ * was observed, and is what this module does.
  *
  * Auth reuses the exact same Keycloak service-account flow already proven
- * in geminus-plus-lookup.js (same realm, same grant_type=password) — no
- * separate login is needed for push vs. the read-only building lookup
- * already used elsewhere in this app. Whether the service account actually
- * has write permission in Geminus Plus has NOT been verified yet.
+ * in geminus-plus-lookup.js (same realm, same grant_type=password).
  *
- * Read-side functions (getRelatedModels) are safe and used by the Sync tab
- * to show which BIM model(s) already exist for a building, so the user can
- * pick a match instead of this pipeline silently creating a duplicate.
- *
- * Write-side functions (createRevision, processIfc) are implemented per
- * the documented API shape but have NOT been exercised against the real
- * staging environment yet -- creating a revision is a real, visible change
- * in Geminus Plus, so this should be confirmed with the user before the
- * first real call, the same way any other hard-to-reverse action would be.
+ * getRelatedModels (read-only) is safe and already verified against real
+ * staging data. pushIfcModel (the write flow above) has NOT been executed
+ * yet -- it should be confirmed with the user before the first real call,
+ * the same way any other hard-to-reverse action would be.
  */
 
-import { setTimeout as delay } from 'node:timers/promises';
+import { randomUUID } from 'node:crypto';
 
 const KEYCLOAK_URL = process.env.GEMINUS_PLUS_KEYCLOAK_URL;
 const CLIENT_ID = process.env.GEMINUS_PLUS_CLIENT_ID;
@@ -33,6 +50,8 @@ const CLIENT_SECRET = process.env.GEMINUS_PLUS_CLIENT_SECRET;
 const USERNAME = process.env.GEMINUS_PLUS_USERNAME;
 const PASSWORD = process.env.GEMINUS_PLUS_PASSWORD;
 const API_URL = process.env.GEMINUS_PLUS_API_URL;
+
+const BIM_OBJECT_TYPE_MODEL = 5;
 
 function assertConfigured() {
   const missing = Object.entries({
@@ -84,7 +103,7 @@ async function apiGet(path, params = {}) {
   return res.json();
 }
 
-async function apiPost(path, body) {
+async function apiPostJson(path, body) {
   assertConfigured();
   const token = await getToken();
   const res = await fetch(`${API_URL}${path}`, {
@@ -93,14 +112,15 @@ async function apiPost(path, body) {
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Geminus Plus API ${path}: ${res.status} ${await res.text()}`);
-  return res.json();
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 /**
  * List existing BIM models related to a building, so a corrected IFC model
  * can be matched against one instead of silently creating a duplicate.
  * @param {string} buildingFmguid
- * @returns {Promise<Array<{ modelId: string, name: string, disciplineId: string, revisionId: string, bimObjectId: string }>>}
+ * @returns {Promise<Array<{ modelId: string, name: string, disciplineId: string, revisionId: string, bimObjectId: string, status: number }>>}
  */
 async function getRelatedModels(buildingFmguid) {
   const models = await apiGet('/GetAllRelatedModels', { fmguid: buildingFmguid });
@@ -114,46 +134,55 @@ async function getRelatedModels(buildingFmguid) {
   }));
 }
 
-/** Create a new revision on top of an existing one, ready to receive an uploaded IFC. */
-async function createRevision(parentRevisionId, status = 0) {
-  return apiPost('/CreateRevision', { parentRevisionId, status });
-}
+/**
+ * Upload IFC text as a new file for an existing BIM object, following the
+ * exact call sequence captured from Geminus Plus's own UI (see file
+ * comment). Works whether the BIM object already has revisions or is
+ * still in "New" status (its bimObjectId doubles as ModelId either way).
+ *
+ * @param {{ bimObjectId: string, name: string, fileName: string, ifcText: string }} params
+ * @returns {Promise<{ revisionId: string, fileId: string, filePath: string }>}
+ */
+async function pushIfcModel({ bimObjectId, name, fileName, ifcText }) {
+  const dirId = randomUUID();
+  const subDirId = randomUUID();
+  const filePath = `${dirId}/${subDirId}`;
 
-/** Get a SAS-token URL for uploading the IFC file directly to blob storage. */
-async function getSasToken() {
-  const json = await apiGet('/SasToken');
-  return json.sasToken;
-}
+  // CreateDirectory/CreateFile/ValidateFile live under an /IfcFiles sub-route
+  // -- confirmed via a real browser network capture's Request URL
+  // (.../api/v1/AssetDB/IfcFiles/CreateDirectory), NOT at the AssetDB root
+  // like GetAllRelatedModels/EditObject. A bare /CreateDirectory 404'd even
+  // on GET, which is what gave this away. EditObject's own Request URL was
+  // not separately confirmed -- kept at root since it's a generic BimObject
+  // mutation, not IFC-file-specific; revisit if it also 404s.
+  await apiPostJson('/IfcFiles/CreateDirectory', { path: filePath });
 
-/** Upload IFC text to blob storage using the SAS URL, under the given file name. */
-async function uploadIfcToBlob(sasToken, fileName, ifcText) {
-  // sasToken is "<container-url>?<sas-query>" -- the file goes at <container-url>/<fileName>?<sas-query>.
-  const [base, query] = sasToken.split('?');
-  const blobUrl = `${base.replace(/\/$/, '')}/${encodeURIComponent(fileName)}?${query}`;
-  const res = await fetch(blobUrl, {
-    method: 'PUT',
-    headers: { 'x-ms-blob-type': 'BlockBlob', 'Content-Type': 'application/octet-stream' },
-    body: ifcText,
+  assertConfigured();
+  const token = await getToken();
+  const form = new FormData();
+  form.append('path', filePath);
+  form.append('file', new Blob([ifcText], { type: 'application/octet-stream' }), fileName);
+  const createFileRes = await fetch(`${API_URL}/IfcFiles/CreateFile`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }, // no Content-Type -- fetch sets the multipart boundary itself
+    body: form,
   });
-  if (!res.ok) throw new Error(`Blob upload failed: ${res.status} ${await res.text()}`);
-  return blobUrl;
+  if (!createFileRes.ok) throw new Error(`Geminus Plus API /IfcFiles/CreateFile: ${createFileRes.status} ${await createFileRes.text()}`);
+
+  await apiPostJson('/IfcFiles/EditObject?hasFileUpload=true', { bimObjectId, objectType: BIM_OBJECT_TYPE_MODEL, name });
+
+  const fileId = randomUUID();
+  const revisionId = randomUUID();
+  await apiPostJson('/IfcFiles/ValidateFile', {
+    RevisionId: revisionId,
+    ModelId: bimObjectId,
+    FileId: fileId,
+    FileName: fileName,
+    FilePath: filePath,
+    ImportType: 0,
+  });
+
+  return { revisionId, fileId, filePath };
 }
 
-/** Trigger server-side processing of an uploaded IFC file against a model+revision. */
-async function processIfc({ fileName, fileId, filePath, modelId, tenantName, revisionId }) {
-  return apiPost('/ProcessIfc', { fileName, fileId, filePath, modelId, tenantName, revisionId });
-}
-
-/** Poll file processing status (completePercentage, numberOfObjectsProcessed) until done or timeout. */
-async function pollFileStatus(fileId, { intervalMs = 2000, timeoutMs = 300_000 } = {}) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const files = await apiGet('/Files', { active: true });
-    const file = (files ?? []).find(f => f.fileId === fileId);
-    if (file && file.completePercentage >= 100) return file;
-    await delay(intervalMs);
-  }
-  throw new Error(`Timed out waiting for file ${fileId} to finish processing.`);
-}
-
-export { getRelatedModels, createRevision, getSasToken, uploadIfcToBlob, processIfc, pollFileStatus };
+export { getRelatedModels, pushIfcModel };
