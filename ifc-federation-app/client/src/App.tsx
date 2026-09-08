@@ -110,7 +110,7 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'match', label: '2. Storey matching' },
   { id: 'fmguid', label: '3. FMGUID generation' },
   { id: 'ids', label: '4. IDS validation' },
-  { id: 'viewer', label: '5. 3D view' },
+  { id: 'viewer', label: '5. BIM viewer' },
   { id: 'rules', label: '6. IDS rules' },
   { id: 'sync', label: '7. Sync to Geminus Plus' },
 ];
@@ -907,7 +907,7 @@ export default function App() {
       )}
       {result && (
           <div className="card">
-            <h2>5. 3D view</h2>
+            <h2>5. BIM viewer</h2>
             <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
               Hover a discipline in the matrix above (on the Storey matching tab) to focus it here and fade out the others — useful for checking whether the models actually align with each other.
               {failedGlobalIds.size > 0 && ' Objects that failed IDS validation are highlighted in red.'}

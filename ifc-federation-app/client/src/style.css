@@ -311,12 +311,29 @@ tr:nth-child(even) td { background: #FAFCFA; }
   font-size: 0.75rem;
 }
 .viewer-legend-row:hover { background: rgba(255, 255, 255, 0.1); }
-.viewer-legend-swatch {
-  height: 10px;
-  width: 16px;
+.viewer-legend-swatch-input {
+  height: 16px;
+  width: 20px;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 2px;
   flex-shrink: 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: none;
+  cursor: pointer;
+}
+.viewer-legend-name-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 .viewer-legend-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

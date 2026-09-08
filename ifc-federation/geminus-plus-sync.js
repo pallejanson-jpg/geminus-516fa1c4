@@ -13,10 +13,10 @@
  * against real staging, so the actually-observed sequence below is what
  * this code follows instead:
  *
- *   1. POST /CreateDirectory  { path: "<dirId>/<subDirId>" }
- *   2. POST /CreateFile       multipart/form-data: path=<same path>, file=<bytes>
- *   3. POST /EditObject?hasFileUpload=true   { bimObjectId, objectType: 5, name }
- *   4. POST /ValidateFile     { RevisionId, ModelId, FileId, FileName, FilePath, ImportType: 0 }
+ *   1. POST /IfcFiles/CreateDirectory  { path: "<dirId>/<subDirId>" }
+ *   2. POST /IfcFiles/CreateFile       multipart/form-data: path=<same path>, file=<bytes>
+ *   3. PUT  /EditObject?hasFileUpload=true   { bimObjectId, objectType: 5, name }  (root path, NOT /IfcFiles; PUT, not POST -- both confirmed via a real Request Method + Request URL check after a first guess 404'd)
+ *   4. POST /ValidateFile     { RevisionId, ModelId, FileId, FileName, FilePath, ImportType: 0 }  (root path, not /IfcFiles)
  *
  * Key discovery: `ModelId` in the ValidateFile payload is the SAME value as
  * the BimObject's own `bimObjectId` -- there is no separate "create a
@@ -103,11 +103,11 @@ async function apiGet(path, params = {}) {
   return res.json();
 }
 
-async function apiPostJson(path, body) {
+async function apiPostJson(path, body, method = 'POST') {
   assertConfigured();
   const token = await getToken();
   const res = await fetch(`${API_URL}${path}`, {
-    method: 'POST',
+    method,
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify(body),
   });
@@ -169,11 +169,14 @@ async function pushIfcModel({ bimObjectId, name, fileName, ifcText }) {
   });
   if (!createFileRes.ok) throw new Error(`Geminus Plus API /IfcFiles/CreateFile: ${createFileRes.status} ${await createFileRes.text()}`);
 
-  await apiPostJson('/IfcFiles/EditObject?hasFileUpload=true', { bimObjectId, objectType: BIM_OBJECT_TYPE_MODEL, name });
+  // Confirmed via real browser capture: root path (not /IfcFiles), and PUT
+  // -- not POST, which is what caused this to 404 on the first attempt.
+  await apiPostJson('/EditObject?hasFileUpload=true', { bimObjectId, objectType: BIM_OBJECT_TYPE_MODEL, name }, 'PUT');
 
   const fileId = randomUUID();
   const revisionId = randomUUID();
-  await apiPostJson('/IfcFiles/ValidateFile', {
+  // Confirmed via real browser capture: root path (not /IfcFiles), POST.
+  await apiPostJson('/ValidateFile', {
     RevisionId: revisionId,
     ModelId: bimObjectId,
     FileId: fileId,

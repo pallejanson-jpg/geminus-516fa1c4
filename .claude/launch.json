@@ -17,7 +17,8 @@
       "name": "ifc-federation-server",
       "runtimeExecutable": "node",
       "runtimeArgs": ["--env-file=.env", "ifc-federation-app/server.js"],
-      "port": 4500
+      "port": 4500,
+      "autoPort": false
     }
   ]
 }

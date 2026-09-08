@@ -48,6 +48,19 @@ function toHex([r, g, b]: [number, number, number]) {
   return `#${h(r)}${h(g)}${h(b)}`;
 }
 
+function fromHex(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
+}
+
+/** Colorize every object belonging to one loaded model, overriding whatever native colour the IFC file's own materials specified. */
+function applyModelColor(viewer: any, modelName: string, color: [number, number, number]) {
+  const model = viewer.scene.models[modelName];
+  if (!model) return;
+  const objectIds = Object.keys(model.objects ?? {});
+  if (objectIds.length > 0) viewer.scene.setObjectsColorized(objectIds, [color[0] * 255, color[1] * 255, color[2] * 255]);
+}
+
 export default function FederationViewer({ models, focusedModelName, highlightedGlobalIds }: FederationViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewerRef = useRef<any>(null);
@@ -55,6 +68,14 @@ export default function FederationViewer({ models, focusedModelName, highlighted
   const [loadState, setLoadState] = useState<LoadState>({ status: 'idle' });
   const [legendOpen, setLegendOpen] = useState(true);
   const [hiddenModels, setHiddenModels] = useState<Set<string>>(new Set());
+  // Per-model colour, user-overridable from the legend panel -- starts from
+  // the `color` prop but can diverge once the user picks their own. Kept in
+  // a ref too so the bootstrap effect (which only re-runs when the model
+  // list itself changes) can read the latest value without needing
+  // colorOverrides in its dependency array.
+  const [colorOverrides, setColorOverrides] = useState<Record<string, [number, number, number]>>({});
+  const colorOverridesRef = useRef(colorOverrides);
+  colorOverridesRef.current = colorOverrides;
 
   useEffect(() => {
     let cancelled = false;
@@ -117,7 +138,15 @@ export default function FederationViewer({ models, focusedModelName, highlighted
             const entity = ifcLoader.load({ id: modelName, src: blobUrl, edges: true });
             entity.on('loaded', () => {
               if (cancelled) return resolve();
-              entity.colorize = [color[0] * 255, color[1] * 255, color[2] * 255];
+              // `entity.colorize` on the model-level Entity doesn't reliably
+              // tint every constituent object (confirmed: legend showed the
+              // intended muted grey for the architect model, but the
+              // rendered geometry stayed whatever native colour the IFC
+              // file's own materials specified, e.g. bright yellow steel) --
+              // colorizing every object individually via the scene, the same
+              // approach the main app's useFederationViewer.ts hook uses, is
+              // what actually overrides per-object native colours.
+              applyModelColor(viewer, modelName, colorOverridesRef.current[modelName] ?? color);
               loadedEntitiesRef.current.set(modelName, entity);
               resolve();
             });
@@ -156,6 +185,17 @@ export default function FederationViewer({ models, focusedModelName, highlighted
       entity.opacity = isFocused ? 1 : 0.25;
     }
   }, [focusedModelName, hiddenModels, loadState.status]);
+
+  // Re-colorize already-loaded models when the user picks a new colour from
+  // the legend panel.
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || loadState.status !== 'ready') return;
+    for (const modelName of loadedEntitiesRef.current.keys()) {
+      const model = models.find(m => m.modelName === modelName);
+      if (model) applyModelColor(viewer, modelName, colorOverrides[modelName] ?? model.color);
+    }
+  }, [colorOverrides, loadState.status]);
 
   // Highlight IDS-validation-failed objects, by IFC GlobalId, once the scene
   // is loaded. Re-applied whenever the failing-id set changes (e.g. after
@@ -212,18 +252,25 @@ export default function FederationViewer({ models, focusedModelName, highlighted
               {models.map(({ modelName, color }) => {
                 const hidden = hiddenModels.has(modelName);
                 const isFocused = !focusedModelName || focusedModelName === modelName;
+                const currentColor = colorOverrides[modelName] ?? color;
                 return (
-                  <button
-                    key={modelName}
-                    onClick={() => toggleModelVisibility(modelName)}
-                    className="viewer-legend-row"
-                    style={{ opacity: !isFocused && !hidden ? 0.5 : 1 }}
-                    type="button"
-                  >
-                    <span className="viewer-legend-swatch" style={{ backgroundColor: toHex(color) }} />
-                    <span className="viewer-legend-name">{modelName}</span>
-                    {hidden ? <EyeOff size={12} style={{ opacity: 0.6 }} /> : <Eye size={12} style={{ opacity: 0.6 }} />}
-                  </button>
+                  <div key={modelName} className="viewer-legend-row" style={{ opacity: !isFocused && !hidden ? 0.5 : 1 }}>
+                    <input
+                      type="color"
+                      className="viewer-legend-swatch-input"
+                      value={toHex(currentColor)}
+                      title={`Change ${modelName}'s colour`}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => {
+                        const next = fromHex(e.target.value);
+                        setColorOverrides(prev => ({ ...prev, [modelName]: next }));
+                      }}
+                    />
+                    <button className="viewer-legend-name-button" onClick={() => toggleModelVisibility(modelName)} type="button">
+                      <span className="viewer-legend-name">{modelName}</span>
+                      {hidden ? <EyeOff size={12} style={{ opacity: 0.6 }} /> : <Eye size={12} style={{ opacity: 0.6 }} />}
+                    </button>
+                  </div>
                 );
               })}
             </div>

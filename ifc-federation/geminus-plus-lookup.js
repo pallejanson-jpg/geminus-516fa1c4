@@ -117,24 +117,45 @@ async function getBuildingByIdentifier(identifier) {
  * List every building in Geminus Plus — for a UI dropdown, so the user picks
  * a building by name instead of having to already know/type its FMGUID.
  * Returns [{ fmguid, name }], sorted by name for a usable dropdown.
+ *
+ * Uses GetBimObjectsByType, NOT PublishDataServiceGetMerged -- confirmed
+ * against real staging data (2026-09-08) that these two are genuinely
+ * different data sources: PublishDataServiceGetMerged only lists objects
+ * that have gone through the property-sync system at least once, while
+ * GetBimObjectsByType reflects the full BIM-object tree exactly as shown
+ * in Geminus Plus's own archive UI. A building created directly in the
+ * Geminus Plus UI (with a "New"-status BIM model under it) that was never
+ * synced is invisible to PublishDataServiceGetMerged's query but present
+ * in GetBimObjectsByType -- this was reported as "some buildings don't
+ * show up in the picker" and traced all the way through (ruling out a
+ * pagination bug, then a tenant/permission gap -- same tenant_id and
+ * Admin role confirmed on both this service account's token and the
+ * user's own interactive browser session) before finding the real cause.
  */
 async function getAllBuildings() {
   assertConfigured();
 
-  const buildings = [];
-  let skip = 0;
-  const take = 200;
+  const token = await getToken();
+  const res = await fetch(`${API_URL}/GetBimObjectsByType`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error(`Geminus Plus API /GetBimObjectsByType: ${res.status} ${await res.text()}`);
+  const rows = await res.json();
 
-  while (true) {
-    const page = await queryGeminusPlus([
-      ['objectType', '=', OBJECT_TYPE.BUILDING],
-    ], { skip, take });
-
-    if (page.length === 0) break;
-    buildings.push(...page.map(mapBuilding));
-    skip += page.length;
-    if (page.length < take) break;
+  // Flat rows are joined across complex/building/model -- one row per model
+  // under a building, so the same building can appear multiple times (once
+  // per model). Dedupe by buildingFmGuid, keeping the first occurrence.
+  const byFmguid = new Map();
+  for (const row of rows) {
+    if (!row.buildingFmGuid || byFmguid.has(row.buildingFmGuid)) continue;
+    byFmguid.set(row.buildingFmGuid, {
+      fmguid: row.buildingFmGuid,
+      name: row.buildingMetaDataName ?? row.buildingDesignation ?? null,
+      complexFmguid: row.complexFmGuid ?? null,
+      complexName: row.complexName ?? null,
+    });
   }
+  const buildings = [...byFmguid.values()];
 
   // Group by complex first (matching Geminus Plus's own tree view), then by
   // building name within each complex.
