@@ -92,24 +92,25 @@ async function queryGeminusPlus(filter, { skip = 0, take = 200, requireTotalCoun
  * Look up a building in Geminus Plus by its FMGUID or designation.
  * Returns null if not found — the caller should treat that as "fall back to
  * the architect model as template" (Phase 2 of the plan).
+ *
+ * Delegates to getAllBuildings() (GetBimObjectsByType) rather than querying
+ * PublishDataServiceGetMerged directly -- this function used to run its own
+ * PublishDataServiceGetMerged query, which meant a building the picker
+ * dropdown correctly listed (via getAllBuildings' GetBimObjectsByType
+ * source) could still fail here with "not found", because those two
+ * endpoints are genuinely different data sources (see getAllBuildings'
+ * comment) and a building never synced through the property-sync system
+ * is invisible to PublishDataServiceGetMerged specifically. Confirmed
+ * against real staging data (2026-09-08): selecting "Huvudbyggnad" under
+ * "Smedvig" from the picker, then analyzing, failed with exactly this
+ * mismatch -- /api/buildings found it, /api/lookup-building didn't.
  */
 async function getBuildingByIdentifier(identifier) {
-  assertConfigured();
-
-  const byGuid = await queryGeminusPlus([
-    ['objectType', '=', OBJECT_TYPE.BUILDING],
-    'and',
-    ['fmGuid', '=', identifier],
-  ], { take: 1 });
-  if (byGuid.length > 0) return mapBuilding(byGuid[0]);
-
-  const byName = await queryGeminusPlus([
-    ['objectType', '=', OBJECT_TYPE.BUILDING],
-    'and',
-    ['designation', '=', identifier],
-  ], { take: 1 });
-  if (byName.length > 0) return mapBuilding(byName[0]);
-
+  const buildings = await getAllBuildings();
+  const byGuid = buildings.find(b => b.fmguid === identifier);
+  if (byGuid) return byGuid;
+  const byName = buildings.find(b => b.name === identifier);
+  if (byName) return byName;
   return null;
 }
 

@@ -216,11 +216,13 @@ export default function App() {
     }
   }, []);
 
-  // Kick off conversion for every model in the matrix once the viewer tab
-  // has actually been visited (not before -- no point spending CPU on a
-  // conversion nobody's looking at yet).
+  // Kick off conversion for every model in the matrix as soon as analysis
+  // finishes -- deliberately NOT gated on viewerVisited, so conversion runs
+  // in the background while the user is still on earlier tabs (storey
+  // matching, FMGUID generation, IDS validation) instead of only starting
+  // once they click through to the viewer tab and having to wait there.
   useEffect(() => {
-    if (!viewerVisited || !result) return;
+    if (!result) return;
     for (const modelName of result.matrix.models) {
       if (!xktStatus[modelName]) convertModel(result.sessionId, modelName);
     }
