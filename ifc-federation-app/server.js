@@ -37,6 +37,7 @@ import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Worker } from 'node:worker_threads';
 
 import { getBuildingByIdentifier, getStoreysForBuilding, getAllBuildings } from '../ifc-federation/geminus-plus-lookup.js';
 import { buildCanonicalStoreys } from '../ifc-federation/architect-model-template.js';
@@ -571,6 +572,78 @@ app.delete('/api/session/:sessionId', async (req, res) => {
   sessions.delete(req.params.sessionId);
   await Promise.all(session.models.map(m => rm(m.filePath, { force: true }))).catch(() => {});
   res.status(204).end();
+});
+
+// ── Phase 6b: server-side IFC -> XKT conversion for the 3D viewer ──────────
+// Replaces live in-browser IFC parsing (WebIFCLoaderPlugin), which real
+// testing showed could hang for 150+ seconds without completing even on a
+// small (2.2 MB) file -- see xkt-converter.js's file comment. Job-based
+// (like /api/ingest) since conversion of a large model can take a while;
+// results are cached on the session so re-visiting the viewer tab or
+// switching between models doesn't reconvert.
+const xktJobs = new Map(); // jobId -> { status, stage, error? }
+
+app.post('/api/convert-xkt', async (req, res) => {
+  try {
+    const { sessionId, modelName } = req.body ?? {};
+    const session = sessions.get(sessionId);
+    if (!session) return res.status(404).json({ error: 'Unknown session — re-run /api/ingest.' });
+    const model = session.models.find(m => m.modelName === modelName);
+    if (!model) return res.status(400).json({ error: `No uploaded model named "${modelName}" in this session.` });
+
+    session.xktCache ??= {};
+    if (session.xktCache[modelName]) {
+      return res.json({ jobId: null, cached: true });
+    }
+
+    const jobId = randomUUID();
+    xktJobs.set(jobId, { status: 'processing', stage: 'Starting…' });
+    res.json({ jobId });
+
+    // Runs in a worker thread, not inline -- @xeokit/xeokit-convert's actual
+    // parsing/tessellation work is synchronous CPU-bound JS, confirmed by
+    // direct testing to block the main event loop for the entire ~18s
+    // conversion (even a simple job-status poll went unresponsive). A
+    // worker thread keeps the server responsive to every other request
+    // while conversion runs.
+    const correctedText = buildCorrectedIfcText(session, modelName, model.ifcText);
+    const worker = new Worker(path.join(__dirname, '..', 'ifc-federation', 'xkt-convert-worker.js'), {
+      workerData: { ifcText: correctedText },
+    });
+    worker.on('message', (msg) => {
+      if (msg.type === 'progress') {
+        xktJobs.set(jobId, { status: 'processing', stage: msg.message });
+      } else if (msg.type === 'done') {
+        session.xktCache[modelName] = Buffer.from(msg.buffer);
+        xktJobs.set(jobId, { status: 'done', stage: 'Done' });
+        worker.terminate();
+      } else if (msg.type === 'error') {
+        xktJobs.set(jobId, { status: 'error', stage: 'Error', error: msg.message });
+        worker.terminate();
+      }
+    });
+    worker.on('error', (err) => {
+      console.error(err);
+      xktJobs.set(jobId, { status: 'error', stage: 'Error', error: err.message });
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/convert-xkt/:jobId', (req, res) => {
+  const job = xktJobs.get(req.params.jobId);
+  if (!job) return res.status(404).json({ error: 'Unknown conversion job.' });
+  res.json(job);
+});
+
+app.get('/api/session/:sessionId/xkt/:modelName', (req, res) => {
+  const session = sessions.get(req.params.sessionId);
+  if (!session) return res.status(404).end();
+  const buffer = session.xktCache?.[req.params.modelName];
+  if (!buffer) return res.status(404).json({ error: 'Not converted yet — call /api/convert-xkt first.' });
+  res.setHeader('Content-Type', 'application/octet-stream');
+  res.send(buffer);
 });
 
 // ── Phase 8: Sync to Geminus Plus ───────────────────────────────────────────

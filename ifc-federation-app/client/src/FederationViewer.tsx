@@ -1,27 +1,29 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Layers, ChevronDown, ChevronUp, Eye, EyeOff } from 'lucide-react';
-import * as WebIFC from 'web-ifc';
 
 /**
- * FederationViewer — loads raw uploaded IFC files directly via xeokit's
- * WebIFCLoaderPlugin (backed by the `web-ifc` WASM module), instead of
- * requiring a pre-converted .xkt file. This trades some load-time
- * performance on very large files (parsing + tessellation happens in the
- * browser, not pre-baked on a server) for skipping the IFC->XKT conversion
- * pipeline entirely — the standalone app has no such pipeline, and building
- * one is a separate, bigger piece of work than just wiring this in.
+ * FederationViewer — loads server-converted XKT files via xeokit's
+ * XKTLoaderPlugin, instead of parsing raw IFC live in the browser.
  *
- * `models[].file` is the same File object the user picked in the upload
- * form (App.tsx) — turned into a blob URL here and fed straight to the
- * loader, so no server round-trip is needed to view a model.
+ * Earlier versions of this component used WebIFCLoaderPlugin to parse IFC
+ * directly client-side, avoiding a conversion step. Reverted (2026-09-08)
+ * after direct testing confirmed that approach could hang for 150+ seconds
+ * without completing, even on a small (2.2 MB) real file — a genuine,
+ * unresolved bug in the web-ifc/xeokit integration, not just "single-
+ * threaded parsing is slow" (multi-threading was tried and made it worse:
+ * a real version incompatibility between the bundled SDK's web-ifc glue
+ * code and the installed web-ifc package). Server-side conversion via
+ * @xeokit/xeokit-convert (see ifc-federation/xkt-converter.js) is
+ * deterministic (~18s for that same 2.2 MB file) and produces a compact
+ * binary that XKTLoaderPlugin loads near-instantly — the same approach
+ * the main Geminus app already uses.
  */
 
 const XEOKIT_SDK_PATH = '/lib/xeokit/xeokit-sdk.es.js';
-const WEB_IFC_WASM_PATH = '/lib/xeokit/';
 
 export interface FederationViewerModel {
   modelName: string;
-  file: File;
+  xktUrl: string;
   /** RGB, 0-1 range. */
   color: [number, number, number];
 }
@@ -31,9 +33,10 @@ export interface FederationViewerProps {
   focusedModelName?: string | null;
   /**
    * IFC GlobalIds to highlight (e.g. objects that failed IDS validation).
-   * Works because WebIFCLoaderPlugin sets each Entity/MetaObject id directly
-   * to the IFC entity's own GlobalId (confirmed in the SDK source), so these
-   * values can be passed straight to `viewer.scene.setObjectsHighlighted`.
+   * XKTLoaderPlugin sets each Entity/MetaObject id directly to the IFC
+   * entity's own GlobalId (same convention as the earlier WebIFCLoaderPlugin
+   * approach), so these values can be passed straight to
+   * `viewer.scene.setObjectsHighlighted`.
    */
   highlightedGlobalIds?: Set<string>;
 }
@@ -58,7 +61,14 @@ function applyModelColor(viewer: any, modelName: string, color: [number, number,
   const model = viewer.scene.models[modelName];
   if (!model) return;
   const objectIds = Object.keys(model.objects ?? {});
-  if (objectIds.length > 0) viewer.scene.setObjectsColorized(objectIds, [color[0] * 255, color[1] * 255, color[2] * 255]);
+  // setObjectsColorized takes 0-1 multiplicative RGB factors (per the SDK's
+  // own doc comment: "multiplied by the rendered pixel colors", default
+  // (1,1,1)) -- NOT 0-255. Confirmed by testing: passing *255-scaled values
+  // barely changed a yellow model's appearance (values >1 just clamp,
+  // leaving the native colour's hue mostly intact) and turned pure red
+  // input black (an out-of-range multiplier overflowing/wrapping somewhere
+  // in the colour pipeline).
+  if (objectIds.length > 0) viewer.scene.setObjectsColorized(objectIds, color);
 }
 
 export default function FederationViewer({ models, focusedModelName, highlightedGlobalIds }: FederationViewerProps) {
@@ -79,14 +89,12 @@ export default function FederationViewer({ models, focusedModelName, highlighted
 
   useEffect(() => {
     let cancelled = false;
-    const blobUrls: string[] = [];
 
     async function bootstrap() {
       if (!canvasRef.current || models.length === 0) return;
 
       setLoadState({ status: 'loading-sdk' });
       let sdk: any;
-      let ifcApi: any;
       try {
         if ((window as any).__xeokitSdk) {
           sdk = (window as any).__xeokitSdk;
@@ -94,58 +102,38 @@ export default function FederationViewer({ models, focusedModelName, highlighted
           sdk = await import(/* @vite-ignore */ `${XEOKIT_SDK_PATH}?v=3`);
           (window as any).__xeokitSdk = sdk;
         }
-        ifcApi = new WebIFC.IfcAPI();
-        ifcApi.SetWasmPath(WEB_IFC_WASM_PATH);
-        await ifcApi.Init();
       } catch (err: any) {
         if (!cancelled) setLoadState({ status: 'error', error: `Could not load the 3D engine: ${err?.message ?? err}` });
         return;
       }
       if (cancelled) return;
 
+      // dtxEnabled (data-texture rendering, a perf optimization) was
+      // removed here: with it on, setObjectsColorized silently had no
+      // visible effect (confirmed: the architect model rendered its native
+      // IFC yellow despite the legend showing the intended muted colour,
+      // and re-checking after 'ready' via the recolor effect below still
+      // didn't fix it). The main app's own working viewer hook
+      // (useFederationViewer.ts) doesn't set dtxEnabled either.
       const viewer = new sdk.Viewer({
         canvasElement: canvasRef.current,
         transparent: false,
         backgroundColor: [0.176, 0.176, 0.176],
-        dtxEnabled: true,
       });
       viewer.camera.eye = [0, 20, 40];
       viewer.camera.look = [0, 0, 0];
       viewer.camera.up = [0, 1, 0];
       viewerRef.current = viewer;
 
-      // WebIFCDefaultDataSource isn't exported by this SDK build, and its
-      // default cache-busting (appending `?_=<timestamp>` to every src URL)
-      // silently breaks blob: URLs, which don't support query strings --
-      // confirmed by a failed XHR (status 0) purely from that suffix. This
-      // minimal custom data source just fetches the blob URL as-is.
-      const ifcLoader = new sdk.WebIFCLoaderPlugin(viewer, {
-        WebIFC,
-        IfcAPI: ifcApi,
-        dataSource: {
-          getIFC(src: string, ok: (buf: ArrayBuffer) => void, error: (msg: any) => void) {
-            fetch(src).then(r => r.arrayBuffer()).then(ok).catch(error);
-          },
-        },
-      });
+      const xktLoader = new sdk.XKTLoaderPlugin(viewer, { reuseGeometries: true });
 
       setLoadState({ status: 'loading-models' });
       try {
-        await Promise.all(models.map(({ modelName, file, color }) => {
-          const blobUrl = URL.createObjectURL(file);
-          blobUrls.push(blobUrl);
+        await Promise.all(models.map(({ modelName, xktUrl, color }) => {
           return new Promise<void>((resolve, reject) => {
-            const entity = ifcLoader.load({ id: modelName, src: blobUrl, edges: true });
+            const entity = xktLoader.load({ id: modelName, src: xktUrl, edges: true });
             entity.on('loaded', () => {
               if (cancelled) return resolve();
-              // `entity.colorize` on the model-level Entity doesn't reliably
-              // tint every constituent object (confirmed: legend showed the
-              // intended muted grey for the architect model, but the
-              // rendered geometry stayed whatever native colour the IFC
-              // file's own materials specified, e.g. bright yellow steel) --
-              // colorizing every object individually via the scene, the same
-              // approach the main app's useFederationViewer.ts hook uses, is
-              // what actually overrides per-object native colours.
               applyModelColor(viewer, modelName, colorOverridesRef.current[modelName] ?? color);
               loadedEntitiesRef.current.set(modelName, entity);
               resolve();
@@ -166,13 +154,12 @@ export default function FederationViewer({ models, focusedModelName, highlighted
 
     return () => {
       cancelled = true;
-      blobUrls.forEach(url => URL.revokeObjectURL(url));
       viewerRef.current?.destroy?.();
       viewerRef.current = null;
       loadedEntitiesRef.current.clear();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [models.map(m => `${m.modelName}:${m.file.name}:${m.file.size}`).join('|')]);
+  }, [models.map(m => m.xktUrl).join('|')]);
 
   useEffect(() => {
     for (const [modelName, entity] of loadedEntitiesRef.current) {
@@ -226,7 +213,7 @@ export default function FederationViewer({ models, focusedModelName, highlighted
 
       {models.length === 0 && (
         <div className="viewer-overlay viewer-overlay-muted">
-          No models to show yet — upload and analyze at least one IFC file above.
+          No models converted yet.
         </div>
       )}
 

@@ -36,32 +36,60 @@ Phase 2 (arkitektmodell-fallback), Phase 4 (matchningsmatris), Phase 5
 `FederationViewer.tsx`/`FederationWorkspace.tsx` — [`client/src/FederationViewer.tsx`](client/src/FederationViewer.tsx),
 omskriven mot denna apps vanliga CSS istället för Tailwind/shadcn.
 
-**Laddar IFC direkt i webbläsaren via xeokits `WebIFCLoaderPlugin`** (backad
-av `web-ifc`/WASM), istället för att kräva en förkonverterad `.xkt`-fil —
-samma `File`-objekt som redan valts i uppladdningsformuläret återanvänds
-direkt (blob-URL), ingen serveromväg eller konverteringssteg behövs. Detta
-är en medveten avvägning: tolkning + tesselering sker i webbläsaren istället
-för i förväg på en server, vilket är långsammare för mycket stora filer
-(100+ MB) än förkonverterad XKT skulle vara — men det sparar hela
-konverteringspipelinen, som annars vore ett separat, stort jobb.
+**Laddar förkonverterade XKT-filer via xeokits `XKTLoaderPlugin`** —
+konverteringen sker server-side (`POST /api/convert-xkt`,
+[`ifc-federation/xkt-converter.js`](../ifc-federation/xkt-converter.js),
+[`ifc-federation/xkt-convert-worker.js`](../ifc-federation/xkt-convert-worker.js))
+med `@xeokit/xeokit-convert` + `web-ifc`, en gång per session/modell
+(resultatet cachas på sessionen). Konverteringen körs i en separat
+**Worker Thread**, inte inline i huvudprocessen — bekräftat i praktiken att
+`@xeokit/xeokit-convert`s faktiska parsnings-/tesselleringsarbete är
+synkront och blockerar hela event-loopen (~18s för en 2,2 MB-fil) om det
+körs direkt i Express-processen, vilket gjorde t.o.m. enkla
+job-status-pollningar hängande under tiden.
 
-Kräver att `client/public/lib/xeokit/web-ifc.wasm` och `web-ifc-mt.wasm`
-**exakt matchar** versionen av `web-ifc`-npm-paketet i `client/package.json`
-— annars kastar `WebAssembly.instantiate()` ett `LinkError` (verifierat i
-praktiken: en wasm-fil kopierad från huvudappens `public/lib/xeokit/`, som
-råkade vara byggd mot en annan `web-ifc`-version, gav exakt detta fel). Vid
-uppgradering av `web-ifc`, kopiera de nya `.wasm`-filerna från
-`client/node_modules/web-ifc/` efter `npm install`.
+**Detta ersätter en tidigare ansats** som laddade rå IFC direkt i
+webbläsaren via `WebIFCLoaderPlugin` (`web-ifc`/WASM), utan server-side
+konvertering. Övergiven (2026-09-08) efter att direkt testning bekräftade
+att den kunde hänga i 150+ sekunder **utan att någonsin bli klar**, även på
+en liten (2,2 MB) riktig fil — en genuin, olöst bugg i webbläsarens
+`web-ifc`/xeokit-integration, inte bara "encelltrådad parsning är
+långsam" (multi-trådning testades och gjorde det värre: en riktig
+versionsinkompatibilitet mellan SDK-bundlens och npm-paketets
+`web-ifc`-versioner).
 
-**Kräver även att cache-buster stängs av för dataSource** — SDK-bundlens
-standard-datakälla för denna loader (`WebIFCDefaultDataSource`) lägger
-annars till `?_=<timestamp>` på varje `src`-URL, vilket är ofarligt för
-riktiga HTTP-URL:er men gör `blob:`-URL:er ogiltiga (de stödjer inte
-query-strängar) — verifierat i praktiken: gav ett förvirrande
-`"getXKT error : null"`-fel (ett copy-paste-kvarleva i SDK-bundlens
-felmeddelande — det är faktiskt `getIFC()` som misslyckas, inte `getXKT()`).
-Lösning: en egen minimal `dataSource`-config som bara gör `fetch(src)` utan
-cache-busting, se kommentaren i `FederationViewer.tsx`.
+**Viktig kompatibilitetsfix för att få `@xeokit/xeokit-convert` att
+importeras alls under vanlig Node ESM:** dess `@loaders.gl/polyfills`-beroende
+har flera relativa imports som saknar `.js`-ändelse (t.ex. `from
+'./buffer/btoa.node'` istället för `'./buffer/btoa.node.js'`), vilket Node
+strikta ESM-resolver avvisar trots att filerna finns. Detta märks inte när
+samma paket laddas via en bundler (Vite, som huvudappens webbläsarbygge
+använder) eller Deno (som `supabase/functions/ifc-to-xkt` använder), båda
+mer tillåtande med filändelser än rå Node ESM — buggen dök alltså aldrig
+upp förrän exakt denna kodväg kördes i vanlig Node. Patchad direkt i
+`node_modules/@loaders.gl/polyfills/dist/*.js` (fyra filer); om `npm
+install` någonsin skriver över `node_modules` behöver patchen läggas på
+igen (`grep` efter `from '.*\.node'` utan `.js`-suffix i den mappen) tills
+uppströmspaketet fixar det själva.
+
+**Varning:** `@xeokit/xeokit-convert` och `web-ifc` är **avsiktligt inte**
+deklarerade i den här appens egna `package.json` — de finns redan i
+repots root-`node_modules` (huvudappens egna beroenden), och Node ESM:s
+katalogvandring hittar dem därifrån automatiskt. Lägg **inte** till dem
+här: eftersom `ifc-federation-app/` redan har en egen `node_modules`, skulle
+`npm install` då installera en **egen, opatchad** kopia av
+`@loaders.gl/polyfills` som skuggar root-versionen (Node letar i närmaste
+`node_modules` först) och återinför exakt buggen ovan.
+
+**Per-modell-färgläggning använder `viewer.scene.setObjectsColorized`**
+(inte `entity.colorize` på hela modellen, som inte tillförlitligt
+överskrev varje objekts egen IFC-materialfärg). Observera att
+`setObjectsColorized` förväntar sig **0–1-värden** (en multiplikativ
+faktor mot pixelfärgen, standard `(1,1,1)`), **inte 0–255** — verifierat i
+praktiken: 255-skalade värden lämnade en gul modell i princip oförändrad
+(värden >1 klipps bara, ursprungsfärgens nyans finns kvar), och rent rött
+in gav svart ut (en urspårad multiplikator som "wrappade" någonstans i
+färgpipelinen).
 
 ## Köra lokalt
 

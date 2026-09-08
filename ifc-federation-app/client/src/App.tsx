@@ -181,21 +181,66 @@ export default function App() {
   const [exporting, setExporting] = useState(false);
   const [focusedModelName, setFocusedModelName] = useState<string | null>(null);
 
-  // Built from the same File objects already sitting in this component's
-  // upload state — the viewer loads IFC directly via WebIFCLoaderPlugin, so
-  // no server-side XKT conversion step is needed. Only populated once an
-  // analysis has actually run, so the model names line up with the matrix.
+  // Each model is converted to XKT server-side (see /api/convert-xkt) before
+  // it can be shown — live in-browser IFC parsing was tried and confirmed
+  // to hang indefinitely on real files (see FederationViewer.tsx's file
+  // comment), so raw File objects are no longer handed to the viewer at all.
+  type XktConvertStatus = { status: 'converting' | 'done' | 'error'; stage?: string; error?: string };
+  const [xktStatus, setXktStatus] = useState<Record<string, XktConvertStatus>>({});
+
+  const convertModel = React.useCallback(async (sessionId: string, modelName: string) => {
+    setXktStatus(prev => ({ ...prev, [modelName]: { status: 'converting', stage: 'Starting…' } }));
+    try {
+      const res = await fetch('/api/convert-xkt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId, modelName }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Conversion failed to start.');
+      if (json.cached) {
+        setXktStatus(prev => ({ ...prev, [modelName]: { status: 'done' } }));
+        return;
+      }
+      while (true) {
+        await new Promise(r => setTimeout(r, 1000));
+        const pres = await fetch(`/api/convert-xkt/${json.jobId}`);
+        const pjson = await pres.json();
+        if (!pres.ok) throw new Error(pjson.error || 'Could not poll conversion status.');
+        if (pjson.status === 'done') { setXktStatus(prev => ({ ...prev, [modelName]: { status: 'done' } })); return; }
+        if (pjson.status === 'error') { setXktStatus(prev => ({ ...prev, [modelName]: { status: 'error', error: pjson.error } })); return; }
+        setXktStatus(prev => ({ ...prev, [modelName]: { status: 'converting', stage: pjson.stage } }));
+      }
+    } catch (err: any) {
+      setXktStatus(prev => ({ ...prev, [modelName]: { status: 'error', error: err.message ?? String(err) } }));
+    }
+  }, []);
+
+  // Kick off conversion for every model in the matrix once the viewer tab
+  // has actually been visited (not before -- no point spending CPU on a
+  // conversion nobody's looking at yet).
+  useEffect(() => {
+    if (!viewerVisited || !result) return;
+    for (const modelName of result.matrix.models) {
+      if (!xktStatus[modelName]) convertModel(result.sessionId, modelName);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewerVisited, result]);
+
   const viewerModels: FederationViewerModel[] = React.useMemo(() => {
     if (!result) return [];
     const models: FederationViewerModel[] = [];
-    if (architectFile) models.push({ modelName: 'architect', file: architectFile, color: VIEWER_PALETTE[0] });
-    disciplines.forEach((row, i) => {
-      if (row.file && row.name.trim()) {
-        models.push({ modelName: row.name.trim(), file: row.file, color: VIEWER_PALETTE[(i + 1) % VIEWER_PALETTE.length] });
+    result.matrix.models.forEach((modelName, i) => {
+      if (xktStatus[modelName]?.status === 'done') {
+        models.push({
+          modelName,
+          xktUrl: `/api/session/${result.sessionId}/xkt/${encodeURIComponent(modelName)}`,
+          color: VIEWER_PALETTE[i % VIEWER_PALETTE.length],
+        });
       }
     });
     return models;
-  }, [result, architectFile, disciplines]);
+  }, [result, xktStatus]);
 
   const [idsResults, setIdsResults] = useState<IdsResults | null>(null);
   const [validatingIds, setValidatingIds] = useState(false);
@@ -911,7 +956,26 @@ export default function App() {
             <p className="subtitle" style={{ marginBottom: '0.75rem' }}>
               Hover a discipline in the matrix above (on the Storey matching tab) to focus it here and fade out the others — useful for checking whether the models actually align with each other.
               {failedGlobalIds.size > 0 && ' Objects that failed IDS validation are highlighted in red.'}
+              {' '}Each model is converted to XKT on the server before it appears here (once per session).
             </p>
+            {result.matrix.models.some(m => xktStatus[m] && xktStatus[m].status !== 'done') && (
+              <div style={{ marginBottom: '0.75rem' }}>
+                {result.matrix.models.map(modelName => {
+                  const s = xktStatus[modelName];
+                  if (!s || s.status === 'done') return null;
+                  return (
+                    <div key={modelName} className="progress-wrap" style={{ marginTop: '0.5rem' }}>
+                      <div className="progress-label">
+                        <span>{modelName}: {s.status === 'error' ? `Error — ${s.error}` : (s.stage ?? 'Converting…')}</span>
+                      </div>
+                      {s.status === 'converting' && (
+                        <div className="progress-track"><div className="progress-fill progress-indeterminate" /></div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             {viewerVisited && <FederationViewer models={viewerModels} focusedModelName={focusedModelName} highlightedGlobalIds={failedGlobalIds} />}
           </div>
       )}
